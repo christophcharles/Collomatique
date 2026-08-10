@@ -15,8 +15,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    IncompatData, InterrogationData, SlotData, StudentData, SubjectData, TeacherData,
-    WeekPatternData,
+    GroupListData, IncompatData, InterrogationData, SlotData, StudentData, SubjectData,
+    TeacherData, WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -5015,6 +5015,342 @@ fn the_two_filling_shapes_read_side_by_side() {
     assert!(
         rows.iter()
             .any(|((_period, _subject), group_list)| **group_list != *automatic_id)
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The group lists come back detached, out and back
+///
+/// The script walks `doc.group_lists` and leaves what it saw; rust compares it
+/// with the same document read straight from the model. The fixture the read
+/// surface built for the two filling shapes carries this test — the automatic
+/// list and the prefilled one side by side, which the example (all prefilled,
+/// all unnamed) cannot show.
+#[test]
+fn the_group_lists_come_back_detached() {
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, PrefilledGroup,
+    };
+
+    let dir = workspace("group-list-data");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let globals = run(include_str!("scripts/group_list_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The fixture is only worth reading if it has something to say: one list
+    // of each filling shape, both named.
+    let lists: Vec<_> = params
+        .group_lists
+        .group_list_map
+        .iter()
+        .map(|(id, gl)| (id, gl.clone()))
+        .collect();
+    assert_eq!(lists.len(), 2);
+    assert!(lists.iter().any(|(_id, gl)| gl.is_prefilled()));
+    assert!(lists.iter().any(|(_id, gl)| !gl.is_prefilled()));
+
+    // Out and back, whole.
+    assert_eq!(
+        extracted_all::<GroupListData>(&globals, "gl_values"),
+        lists.iter().map(|(_id, gl)| gl.clone()).collect::<Vec<_>>()
+    );
+
+    // And the same fields as python saw them.
+    let bounds = |range: &collomatique_state_colloscopes::NonEmptyRangeInclusive<NonZeroU32>| {
+        (range.start().get(), range.end().get())
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "gl_names"),
+        lists
+            .iter()
+            .map(|(_id, gl)| gl.params().name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<(u32, u32)>>(&globals, "gl_ranges"),
+        lists
+            .iter()
+            .map(|(_id, gl)| bounds(&gl.params().students_per_group))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<Option<String>>>>(&globals, "group_names_lists"),
+        lists
+            .iter()
+            .map(|(_id, gl)| gl
+                .params()
+                .group_names
+                .iter()
+                .map(|name| name.as_ref().map(|name| name.to_string()))
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    );
+
+    // The fillings, as python saw them: the exclusions of the automatic list
+    // and the members of the prefilled groups, both by surname.
+    let automatic = lists
+        .iter()
+        .find(|(_id, gl)| !gl.is_prefilled())
+        .expect("the fixture holds an automatic list")
+        .1
+        .clone();
+    let prefilled = lists
+        .iter()
+        .find(|(_id, gl)| gl.is_prefilled())
+        .expect("the fixture holds a prefilled list")
+        .1
+        .clone();
+
+    let excluded: BTreeSet<_> = match automatic.filling() {
+        GroupListFilling::Automatic { excluded_students } => excluded_students.clone(),
+        GroupListFilling::Prefilled { .. } => unreachable!("the list was picked as automatic"),
+    };
+    let mut expected_excluded: Vec<_> = excluded
+        .iter()
+        .map(|student| {
+            params
+                .students
+                .student_map
+                .get(student)
+                .expect("an excluded student is a live one")
+                .desc
+                .surname
+                .clone()
+        })
+        .collect();
+    expected_excluded.sort();
+    assert_eq!(
+        global::<Vec<String>>(&globals, "excluded_surnames"),
+        expected_excluded
+    );
+
+    let expected_members: Vec<Vec<String>> = match prefilled.filling() {
+        GroupListFilling::Prefilled { groups } => groups
+            .iter()
+            .map(|group| {
+                let mut names: Vec<_> = group
+                    .students
+                    .iter()
+                    .map(|student| {
+                        params
+                            .students
+                            .student_map
+                            .get(student)
+                            .expect("a prefilled group names a live student")
+                            .desc
+                            .surname
+                            .clone()
+                    })
+                    .collect();
+                names.sort();
+                names
+            })
+            .collect(),
+        GroupListFilling::Automatic { .. } => unreachable!("the list was picked as prefilled"),
+    };
+    assert_eq!(
+        global::<Vec<Vec<String>>>(&globals, "prefilled_members"),
+        expected_members
+    );
+
+    // Built by hand: the value the script wrote out is the group list expected
+    // of it, whether the students were named by handle or by id — the prefilled
+    // one reproduces the fixture's own list, group for group.
+    let students: Vec<_> = params.students.student_map.keys().collect();
+    let named = |text: &str| {
+        text.to_owned()
+            .try_into()
+            .expect("the fixture's group names are not empty")
+    };
+    let expected_by_hand = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![Some(named("Aurore")), None, Some(named("Serdaigle"))],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([students[0], students[1]]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([students[2]]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([students[3]]),
+                },
+            ],
+        },
+    )
+    .expect("the hand-built list is internally consistent");
+    for name in ["by_handle", "by_id"] {
+        assert_eq!(extracted::<GroupListData>(&globals, name), expected_by_hand);
+    }
+
+    // The automatic shape, named entirely by id, with the fixture's exclusion.
+    assert_eq!(
+        extracted::<GroupListData>(&globals, "automatic_by_id"),
+        GroupList::new(
+            GroupListParameters {
+                name: "Automatique".to_owned(),
+                students_per_group: nonzero_range((1, 2)),
+                group_names: vec![None; 4],
+            },
+            GroupListFilling::Automatic {
+                excluded_students: BTreeSet::from([students[2]]),
+            },
+        )
+        .expect("the hand-built list is internally consistent")
+    );
+
+    // The default pin: `clm.GroupListData()` is the model's own default — a
+    // list named « Liste », two to three students per group, sixteen unnamed
+    // groups, and the solver filling them.
+    assert_eq!(
+        extracted::<GroupListData>(&globals, "bare"),
+        GroupList::default()
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<GroupListData>(&globals, "not_a_name"),
+        (
+            "TypeError".to_owned(),
+            "a GroupListData's name is a string, and 3 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<GroupListData>(&globals, "not_a_range"),
+        (
+            "ValueError".to_owned(),
+            "a GroupListData's students_per_group is a (min, max) range, and \
+             5 is above 2"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<GroupListData>(&globals, "not_a_names_list"),
+        (
+            "TypeError".to_owned(),
+            "a GroupListData's group_names is a list of names, and 3 cannot be \
+             iterated over"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<GroupListData>(&globals, "not_an_entry"),
+        (
+            "ValueError".to_owned(),
+            "a GroupListData's group_names holds non-empty strings or None, \
+             and '' is neither"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<GroupListData>(&globals, "not_a_filling"),
+        (
+            "TypeError".to_owned(),
+            "a GroupListData's filling is a Filling, and 'Aurore' is not one".to_owned(),
+        )
+    );
+
+    // The two sealed-constructor violations, in the model's own words.
+    assert_eq!(
+        refused::<GroupListData>(&globals, "mismatched_count"),
+        (
+            "ValueError".to_owned(),
+            "prefilled group count (2) does not match the group name count (3)".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<GroupListData>(&globals, "duplicated_student"),
+        (
+            "ValueError".to_owned(),
+            format!("student {:?} appears in two prefilled groups", students[0]),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<GroupListData>(&globals, "foreign_student");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed group list stales the handle that names it
+///
+/// Stale is loud on the value surface like everywhere else: `to_data()`
+/// through a dead handle raises, and it does not hand back a value describing
+/// a group list that is gone. The value itself is untouched — nothing in it
+/// names the list — so the same value still extracts after the removal. The
+/// read surface ships no removes, so the `UpdateOp` lands between the two
+/// stages.
+#[test]
+fn a_removed_group_list_stales_the_values_that_name_it() {
+    let dir = workspace("group-list-data-stale");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entity the script is
+    // holding.
+    let data = reload(&source);
+    let doomed = data
+        .get_inner_data()
+        .params
+        .group_lists
+        .group_list_map
+        .keys()
+        .last()
+        .expect("the fixture has group lists");
+    let expected = data
+        .get_inner_data()
+        .params
+        .group_lists
+        .group_list_map
+        .get(&doomed)
+        .cloned()
+        .expect("the doomed list exists before the stage");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/group_list_data_stale_before.py"),
+            include_str!("scripts/group_list_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        // One stage in the middle, so this runs once — and it makes the one
+        // change the two halves of this test stand on.
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::GroupLists(
+                        collomatique_ops::GroupListsUpdateOp::DeleteGroupList(doomed),
+                    ),
+                )
+                .expect("the fixture takes the removal");
+        },
+    );
+
+    // The value built before the removal is untouched, and still extracts to
+    // the list the file used to hold — the students it names all survived.
+    assert_eq!(
+        extracted::<GroupListData>(&globals, "doomed_value"),
+        expected
     );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");

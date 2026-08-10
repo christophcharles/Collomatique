@@ -432,6 +432,34 @@ impl GroupList {
         crate::refs::group_list_references(py, self)
     }
 
+    /// This group list, detached — a `GroupListData` holding what the handle
+    /// shows
+    ///
+    /// A fresh object every call. The filling comes out as the matching leaf
+    /// value — `PrefilledGroups` or `AutomaticGroups` — because the value
+    /// keeps the sum the model keeps; the students inside come out as ids
+    /// rather than as handles, since a value holding handles would carry this
+    /// document around with it and keep it alive (`docs/python/values.md`
+    /// §2.3).
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let group_list = self.read(py, |data| {
+            data.params
+                .group_lists
+                .group_list_map
+                .get(&self.id)
+                .cloned()
+        })?;
+
+        crate::data::GroupListData::to_py(py, &group_list)
+    }
+
     /// Whether two handles name the same group list of the same document
     ///
     /// Never reads the state, so it keeps working once the group list is gone —

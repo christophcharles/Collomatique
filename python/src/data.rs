@@ -18,17 +18,17 @@ use pyo3::PyClass;
 use pyo3::exceptions::{PyAttributeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
-use pyo3::types::{PyDict, PyList, PySet};
+use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
-    incompats, slots, students, subjects, teachers, week_patterns,
+    group_lists, incompats, slots, students, subjects, teachers, week_patterns,
 };
 
 use crate::Document;
-use crate::collections::{Period, Subject, Teacher, Week, WeekPattern};
+use crate::collections::{Period, Student, Subject, Teacher, Week, WeekPattern};
 use crate::handles::{Handle, RawId, argument, shown};
-use crate::ids::{IdClass, PeriodId, SubjectId, TeacherId, WeekId, WeekPatternId};
+use crate::ids::{IdClass, PeriodId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId};
 use crate::values;
 
 /// The dataclasses, as `data.py` writes them
@@ -480,6 +480,162 @@ fn time_slots(
         .collect()
 }
 
+/// A field holding the group names of a group list
+///
+/// A list of optional non-empty strings, entry `i` naming group `i` and
+/// `None` naming none. The empty string is refused the way every optional
+/// text is — absent is `None`, never `""` — and the generic bound is the same
+/// trick [optional_text] uses, so this crate keeps no dependency of its own
+/// on the model's string type.
+fn group_names<T: TryFrom<String>>(
+    site: Site<'_>,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Vec<Option<T>>> {
+    let value = field(site, "group_names", obj)?;
+    let items = value.try_iter().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a list of names, and {} cannot be iterated over",
+            site.field("group_names"),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    items
+        .map(|item| {
+            let item = item?;
+            if item.is_none() {
+                return Ok(None);
+            }
+
+            let text: String = item.extract().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} holds non-empty strings or None, and {} is neither",
+                    site.field("group_names"),
+                    shown(&item, "that value"),
+                ))
+            })?;
+
+            T::try_from(text).map(Some).map_err(|_| {
+                PyValueError::new_err(format!(
+                    "{} holds non-empty strings or None, and '' is neither",
+                    site.field("group_names"),
+                ))
+            })
+        })
+        .collect()
+}
+
+/// A field holding one of the two fillings of a group list
+///
+/// The sum keeps its two shapes in python — [values::AutomaticGroups] and
+/// [values::PrefilledGroups], under the [values::Filling] base — and the two
+/// are told apart by their class, the way the four periodicities are. The
+/// students inside resolve like every other entity reference: a handle or an
+/// id, against this document, so a foreign handle and a dead id are refused
+/// here. Nothing else can be refused: the group count and the duplicate check
+/// belong to the pair `{params, filling}` and stay in the model's own
+/// constructor, which the caller runs.
+fn filling(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<group_lists::GroupListFilling> {
+    let value = field(site, "filling", obj)?;
+
+    if let Ok(filling) = value.cast::<values::AutomaticGroups>() {
+        let excluded = filling.get().excluded_students.bind(obj.py());
+        let items = excluded.try_iter().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} is a set of students, and {} cannot be iterated over",
+                site.field("filling"),
+                shown(excluded, "that value"),
+            ))
+        })?;
+        let excluded_students = items
+            .map(|student| argument::<Student>(doc, &student?))
+            .collect::<PyResult<BTreeSet<_>>>()?;
+
+        return Ok(group_lists::GroupListFilling::Automatic { excluded_students });
+    }
+
+    if let Ok(filling) = value.cast::<values::PrefilledGroups>() {
+        let groups = filling.get().groups.bind(obj.py());
+        let items = groups.try_iter().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} is a collection of groups, and {} cannot be iterated over",
+                site.field("filling"),
+                shown(groups, "that value"),
+            ))
+        })?;
+        let mut prefilled = Vec::new();
+        for group in items {
+            let group = group?;
+            let members = group.try_iter().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} holds groups of students, and {} is not one",
+                    site.field("filling"),
+                    shown(&group, "that value"),
+                ))
+            })?;
+            let students = members
+                .map(|student| argument::<Student>(doc, &student?))
+                .collect::<PyResult<BTreeSet<_>>>()?;
+            prefilled.push(group_lists::PrefilledGroup { students });
+        }
+
+        return Ok(group_lists::GroupListFilling::Prefilled { groups: prefilled });
+    }
+
+    Err(PyTypeError::new_err(format!(
+        "{} is a Filling, and {} is not one",
+        site.field("filling"),
+        shown(&value, "that value"),
+    )))
+}
+
+/// The python filling for one model filling
+///
+/// The students come out as ids, like every entity reference of a value
+/// (§2.3 of the design), inside the leaf value's frozen containers.
+fn filling_to_py<'py>(
+    py: Python<'py>,
+    filling: &group_lists::GroupListFilling,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(match filling {
+        group_lists::GroupListFilling::Automatic { excluded_students } => Py::new(
+            py,
+            values::AutomaticGroups {
+                excluded_students: PyFrozenSet::new(
+                    py,
+                    excluded_students.iter().map(|id| StudentId::wrap(*id)),
+                )?
+                .into(),
+            }
+            .init(),
+        )?
+        .into_bound(py)
+        .into_any(),
+        group_lists::GroupListFilling::Prefilled { groups } => {
+            let groups: Vec<Bound<'py, PyAny>> = groups
+                .iter()
+                .map(|group| {
+                    PyFrozenSet::new(py, group.students.iter().map(|id| StudentId::wrap(*id)))
+                        .map(|set| set.into_any())
+                })
+                .collect::<PyResult<_>>()?;
+            Py::new(
+                py,
+                values::PrefilledGroups {
+                    groups: PyTuple::new(py, groups)?.into(),
+                }
+                .init(),
+            )?
+            .into_bound(py)
+            .into_any()
+        }
+    })
+}
+
 /// The person card the two classes share, read off a value
 ///
 /// The fields are read in the order they are declared in, so the first bad one
@@ -831,6 +987,70 @@ impl Value for IncompatData {
             "week_pattern",
             incompat.week_pattern_id.map(WeekPatternId::wrap),
         )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One group list — a name, a student range, the group names, and the filling
+///
+/// The model splits the id-free parameters from the `#[fk]` filling, for its
+/// reference walk; python flattens them, the way the handle already shows
+/// them. What stays a sum is the filling itself: `PrefilledGroups` or
+/// `AutomaticGroups`, two leaf classes under the `Filling` base — the
+/// `{params, filling}` pair is sealed in the model, and the boundary calls
+/// the model's own constructor, which is where the group-count and
+/// duplicate-student checks stay.
+pub struct GroupListData;
+
+impl Value for GroupListData {
+    /// The **entity**, and the op payload too: the group list ops carry the
+    /// whole sealed `GroupList`, so §2.0 of the design says nothing new here.
+    type Model = group_lists::GroupList;
+
+    const CLASS: &'static str = "GroupListData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<group_lists::GroupList> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names. The two value-
+        // internal invariants — a prefilled filling has exactly as many groups
+        // as `group_names`, and no student appears in two — are the model's
+        // own, and their message is the one a script meets.
+        let params = group_lists::GroupListParameters {
+            name: plain_text(site, "name", obj)?,
+            students_per_group: nonzero_range(site, "students_per_group", obj)?,
+            group_names: group_names(site, obj)?,
+        };
+        let filling = filling(doc, site, obj)?;
+
+        group_lists::GroupList::new(params, filling)
+            .map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        group_list: &group_lists::GroupList,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let params = group_list.params();
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("name", &params.name)?;
+        kwargs.set_item(
+            "students_per_group",
+            values::nonzero_range(&params.students_per_group),
+        )?;
+        kwargs.set_item(
+            "group_names",
+            PyList::new(
+                py,
+                params
+                    .group_names
+                    .iter()
+                    .map(|name| name.as_ref().map(|name| name.to_string())),
+            )?,
+        )?;
+        kwargs.set_item("filling", filling_to_py(py, group_list.filling())?)?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

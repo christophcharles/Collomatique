@@ -15,14 +15,18 @@
 //! need, [TimeSlot], which the incompatibilities hand out, the settings
 //! vocabulary — [Enforcement] and [Limit] — which the settings and balancing
 //! read surfaces hand out, and [Color] and [Orientation], which the export
-//! configuration hands out. The rest of the vocabulary lands with the
-//! collections that hand it out.
+//! configuration hands out. The fillings of the group lists — [Filling] and
+//! its two subclasses — are the first leaf values that hold python objects,
+//! and they land with the collections that hand them out, which is the rest
+//! of this module's rule.
 
 use std::num::NonZeroU32;
 
-use pyo3::exceptions::PyValueError;
+use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
-use pyo3::types::PyTuple;
+use pyo3::types::{PyFrozenSet, PyTuple};
+
+use crate::handles::shown;
 
 use collomatique_state_colloscopes::export_config::{Color as RawColor, PageOrientation};
 use collomatique_state_colloscopes::settings::SoftParam;
@@ -975,6 +979,216 @@ impl Color {
     }
 }
 
+/// The base class of the two fillings of a group list
+///
+/// A group list is either filled by hand — its groups are fixed sets of
+/// students — or by the solver, which places the students itself. Those are
+/// the two subclasses, so `isinstance(f, Filling)` catches both of them. It
+/// has no constructor of its own: every filling is one of the subclasses, and
+/// `collomatique.Filling()` raises `TypeError`.
+///
+/// The sum keeps its two shapes in python rather than flattening, because a
+/// flat encoding of a sum type has two states that mean nothing — both shapes
+/// set, or neither (`docs/python/values.md` §3.6).
+#[pyclass(module = "collomatique", subclass, frozen)]
+pub struct Filling;
+
+/// Groups filled by the solver, minus the students it must skip
+///
+/// The automatic filling of a group list: the solver places every student but
+/// the excluded ones. The exclusions are a frozenset of `Student` handles or
+/// `StudentId`s:
+///
+/// ```python
+/// clm.AutomaticGroups(excluded_students={ron})
+/// ```
+///
+/// The students are python objects rather than model data, because resolving
+/// them needs a document and a leaf value has none: they are checked when the
+/// value is used, like every other entity reference of the api. So nothing is
+/// refused here but a value that cannot be iterated over.
+///
+/// `==` and `hash` compare the frozenset, so two fillings naming the same
+/// students, one by handle and one by id, do *not* compare equal — a leaf
+/// value stores what it was given, and a handle and an id hash differently
+/// (`docs/python/values.md` §2.3).
+#[pyclass(module = "collomatique", extends = Filling, frozen)]
+pub struct AutomaticGroups {
+    /// The students the automatic filling must skip, as a python frozenset
+    pub(crate) excluded_students: Py<PyFrozenSet>,
+}
+
+#[pymethods]
+impl AutomaticGroups {
+    #[new]
+    #[pyo3(signature = (excluded_students = None))]
+    fn new(
+        py: Python<'_>,
+        excluded_students: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<PyClassInitializer<Self>> {
+        let set = match excluded_students {
+            Some(excluded_students) => {
+                let items = excluded_students.try_iter().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "an AutomaticGroups' excluded_students is a set of students, \
+                         and {} is not one",
+                        shown(excluded_students, "that value"),
+                    ))
+                })?;
+                PyFrozenSet::new(excluded_students.py(), items.collect::<PyResult<Vec<_>>>()?)?
+            }
+            None => PyFrozenSet::empty(py)?,
+        };
+
+        Ok(AutomaticGroups {
+            excluded_students: set.into(),
+        }
+        .init())
+    }
+
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const __match_args__: (&'static str,) = ("excluded_students",);
+
+    /// The students the automatic filling must skip, as a frozenset of
+    /// `Student` handles or `StudentId`s
+    #[getter]
+    fn excluded_students(&self, py: Python<'_>) -> Py<PyFrozenSet> {
+        self.excluded_students.clone_ref(py)
+    }
+
+    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<AutomaticGroups>() {
+            Ok(other) => self
+                .excluded_students
+                .bind(py)
+                .eq(other.get().excluded_students.bind(py))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> PyResult<u64> {
+        self.excluded_students
+            .bind(py)
+            .hash()
+            .map(|hash| hash as u64)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "AutomaticGroups(excluded_students={})",
+            self.excluded_students.bind(py).repr()?,
+        ))
+    }
+}
+
+/// Groups filled by hand, one set of students per group
+///
+/// The prefilled filling of a group list: group `i` is entry `i` of `groups`,
+/// a tuple of frozensets of `Student` handles or `StudentId`s:
+///
+/// ```python
+/// clm.PrefilledGroups(({harry, hermione}, {ron}))
+/// ```
+///
+/// The group count and the duplicate check — no student may appear in two
+/// groups — are `GroupList::new`'s own, and the count needs the group names,
+/// so nothing is checked here: the constructor takes any iterable of
+/// iterables and freezes each of them. `==` and `hash` compare the tuple, so
+/// two fillings naming the same students, one by handle and one by id, do
+/// *not* compare equal (`docs/python/values.md` §2.3).
+#[pyclass(module = "collomatique", extends = Filling, frozen)]
+pub struct PrefilledGroups {
+    /// One frozenset of students per group, in group order
+    pub(crate) groups: Py<PyTuple>,
+}
+
+#[pymethods]
+impl PrefilledGroups {
+    #[new]
+    fn new(groups: &Bound<'_, PyAny>) -> PyResult<PyClassInitializer<Self>> {
+        let items = groups.try_iter().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "a PrefilledGroups' groups is a collection of collections of students, \
+                 and {} is not one",
+                shown(groups, "that value"),
+            ))
+        })?;
+        let mut frozen = Vec::new();
+        for group in items {
+            let group = group?;
+            let members = group.try_iter().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "a PrefilledGroups' groups holds collections of students, \
+                     and {} is not one",
+                    shown(&group, "that value"),
+                ))
+            })?;
+            frozen.push(PyFrozenSet::new(
+                groups.py(),
+                members.collect::<PyResult<Vec<_>>>()?,
+            )?);
+        }
+        let tuple = PyTuple::new(groups.py(), frozen)?;
+
+        Ok(PrefilledGroups {
+            groups: tuple.into(),
+        }
+        .init())
+    }
+
+    #[classattr]
+    #[allow(non_upper_case_globals)]
+    const __match_args__: (&'static str,) = ("groups",);
+
+    /// The groups, in group order, as a tuple of frozensets of `Student`
+    /// handles or `StudentId`s
+    #[getter]
+    fn groups(&self, py: Python<'_>) -> Py<PyTuple> {
+        self.groups.clone_ref(py)
+    }
+
+    fn __eq__(&self, py: Python<'_>, other: &Bound<'_, PyAny>) -> bool {
+        match other.cast::<PrefilledGroups>() {
+            Ok(other) => self
+                .groups
+                .bind(py)
+                .eq(other.get().groups.bind(py))
+                .unwrap_or(false),
+            Err(_) => false,
+        }
+    }
+
+    fn __hash__(&self, py: Python<'_>) -> PyResult<u64> {
+        self.groups.bind(py).hash().map(|hash| hash as u64)
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "PrefilledGroups(groups={})",
+            self.groups.bind(py).repr()?,
+        ))
+    }
+}
+
+/// Pairs a value with its base class, which is how a subclass instance is built
+///
+/// The same shape as `init_as_periodicity!`, and `pub(crate)` because the
+/// value boundary builds these too: a `GroupListData`'s `to_py` constructs
+/// the filling a read hands out, not only python.
+macro_rules! init_as_filling {
+    ($($name:ident),* $(,)?) => { $(
+        impl $name {
+            pub(crate) fn init(self) -> PyClassInitializer<Self> {
+                PyClassInitializer::from(Filling).add_subclass(self)
+            }
+        }
+    )* };
+}
+
+init_as_filling!(AutomaticGroups, PrefilledGroups);
+
 #[cfg(test)]
 mod tests {
     use super::Weekday;
@@ -1050,5 +1264,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Limit>()?;
     m.add_class::<Color>()?;
     m.add_class::<Orientation>()?;
+    m.add_class::<Filling>()?;
+    m.add_class::<AutomaticGroups>()?;
+    m.add_class::<PrefilledGroups>()?;
     Ok(())
 }

@@ -33,6 +33,8 @@ if TYPE_CHECKING:
     import datetime
 
     from collomatique import (
+        AutomaticGroups,
+        Filling,
         Period,
         PeriodId,
         Periodicity,
@@ -56,6 +58,7 @@ __all__ = [
     "WeekPatternData",
     "SlotData",
     "IncompatData",
+    "GroupListData",
 ]
 
 
@@ -333,3 +336,77 @@ class IncompatData:
     slots: list[TimeSlot] = field(default_factory=list)
     minimum_free_slots: int = 1
     week_pattern: WeekPattern | WeekPatternId | None = None
+
+
+def _sixteen_unnamed() -> list[str | None]:
+    """The group names a new `GroupListData` comes with.
+
+    The model's own default: sixteen unnamed groups, which is room for a class
+    of forty-eight students at three per group. A fresh list every call, since
+    a dataclass must never share a mutable default between its instances.
+    """
+
+    return [None] * 16
+
+
+def _automatic_filling() -> AutomaticGroups:
+    """The filling a new `GroupListData` comes with.
+
+    A function rather than a value, because there is no value to write here:
+    `AutomaticGroups` is one of the rust classes, and this file is compiled
+    while `collomatique` is still initializing, so nothing of it can be
+    imported at that moment. A `default_factory` runs when a value is built
+    instead, which is long after the module is whole.
+    """
+
+    import collomatique
+
+    return collomatique.AutomaticGroups()
+
+
+@dataclass
+class GroupListData:
+    """A group list, detached from the document.
+
+    `doc.group_lists[...].to_data()` hands one back, and the group list
+    mutators will take one:
+
+        clm.GroupListData("Maisons", filling=clm.PrefilledGroups(
+            (({harry, hermione}), ({ron},), ({neville},))))
+
+    Every field takes the model's own default, so `clm.GroupListData()` is
+    exactly what the application creates when a user adds a group list — a
+    list named « Liste », two to three students per group, sixteen unnamed
+    groups, and the solver filling them.
+
+    `name` is a plain string, the empty one included: the model types it that
+    way.
+
+    `students_per_group` is a `(min, max)` pair, inclusive at both ends and
+    counting from one.
+
+    `group_names` names the groups, entry `i` naming group `i`. Its length is
+    the group count, and every group number in the colloscope is measured
+    against it. `None` is a group that shows its number, and a stored name is
+    a non-empty string — `""` is refused when the value is used.
+
+    `filling` is how the groups are filled, and it keeps the sum the model
+    keeps: `AutomaticGroups` lets the solver place the students, and
+    `PrefilledGroups` fixes the set of students of each group. A flat encoding
+    of the two would have two states that mean nothing — both shapes set, or
+    neither — so they stay two classes under the `Filling` base:
+
+        clm.AutomaticGroups(excluded_students={ron})
+        clm.PrefilledGroups(((harry, hermione), (ron,), (neville,)))
+
+    The students inside take `Student` handles and `StudentId`s
+    interchangeably, and `to_data()` fills them with ids. A prefilled filling
+    must have exactly `len(group_names)` groups, and no student may appear in
+    two of them; both are checked when the value is used, by the model's own
+    constructor, whose message is the one a script meets.
+    """
+
+    name: str = "Liste"
+    students_per_group: tuple[int, int] = (2, 3)
+    group_names: list[str | None] = field(default_factory=_sixteen_unnamed)
+    filling: Filling = field(default_factory=_automatic_filling)
