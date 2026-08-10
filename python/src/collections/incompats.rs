@@ -238,6 +238,30 @@ impl Incompat {
         crate::refs::never_referenced::<Self>(py, self)
     }
 
+    /// This incompatibility, detached — an `IncompatData` holding what the
+    /// handle shows
+    ///
+    /// A fresh object every call. The subject and the pattern come out as ids
+    /// rather than as handles, because a value holding handles would carry this
+    /// document around with it and keep it alive (`docs/python/values.md`
+    /// §2.3). The busy windows come out as a *list* of [TimeSlot] — the
+    /// mutable container a value is for (§2.7) — where the handle's read hands
+    /// back the read surface's tuple.
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let incompat = self.read(py, |data| {
+            data.params.incompats.incompat_map.get(&self.id).cloned()
+        })?;
+
+        crate::data::IncompatData::to_py(py, &incompat)
+    }
+
     /// Whether two handles name the same incompatibility of the same document
     ///
     /// Never reads the state, so it keeps working once the incompatibility is

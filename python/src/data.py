@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         SubjectId,
         Teacher,
         TeacherId,
+        TimeSlot,
         Week,
         WeekId,
         Weekday,
@@ -54,6 +55,7 @@ __all__ = [
     "InterrogationData",
     "WeekPatternData",
     "SlotData",
+    "IncompatData",
 ]
 
 
@@ -285,3 +287,49 @@ class SlotData:
     extra_info: str = ""
     week_pattern: WeekPattern | WeekPatternId | None = None
     cost: int = 0
+
+
+@dataclass
+class IncompatData:
+    """An incompatibility, detached from the document.
+
+    `doc.incompats[...].to_data()` hands one back, and the incompatibility
+    mutators will take one:
+
+        clm.IncompatData("Lundi Midi", maths, slots=[clm.TimeSlot(
+            clm.Weekday.MONDAY, datetime.time(12, 0), 60)])
+
+    An incompatibility says when the students of a subject may be unavailable:
+    the busy windows of `slots`, at least `minimum_free_slots` of which must
+    stay free.
+
+    `subject` is the subject whose students this constrains. It is deliberately
+    *not* required to hold interrogations of its own — a student can be
+    declared in a subject purely so that an incompatibility can block slots for
+    them, without the subject having colles. It takes a `Subject` handle or a
+    `SubjectId`, like every other place in this API that names an entity;
+    `to_data()` fills it with an id, so that a value carries no document around
+    with it.
+
+    `slots` is the list of busy windows, as `TimeSlot` values — a day, a start
+    time and a duration. The windows are data, not handles: nothing points at
+    one by position, so a script takes them apart and compares them as values.
+    The model's own window type refuses a window that crosses midnight, and
+    `TimeSlot` refuses it when it is built, so a list here only ever holds
+    windows the document could hold.
+
+    `minimum_free_slots` is how many of the windows must stay free, at least
+    one: an incompatibility that could spare every window would be no
+    incompatibility at all. It has no model default, and 1 is the neutral one.
+
+    `week_pattern` says which weeks this incompatibility applies on. `None`
+    means every week: the incompatibility has no pattern of its own, so only
+    the weeks' own flags switch it off. It takes a `WeekPattern` handle or a
+    `WeekPatternId`, and `to_data()` fills it with an id.
+    """
+
+    name: str
+    subject: Subject | SubjectId
+    slots: list[TimeSlot] = field(default_factory=list)
+    minimum_free_slots: int = 1
+    week_pattern: WeekPattern | WeekPatternId | None = None

@@ -18,11 +18,11 @@ use pyo3::PyClass;
 use pyo3::exceptions::{PyAttributeError, PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
-use pyo3::types::{PyDict, PySet};
+use pyo3::types::{PyDict, PyList, PySet};
 
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
-    slots, students, subjects, teachers, week_patterns,
+    incompats, slots, students, subjects, teachers, week_patterns,
 };
 
 use crate::Document;
@@ -351,6 +351,26 @@ fn cost(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<i32> {
     })
 }
 
+/// A field the model stores as "at least one"
+///
+/// The incompatibility's `minimum_free_slots` is the one field of this shape:
+/// it has no model default, and 1 is the neutral one — an incompatibility that
+/// could spare every window would be no incompatibility at all. The check is
+/// `values.rs`'s own, so a count written in a dataclass is refused for the same
+/// reason and in the same words as one written in a leaf value.
+fn non_zero_count(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<NonZeroU32> {
+    let value = field(site, name, obj)?;
+    let count: u32 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a number of slots, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    values::at_least_one(&site.field(name), count)
+}
+
 /// A field naming one entity
 ///
 /// The single one's version of [entity_set], and it defers to the same
@@ -422,6 +442,42 @@ where
     })?;
 
     items.map(|item| argument::<H>(doc, &item?)).collect()
+}
+
+/// A field holding the busy windows of an incompatibility
+///
+/// Anything iterable is accepted, and every item must be a [values::TimeSlot] —
+/// the leaf value the read surface already hands the windows out as. Nothing
+/// else can be refused here: a `TimeSlot` was born whole, so a window that
+/// crosses midnight or lasts zero minutes never existed in the first place.
+fn time_slots(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Vec<collomatique_time::SlotWithDuration>> {
+    let value = field(site, name, obj)?;
+    let items = value.try_iter().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a list of TimeSlot values, and {} cannot be iterated over",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    items
+        .map(|item| {
+            let item = item?;
+            let slot: values::TimeSlot = item.extract().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} holds TimeSlot values, and {} is not one",
+                    site.field(name),
+                    shown(&item, "that value"),
+                ))
+            })?;
+
+            Ok(slot.to_model())
+        })
+        .collect()
 }
 
 /// The person card the two classes share, read off a value
@@ -725,6 +781,56 @@ impl Value for SlotData {
         kwargs.set_item("extra_info", &slot.extra_info)?;
         kwargs.set_item("week_pattern", slot.week_pattern.map(WeekPatternId::wrap))?;
         kwargs.set_item("cost", slot.cost)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One incompatibility — a name, a subject, the busy windows, and the count
+///
+/// One of the eleven classes whose entity and op payload are the same type:
+/// `AddNewIncompat` and `UpdateIncompat` carry the whole `Incompatibility`, so
+/// §2.0 of the design says nothing new here. The subject is deliberately not
+/// required to hold interrogations — the edge's whole point — so the value
+/// takes any live subject, and the refusal stays where the model keeps it, in
+/// the write.
+pub struct IncompatData;
+
+impl Value for IncompatData {
+    type Model = incompats::Incompatibility;
+
+    const CLASS: &'static str = "IncompatData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<incompats::Incompatibility> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(incompats::Incompatibility {
+            name: plain_text(site, "name", obj)?,
+            subject_id: entity::<Subject>(doc, site, "subject", obj)?,
+            slots: time_slots(site, "slots", obj)?,
+            minimum_free_slots: non_zero_count(site, "minimum_free_slots", obj)?,
+            week_pattern_id: optional_entity::<WeekPattern>(doc, site, "week_pattern", obj)?,
+        })
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        incompat: &incompats::Incompatibility,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("name", &incompat.name)?;
+        kwargs.set_item("subject", SubjectId::wrap(incompat.subject_id))?;
+        kwargs.set_item(
+            "slots",
+            PyList::new(py, incompat.slots.iter().map(values::TimeSlot::from_model))?,
+        )?;
+        kwargs.set_item("minimum_free_slots", incompat.minimum_free_slots.get())?;
+        kwargs.set_item(
+            "week_pattern",
+            incompat.week_pattern_id.map(WeekPatternId::wrap),
+        )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

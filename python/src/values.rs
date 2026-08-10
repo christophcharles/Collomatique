@@ -683,6 +683,25 @@ impl TimeSlot {
             duration: slot.duration().get(),
         }
     }
+
+    /// The model window for one python window
+    ///
+    /// Nothing can be refused here: a window was born whole, so its three
+    /// checks were run when it was built, which is the whole difference
+    /// between a leaf value and a dataclass (`docs/python/values.md` §1).
+    /// This is the inbound half of the travel `from_model` makes out.
+    pub(crate) fn to_model(&self) -> collomatique_time::SlotWithDuration {
+        let start = collomatique_time::SlotStart {
+            weekday: self.weekday.to_model(),
+            start_time: collomatique_time::WholeMinuteTime::new(self.start_time)
+                .expect("a TimeSlot's start_time was checked when it was built"),
+        };
+        collomatique_time::SlotWithDuration::new(
+            start,
+            collomatique_time::NonZeroMinutes::from(self.duration),
+        )
+        .expect("a TimeSlot's window was checked when it was built")
+    }
 }
 
 /// Whether a goal is an objective or a hard constraint

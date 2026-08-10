@@ -15,7 +15,8 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    InterrogationData, SlotData, StudentData, SubjectData, TeacherData, WeekPatternData,
+    IncompatData, InterrogationData, SlotData, StudentData, SubjectData, TeacherData,
+    WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -4145,6 +4146,334 @@ fn the_incompats_read_back_slot_by_slot() {
 #[test]
 fn a_time_slot_refuses_what_the_model_refuses() {
     run(include_str!("scripts/time_slot.py"), |_| Ok(()));
+}
+
+/// The incompatibility values carry the busy windows out and back
+///
+/// The script walks `doc.incompats` and detaches each incompatibility with
+/// `to_data()`; rust compares the values it left in the globals against the
+/// same document read straight from the model — the names, the subjects, every
+/// window of every list, the minimums and the patterns. The `TimeSlot` leaf
+/// value makes the trip back *in* as a list element, which is the half of its
+/// travel the read surface never exercised.
+///
+/// The example holds six incompatibilities across two subjects, one with more
+/// than a single busy window, all bound to no week pattern — enough to pin the
+/// walk and the `None` shape of `week_pattern`. The `Some` shape comes in only
+/// through the hand-built value: the fixture has no incompatibility carrying a
+/// pattern, so nothing here claims to read one out.
+#[test]
+fn the_incompat_values_carry_the_busy_windows_out_and_back() {
+    let dir = workspace("incompat-values");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/incompat_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // In id order, which is the order `doc.incompats` promises.
+    let incompats: Vec<_> = params
+        .incompats
+        .incompat_map
+        .iter()
+        .map(|(id, incompat)| (id, incompat.clone()))
+        .collect();
+    let patterns: Vec<_> = params.week_patterns.week_pattern_map.keys().collect();
+
+    // The example is only worth reading if it has something to say: six
+    // incompatibilities, one of them with more than a single busy window, and
+    // all of them without a week pattern — the shape the script's `None`
+    // assertions stand on.
+    assert_eq!(
+        incompats.len(),
+        6,
+        "the example holds six incompatibilities"
+    );
+    assert!(
+        incompats
+            .iter()
+            .any(|(_id, incompat)| incompat.slots.len() > 1)
+    );
+    assert!(
+        incompats
+            .iter()
+            .all(|(_id, incompat)| incompat.week_pattern_id.is_none())
+    );
+
+    // Out and back, whole.
+    assert_eq!(
+        extracted_all::<IncompatData>(&globals, "incompat_values"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat.clone())
+            .collect::<Vec<_>>()
+    );
+
+    // And the same fields as python saw them.
+    let subject_position = |subject_id: &collomatique_state_colloscopes::SubjectId| {
+        params
+            .subjects
+            .find_subject_position(*subject_id)
+            .expect("an incompatibility names a live subject")
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "incompat_names"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat.name.clone())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "incompat_subject_indices"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| subject_position(&incompat.subject_id))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Vec<(String, chrono::NaiveTime, u32)>>>(&globals, "incompat_slots"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat
+                .slots
+                .iter()
+                .map(|slot| (
+                    weekday_name(slot.start().weekday).to_owned(),
+                    *slot.start().start_time.inner(),
+                    slot.duration().get().get(),
+                ))
+                .collect::<Vec<_>>())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<u32>>(&globals, "minimum_free_slots"),
+        incompats
+            .iter()
+            .map(|(_id, incompat)| incompat.minimum_free_slots.get())
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<usize>>>(&globals, "week_pattern_positions"),
+        incompats
+            .iter()
+            .map(
+                |(_id, incompat)| incompat.week_pattern_id.map(|pattern_id| patterns
+                    .iter()
+                    .position(|id| *id == pattern_id)
+                    .expect("an incompatibility names a live pattern"))
+            )
+            .collect::<Vec<_>>()
+    );
+
+    // Built by hand: the value the script wrote out is the incompatibility
+    // expected of it, whether the subject and the pattern were named by handle
+    // or by id. The `Some` shape of `week_pattern` is inbound only, and it is
+    // pinned here, since no fixture carries it.
+    let first_subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+    let first_pattern = *patterns.first().expect("the example has week patterns");
+    let at = |hour: u32, minute: u32| {
+        collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a real time of day"),
+        )
+        .expect("a whole minute")
+    };
+    let noon = collomatique_time::SlotWithDuration::new(
+        collomatique_time::SlotStart {
+            weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+            start_time: at(12, 0),
+        },
+        collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+    )
+    .expect("noon to one o'clock is a window");
+    let written_out = collomatique_state_colloscopes::incompats::Incompatibility {
+        subject_id: first_subject,
+        name: "Mercredi après-midi".to_owned(),
+        slots: vec![noon],
+        minimum_free_slots: NonZeroU32::new(2).expect("two is not zero"),
+        week_pattern_id: Some(first_pattern),
+    };
+    for name in ["incompat_by_handle", "incompat_by_id"] {
+        assert_eq!(extracted::<IncompatData>(&globals, name), written_out);
+    }
+
+    // And one carrying nothing but the two fields an incompatibility cannot do
+    // without: no windows, one window free at least, and every week.
+    assert_eq!(
+        extracted::<IncompatData>(&globals, "bare_incompat"),
+        collomatique_state_colloscopes::incompats::Incompatibility {
+            subject_id: first_subject,
+            name: String::new(),
+            slots: vec![],
+            minimum_free_slots: NonZeroU32::new(1).expect("one is not zero"),
+            week_pattern_id: None,
+        }
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_name"),
+        (
+            "TypeError".to_owned(),
+            "an IncompatData's name is a string, and 3 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_subject"),
+        (
+            "TypeError".to_owned(),
+            "a subject argument takes a Subject or a SubjectId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_slots"),
+        (
+            "TypeError".to_owned(),
+            "an IncompatData's slots is a list of TimeSlot values, and 3 \
+             cannot be iterated over"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_time_slot"),
+        (
+            "TypeError".to_owned(),
+            "an IncompatData's slots holds TimeSlot values, and 'jeudi' is not one".to_owned(),
+        )
+    );
+
+    // The one field the model counts non-zero, refused in `values.rs`'s own
+    // words — the boundary's only new refusal, since a `TimeSlot` was born
+    // whole.
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_minimum"),
+        (
+            "ValueError".to_owned(),
+            "an IncompatData's minimum_free_slots is at least 1, and 0 was given".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_minimum_count"),
+        (
+            "TypeError".to_owned(),
+            "an IncompatData's minimum_free_slots is a number of slots, and \
+             'beaucoup' is not one"
+                .to_owned(),
+        )
+    );
+
+    // A field naming an entity refuses with `argument`'s own sentence, so a
+    // script meets the same words here as anywhere else it passes something
+    // that was never a reference to this document.
+    assert_eq!(
+        refused::<IncompatData>(&globals, "not_a_pattern"),
+        (
+            "TypeError".to_owned(),
+            "a week pattern argument takes a WeekPattern or a WeekPatternId, \
+             and 'Lundi Midi' is neither"
+                .to_owned(),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<IncompatData>(&globals, "foreign_subject");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed incompatibility or pattern stales the values that name it
+///
+/// Stale is loud on the value surface like everywhere else: `to_data()`
+/// through a dead handle raises, and a hand-built value naming an entity that
+/// no longer exists refuses to extract. The read surface ships no removes, so
+/// the two `UpdateOp`s land between two stages — the last incompatibility in
+/// id order and the last week pattern, neither of which anything in the script
+/// but the value it built names.
+#[test]
+fn a_removed_incompat_or_pattern_stales_the_incompat_values_that_name_it() {
+    let dir = workspace("incompat-values-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entities the script is
+    // holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let doomed_incompat = params
+        .incompats
+        .incompat_map
+        .keys()
+        .last()
+        .expect("the example has incompatibilities");
+    let doomed_pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .last()
+        .expect("the example has week patterns");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/incompat_data_stale_before.py"),
+            include_str!("scripts/incompat_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        // Two scripts, so this runs once — and it makes both changes, because
+        // the failures they cause are the halves of one test.
+        |py, globals| {
+            let doc = document_of(globals);
+            let apply = |op| {
+                doc.borrow_mut(py)
+                    .update(py, op)
+                    .expect("the example takes these two changes");
+            };
+
+            apply(collomatique_ops::UpdateOp::Incompatibilities(
+                collomatique_ops::IncompatibilitiesUpdateOp::DeleteIncompat(doomed_incompat),
+            ));
+            apply(collomatique_ops::UpdateOp::WeekPatterns(
+                collomatique_ops::WeekPatternsUpdateOp::DeleteWeekPattern(doomed_pattern),
+            ));
+        },
+    );
+
+    // The values naming the dead pattern no longer name anything, and it makes
+    // no difference whether the script wrote the handle or the id.
+    for name in [
+        "naming_the_dead_pattern_by_handle",
+        "naming_the_dead_pattern_by_id",
+    ] {
+        let (kind, _message) = refused::<IncompatData>(&globals, name);
+        assert_eq!(kind, "StaleHandleError", "`{name}` should be refused");
+    }
+
+    // And the ones naming only what survived still extract — the value with no
+    // pattern at all had nothing to lose here.
+    assert_eq!(
+        extracted::<IncompatData>(&globals, "naming_no_pattern").week_pattern_id,
+        None
+    );
+    assert!(
+        extracted::<IncompatData>(&globals, "naming_the_living_pattern")
+            .week_pattern_id
+            .is_some()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
 /// A document written here rather than copied, holding both group-list shapes
