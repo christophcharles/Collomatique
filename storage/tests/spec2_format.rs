@@ -56,11 +56,11 @@ const SETTINGS_BLOCK: &str = r#"{ "Settings": {
     "students": []
 } }"#;
 
-/// A minimal scheduling setup: one period of two weeks, one subject
-/// with interrogations, one teacher, one slot (id 7)
+/// A minimal scheduling setup: one period of two weeks (ids 20 and 21),
+/// one subject with interrogations, one teacher, one slot (id 7)
 ///
 /// The second week's `interrogations` flag and the slot's week pattern
-/// (`[true, false]` when enabled) are the two knobs that make weeks
+/// (excluding week 21 when enabled) are the two knobs that make weeks
 /// inactive for the colloscope placement tests.
 fn scheduling_entries(week1_interrogations: bool, with_pattern: bool) -> Vec<String> {
     let mut entries = vec![
@@ -69,8 +69,8 @@ fn scheduling_entries(week1_interrogations: bool, with_pattern: bool) -> Vec<Str
                 "first_week": null,
                 "periods": [
                     {{ "id": 1, "weeks": [
-                        {{ "interrogations": true, "annotation": null }},
-                        {{ "interrogations": {week1_interrogations}, "annotation": null }}
+                        {{ "id": 20, "interrogations": true, "annotation": null }},
+                        {{ "id": 21, "interrogations": {week1_interrogations}, "annotation": null }}
                     ] }}
                 ]
             }} }}"#
@@ -99,7 +99,7 @@ fn scheduling_entries(week1_interrogations: bool, with_pattern: bool) -> Vec<Str
     ];
     if with_pattern {
         entries.push(entry(
-            r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
+            r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "excluded_weeks": [21] } ] }"#,
         ));
     }
     let week_pattern_id = if with_pattern { "6" } else { "null" };
@@ -156,8 +156,8 @@ const SPEC_COMPLETE_EXAMPLE: &str = r#"{
             {
               "id": 1,
               "weeks": [
-                { "interrogations": true, "annotation": "Rentrée" },
-                { "interrogations": true, "annotation": null }
+                { "id": 9, "interrogations": true, "annotation": "Rentrée" },
+                { "id": 10, "interrogations": true, "annotation": null }
               ]
             }
           ]
@@ -238,7 +238,7 @@ const SPEC_COMPLETE_EXAMPLE: &str = r#"{
       "needed_entry": true,
       "content": {
         "WeekPatterns": [
-          { "id": 6, "name": "Toutes les semaines", "weeks": [true, true] }
+          { "id": 6, "name": "Toutes les semaines", "excluded_weeks": [] }
         ]
       }
     },
@@ -307,7 +307,7 @@ const SPEC_COMPLETE_EXAMPLE: &str = r#"{
       "content": {
         "Colloscope": {
           "interrogations": [
-            { "slot_id": 7, "week": 0, "assigned_groups": [0] }
+            { "slot_id": 7, "week_id": 9, "assigned_groups": [0] }
           ],
           "group_lists": [
             {
@@ -479,7 +479,7 @@ fn colloscope_row_on_unknown_slot_is_rejected() {
         true,
         false,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 99, "week": 0, "assigned_groups": [] } ],
+            "interrogations": [ { "slot_id": 99, "week_id": 20, "assigned_groups": [] } ],
             "group_lists": []
         } }"#,
     );
@@ -490,32 +490,29 @@ fn colloscope_row_on_unknown_slot_is_rejected() {
 }
 
 #[test]
-fn colloscope_row_on_out_of_range_week_is_rejected() {
+fn colloscope_row_on_unknown_week_is_rejected() {
     let content = scheduling_document(
         true,
         false,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 5, "assigned_groups": [] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 99, "assigned_groups": [] } ],
             "group_lists": []
         } }"#,
     );
     assert_eq!(
         expect_decode_error(&content),
-        DecodeError::InvalidInterrogationCell {
-            slot_id: 7,
-            week: 5
-        }
+        DecodeError::UnknownWeekInColloscope { week_id: 99 }
     );
 }
 
 #[test]
 fn colloscope_row_on_non_interrogation_week_is_rejected() {
-    // Week 1 has its `interrogations` flag off
+    // Week 21 has its `interrogations` flag off
     let content = scheduling_document(
         false,
         false,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 1, "assigned_groups": [] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 21, "assigned_groups": [] } ],
             "group_lists": []
         } }"#,
     );
@@ -523,19 +520,19 @@ fn colloscope_row_on_non_interrogation_week_is_rejected() {
         expect_decode_error(&content),
         DecodeError::InvalidInterrogationCell {
             slot_id: 7,
-            week: 1
+            week_id: 21
         }
     );
 }
 
 #[test]
 fn colloscope_row_on_week_pattern_off_week_is_rejected() {
-    // Week 1 has interrogations, but the slot's week pattern is off
+    // Week 21 has interrogations, but the slot's week pattern excludes it
     let content = scheduling_document(
         true,
         true,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 1, "assigned_groups": [] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 21, "assigned_groups": [] } ],
             "group_lists": []
         } }"#,
     );
@@ -543,7 +540,7 @@ fn colloscope_row_on_week_pattern_off_week_is_rejected() {
         expect_decode_error(&content),
         DecodeError::InvalidInterrogationCell {
             slot_id: 7,
-            week: 1
+            week_id: 21
         }
     );
 }
@@ -554,7 +551,7 @@ fn colloscope_row_on_active_cell_decodes() {
         true,
         true,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 20, "assigned_groups": [] } ],
             "group_lists": []
         } }"#,
     );
@@ -615,7 +612,7 @@ fn derived_key_sets_are_completed() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 30, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(
@@ -729,7 +726,7 @@ fn neutral_assignments_row_on_unknown_subject_is_rejected() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 31, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 9999, "students": [] } ] }"#),
@@ -750,8 +747,8 @@ fn neutral_assignments_row_on_excluded_subject_is_rejected() {
             r#"{ "GeneralPlanning": {
                 "first_week": null,
                 "periods": [
-                    { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] },
-                    { "id": 4, "weeks": [ { "interrogations": true, "annotation": null } ] }
+                    { "id": 1, "weeks": [ { "id": 32, "interrogations": true, "annotation": null } ] },
+                    { "id": 4, "weeks": [ { "id": 33, "interrogations": true, "annotation": null } ] }
                 ]
             } }"#,
         ),
@@ -879,11 +876,12 @@ fn a_rule_naming_one_uninterrogated_subject_twice_is_still_inconsistent() {
     );
 }
 
-/// A document with a single period of seven weeks and one week pattern
-/// whose bitmask has `week_count` entries
+/// A document in the **pre-week-id shape** with a single period of seven
+/// weeks and one week pattern whose bitmask has `week_count` entries
 ///
-/// The spec (§4.6) requires exactly one entry per week of the schedule,
-/// so only `week_count == 7` is well-formed here.
+/// That shape required exactly one entry per week of the schedule, so
+/// only `week_count == 7` is well-formed here. Both blocks are legacy:
+/// weeks carry no id and the pattern is a positional bitmask.
 fn seven_week_document_with_pattern_of_length(week_count: usize) -> String {
     let weeks = vec![r#"{ "interrogations": true, "annotation": null }"#; 7].join(", ");
     let bits = vec!["true"; week_count].join(", ");
@@ -1018,10 +1016,10 @@ fn object_id_exactly_at_the_ceiling_is_accepted() {
 }
 
 #[test]
-fn an_id_at_the_ceiling_next_to_a_week_is_accepted() {
-    // The same boundary id as above, in a document that also has a week.
-    // The file is just as legal: it defines one id, 2^63 - 1, and weeks
-    // carry no id at all (they are positional — §4.1).
+fn an_id_at_the_ceiling_next_to_a_legacy_week_is_accepted() {
+    // The same boundary id as above, in a **pre-week-id** document that
+    // also has a week. The file is just as legal: it defines one id,
+    // 2^63 - 1, and in that shape weeks carry no id at all.
     //
     // This pins the hole-filling rule for synthesized week ids. When the
     // decoder minted them *above* every id the file defines, the week here
@@ -1048,6 +1046,99 @@ fn an_id_at_the_ceiling_next_to_a_week_is_accepted() {
     let (inner, caveats) = deserialize_data(&content).expect("boundary id should decode");
     assert!(caveats.is_empty());
     gate(inner);
+}
+
+#[test]
+fn a_week_id_at_the_ceiling_is_accepted() {
+    // A week id is an id like any other: the ceiling applies to it, and
+    // sitting exactly on it is legal.
+    let content = document(&[entry(&format!(
+        r#"{{ "GeneralPlanning": {{
+            "first_week": null,
+            "periods": [
+                {{ "id": 1, "weeks": [ {{ "id": {}, "interrogations": true, "annotation": null }} ] }}
+            ]
+        }} }}"#,
+        u64::MAX >> 1
+    ))]);
+
+    let (inner, caveats) = deserialize_data(&content).expect("boundary week id should decode");
+    assert!(caveats.is_empty());
+    gate(inner);
+}
+
+#[test]
+fn a_week_id_above_the_ceiling_is_rejected() {
+    let content = document(&[entry(&format!(
+        r#"{{ "GeneralPlanning": {{
+            "first_week": null,
+            "periods": [
+                {{ "id": 1, "weeks": [ {{ "id": {}, "interrogations": true, "annotation": null }} ] }}
+            ]
+        }} }}"#,
+        (u64::MAX >> 1) + 1
+    ))]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::IdAboveCeiling {
+            block: "GeneralPlanning",
+            id: (u64::MAX >> 1) + 1
+        }
+    );
+}
+
+#[test]
+fn a_week_id_clashing_with_another_block_is_rejected() {
+    // §3: week ids share the one global id space, so a week cannot reuse
+    // a subject's id.
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [
+                    { "id": 1, "weeks": [ { "id": 2, "interrogations": true, "annotation": null } ] }
+                ]
+            } }"#,
+        ),
+        entry(
+            r#"{ "Subjects": [
+                { "id": 2, "name": "Mathématiques", "interrogation_parameters": null, "excluded_periods": [] }
+            ] }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedIdAcrossBlocks {
+            first: "GeneralPlanning",
+            second: "Subjects",
+            id: 2
+        }
+    );
+}
+
+#[test]
+fn a_week_id_duplicated_within_the_block_is_rejected() {
+    let content = document(&[entry(
+        r#"{ "GeneralPlanning": {
+            "first_week": null,
+            "periods": [
+                { "id": 1, "weeks": [
+                    { "id": 30, "interrogations": true, "annotation": null },
+                    { "id": 30, "interrogations": true, "annotation": null }
+                ] }
+            ]
+        } }"#,
+    )]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedIdInBlock {
+            block: "GeneralPlanning",
+            id: 30
+        }
+    );
 }
 
 #[test]
@@ -1102,8 +1193,8 @@ fn duplicate_slot_id_across_subjects_is_rejected() {
                 "first_week": null,
                 "periods": [
                     { "id": 1, "weeks": [
-                        { "interrogations": true, "annotation": null },
-                        { "interrogations": true, "annotation": null }
+                        { "id": 36, "interrogations": true, "annotation": null },
+                        { "id": 37, "interrogations": true, "annotation": null }
                     ] }
                 ]
             } }"#,
@@ -1150,8 +1241,8 @@ fn duplicate_period_id_names_its_block() {
         r#"{ "GeneralPlanning": {
             "first_week": null,
             "periods": [
-                { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] },
-                { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] }
+                { "id": 1, "weeks": [ { "id": 38, "interrogations": true, "annotation": null } ] },
+                { "id": 1, "weeks": [ { "id": 39, "interrogations": true, "annotation": null } ] }
             ]
         } }"#,
     )]);
@@ -1364,7 +1455,7 @@ fn assigned_student_must_exist() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 40, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(
@@ -1573,7 +1664,7 @@ fn association_subject_must_exist() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 41, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(SIMPLE_GROUP_LIST),
@@ -1602,7 +1693,7 @@ fn association_group_list_must_exist() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 42, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(
@@ -1792,10 +1883,10 @@ fn document_with_all_references_resolving_decodes() {
                 "first_week": null,
                 "periods": [
                     { "id": 1, "weeks": [
-                        { "interrogations": true, "annotation": null },
-                        { "interrogations": true, "annotation": null }
+                        { "id": 43, "interrogations": true, "annotation": null },
+                        { "id": 44, "interrogations": true, "annotation": null }
                     ] },
-                    { "id": 10, "weeks": [ { "interrogations": true, "annotation": null } ] }
+                    { "id": 10, "weeks": [ { "id": 45, "interrogations": true, "annotation": null } ] }
                 ]
             } }"#,
         ),
@@ -1825,7 +1916,7 @@ fn document_with_all_references_resolving_decodes() {
         ),
         entry(r#"{ "Assignments": [ { "period_id": 1, "subject_id": 2, "students": [4, 5] } ] }"#),
         entry(
-            r#"{ "WeekPatterns": [ { "id": 6, "name": "Toutes les semaines", "weeks": [true, true, true] } ] }"#,
+            r#"{ "WeekPatterns": [ { "id": 6, "name": "Toutes les semaines", "excluded_weeks": [] } ] }"#,
         ),
         entry(
             r#"{ "Slots": [
@@ -1925,7 +2016,7 @@ fn document_with_all_references_resolving_decodes() {
         ),
         entry(
             r#"{ "Colloscope": {
-                "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [0] } ],
+                "interrogations": [ { "slot_id": 7, "week_id": 43, "assigned_groups": [0] } ],
                 "group_lists": [
                     { "group_list_id": 11, "students": [ { "student_id": 4, "group": 0 } ] }
                 ]
@@ -1981,7 +2072,7 @@ fn assigned_student_excluded_from_the_period_is_rejected() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 46, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(
@@ -2084,7 +2175,7 @@ fn association_for_a_subject_without_interrogations_is_rejected() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 47, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(
@@ -2118,7 +2209,7 @@ fn association_on_an_excluded_period_is_rejected() {
         entry(
             r#"{ "GeneralPlanning": {
                 "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+                "periods": [ { "id": 1, "weeks": [ { "id": 48, "interrogations": true, "annotation": null } ] } ]
             } }"#,
         ),
         entry(&format!(r#"{{ "Subjects": [ {subject} ] }}"#)),
@@ -2239,7 +2330,7 @@ fn interrogation_group_out_of_bounds_is_rejected() {
     ));
     entries.push(entry(
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [1] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 20, "assigned_groups": [1] } ],
             "group_lists": []
         } }"#,
     ));
@@ -2249,7 +2340,7 @@ fn interrogation_group_out_of_bounds_is_rejected() {
         expect_decode_error(&content),
         DecodeError::InterrogationGroupOutOfBounds {
             slot_id: 7,
-            week: 0,
+            week_id: 20,
             group: 1,
             group_count: 1
         }
@@ -2264,7 +2355,7 @@ fn interrogation_group_without_an_association_is_rejected() {
         true,
         false,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [0] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 20, "assigned_groups": [0] } ],
             "group_lists": []
         } }"#,
     );
@@ -2273,7 +2364,7 @@ fn interrogation_group_without_an_association_is_rejected() {
         expect_decode_error(&content),
         DecodeError::InterrogationGroupOutOfBounds {
             slot_id: 7,
-            week: 0,
+            week_id: 20,
             group: 0,
             group_count: 0
         }
@@ -2371,8 +2462,8 @@ fn colloscope_row_on_a_week_of_an_excluded_period_is_rejected() {
             r#"{ "GeneralPlanning": {
                 "first_week": null,
                 "periods": [
-                    { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] },
-                    { "id": 10, "weeks": [ { "interrogations": true, "annotation": null } ] }
+                    { "id": 1, "weeks": [ { "id": 49, "interrogations": true, "annotation": null } ] },
+                    { "id": 10, "weeks": [ { "id": 50, "interrogations": true, "annotation": null } ] }
                 ]
             } }"#,
         ),
@@ -2389,10 +2480,10 @@ fn colloscope_row_on_a_week_of_an_excluded_period_is_rejected() {
                 ] }
             ] }"#,
         ),
-        // Week 1 is the single week of period 10, which subject 2 excludes.
+        // Week 50 is the single week of period 10, which subject 2 excludes.
         entry(
             r#"{ "Colloscope": {
-                "interrogations": [ { "slot_id": 7, "week": 1, "assigned_groups": [] } ],
+                "interrogations": [ { "slot_id": 7, "week_id": 50, "assigned_groups": [] } ],
                 "group_lists": []
             } }"#,
         ),
@@ -2402,7 +2493,7 @@ fn colloscope_row_on_a_week_of_an_excluded_period_is_rejected() {
         expect_decode_error(&content),
         DecodeError::InvalidInterrogationCell {
             slot_id: 7,
-            week: 1
+            week_id: 50
         }
     );
 }
@@ -2464,15 +2555,16 @@ fn slot_pairing_naming_one_slot_twice_is_inconsistent() {
 }
 
 #[test]
-fn colloscope_week_out_of_32_bits_is_rejected() {
-    // Distinct from `colloscope_row_on_out_of_range_week_is_rejected`,
-    // which uses an in-width week past the end of the schedule and is
-    // caught later, by the placement check.
+fn colloscope_week_id_out_of_64_bits_is_rejected() {
+    // A week id wider than the id type is a malformed block, caught by
+    // serde before any referential check. Distinct from
+    // `colloscope_row_on_unknown_week_is_rejected`, which uses an in-width
+    // id that simply names no week and is caught by the placement check.
     let content = scheduling_document(
         true,
         false,
         r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 4294967296, "assigned_groups": [] } ],
+            "interrogations": [ { "slot_id": 7, "week_id": 18446744073709551616, "assigned_groups": [] } ],
             "group_lists": []
         } }"#,
     );
@@ -2483,7 +2575,249 @@ fn colloscope_week_out_of_32_bits_is_rejected() {
     };
     assert_eq!(block, "Colloscope");
     assert!(
-        detail.contains("4294967296"),
-        "The serde diagnostics should surface the out-of-width week, got {detail:?}"
+        detail.contains("u64"),
+        "The serde diagnostics should name the expected width, got {detail:?}"
+    );
+}
+
+// ---------------------------------------------------------------------
+// The transitional reader: files written before weeks carried an id
+//
+// Three blocks had a different shape then — `GeneralPlanning` (weeks
+// without ids), `WeekPatterns` (a dense bitmask over the global week
+// indices) and `Colloscope` (interrogations naming a week by index). The
+// reader still takes both shapes so those files can be re-saved once; the
+// tests below pin that path until it is removed. `week_pattern_*_than_the
+// _schedule_is_rejected` and `an_id_at_the_ceiling_next_to_a_legacy_week
+// _is_accepted`, further up, belong to this family too.
+// ---------------------------------------------------------------------
+
+/// The scheduling setup of [scheduling_entries], written in the
+/// pre-week-id shape: no week ids, a positional pattern bitmask
+fn legacy_scheduling_entries(week1_interrogations: bool, with_pattern: bool) -> Vec<String> {
+    let mut entries = vec![
+        entry(&format!(
+            r#"{{ "GeneralPlanning": {{
+                "first_week": null,
+                "periods": [
+                    {{ "id": 1, "weeks": [
+                        {{ "interrogations": true, "annotation": null }},
+                        {{ "interrogations": {week1_interrogations}, "annotation": null }}
+                    ] }}
+                ]
+            }} }}"#
+        )),
+        entry(
+            r#"{ "Subjects": [
+                {
+                    "id": 2,
+                    "name": "Mathématiques",
+                    "interrogation_parameters": {
+                        "students_per_group": { "min": 1, "max": 2 },
+                        "groups_per_interrogation": { "min": 1, "max": 1 },
+                        "duration_minutes": 60,
+                        "take_duration_into_account": true,
+                        "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
+                    },
+                    "excluded_periods": []
+                }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2] }
+            ] }"#,
+        ),
+    ];
+    if with_pattern {
+        entries.push(entry(
+            r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
+        ));
+    }
+    let week_pattern_id = if with_pattern { "6" } else { "null" };
+    entries.push(entry(&format!(
+        r#"{{ "Slots": [
+            {{ "subject_id": 2, "slots": [
+                {{ "id": 7, "teacher_id": 3, "start": {{ "day": "monday", "time": "14:00" }}, "extra_info": "", "week_pattern_id": {week_pattern_id}, "cost": 0 }}
+            ] }}
+        ] }}"#
+    )));
+    entries
+}
+
+/// The proof the transitional reader is faithful: the same document in
+/// the two shapes decodes to exactly the same state
+///
+/// The old shape carries no week ids, so the decoder synthesizes them —
+/// the smallest values the file leaves free, which here are 0 and 4 (the
+/// file defines 1, 2, 3, 6 and 7). Spelling those very ids out in the
+/// current-shape twin is what lets the two states be compared as they
+/// are, with no renumbering to blunt the comparison.
+#[test]
+fn a_legacy_document_decodes_like_its_current_twin() {
+    let common = |week_pattern: &str, colloscope: &str| {
+        vec![
+            entry(
+                r#"{ "Subjects": [
+                    {
+                        "id": 2,
+                        "name": "Mathématiques",
+                        "interrogation_parameters": {
+                            "students_per_group": { "min": 1, "max": 2 },
+                            "groups_per_interrogation": { "min": 1, "max": 1 },
+                            "duration_minutes": 60,
+                            "take_duration_into_account": true,
+                            "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
+                        },
+                        "excluded_periods": []
+                    }
+                ] }"#,
+            ),
+            entry(
+                r#"{ "Teachers": [
+                    { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2] }
+                ] }"#,
+            ),
+            entry(week_pattern),
+            entry(
+                r#"{ "Slots": [
+                    { "subject_id": 2, "slots": [
+                        { "id": 7, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": 6, "cost": 0 }
+                    ] }
+                ] }"#,
+            ),
+            entry(colloscope),
+        ]
+    };
+
+    let mut legacy = vec![entry(
+        r#"{ "GeneralPlanning": {
+            "first_week": null,
+            "periods": [ { "id": 1, "weeks": [
+                { "interrogations": true, "annotation": null },
+                { "interrogations": true, "annotation": null }
+            ] } ]
+        } }"#,
+    )];
+    legacy.extend(common(
+        r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [] } ],
+            "group_lists": []
+        } }"#,
+    ));
+
+    let mut current = vec![entry(
+        r#"{ "GeneralPlanning": {
+            "first_week": null,
+            "periods": [ { "id": 1, "weeks": [
+                { "id": 0, "interrogations": true, "annotation": null },
+                { "id": 4, "interrogations": true, "annotation": null }
+            ] } ]
+        } }"#,
+    )];
+    current.extend(common(
+        r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "excluded_weeks": [4] } ] }"#,
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week_id": 0, "assigned_groups": [] } ],
+            "group_lists": []
+        } }"#,
+    ));
+
+    let (legacy_inner, legacy_caveats) =
+        deserialize_data(&document(&legacy)).expect("The legacy document should decode");
+    let (current_inner, current_caveats) =
+        deserialize_data(&document(&current)).expect("The current document should decode");
+    assert!(legacy_caveats.is_empty());
+    assert!(current_caveats.is_empty());
+
+    assert_eq!(legacy_inner, current_inner);
+}
+
+/// Blocks are read independently, so a half-migrated file is legal
+#[test]
+fn a_document_mixing_the_two_shapes_decodes() {
+    // Current `GeneralPlanning`, legacy `WeekPatterns` and legacy
+    // `Colloscope`: both legacy paths resolve through the week table the
+    // decoder has already built, whichever shape built it.
+    let mut entries = scheduling_entries(true, false);
+    entries.push(entry(
+        r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
+    ));
+    entries.push(entry(
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [] } ],
+            "group_lists": []
+        } }"#,
+    ));
+
+    let (_inner, caveats) =
+        deserialize_data(&document(&entries)).expect("A mixed document should decode");
+    assert!(caveats.is_empty());
+}
+
+#[test]
+fn a_legacy_colloscope_week_past_the_schedule_is_rejected() {
+    let mut entries = legacy_scheduling_entries(true, false);
+    entries.push(entry(
+        r#"{ "Colloscope": {
+            "interrogations": [ { "slot_id": 7, "week": 5, "assigned_groups": [] } ],
+            "group_lists": []
+        } }"#,
+    ));
+
+    assert_eq!(
+        expect_decode_error(&document(&entries)),
+        DecodeError::ColloscopeWeekIndexOutOfRange {
+            slot_id: 7,
+            week: 5
+        }
+    );
+}
+
+#[test]
+fn a_block_name_appearing_in_both_shapes_is_a_duplicate() {
+    // A name appears at most once whichever shape it wears.
+    let content = document(&[
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [ { "id": 1, "weeks": [ { "id": 30, "interrogations": true, "annotation": null } ] } ]
+            } }"#,
+        ),
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [ { "id": 2, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
+            } }"#,
+        ),
+    ]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::DuplicatedBlock("GeneralPlanning")
+    );
+}
+
+/// A block that is neither shape is reported with the *current* shape's
+/// diagnostics — the legacy attempt is silent, so the message stays about
+/// the format as it is today
+#[test]
+fn a_block_matching_neither_shape_reports_the_current_one() {
+    let content = document(&[entry(
+        r#"{ "GeneralPlanning": {
+            "first_week": null,
+            "periods": [ { "id": 1, "weeks": [ { "id": 30, "interrogations": true } ] } ]
+        } }"#,
+    )]);
+
+    let error = expect_decode_error(&content);
+    let DecodeError::IllformedBlock { block, detail } = error else {
+        panic!("The error should be IllformedBlock, got {error:?}");
+    };
+    assert_eq!(block, "GeneralPlanning");
+    assert!(
+        detail.contains("annotation"),
+        "The diagnostics should name the missing field of the current shape, got {detail:?}"
     );
 }

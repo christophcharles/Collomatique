@@ -34,15 +34,10 @@ fn round_trip_identity() {
     let (decoded, caveats) =
         deserialize_data(&serialized).expect("Serialized data should deserialize");
 
-    // Week ids are synthesized on decode — the file never stores them — so the
-    // decoded state can differ from the original only in those internal id
-    // values (nothing references them yet). The meaningful round-trip identity
-    // is therefore byte-level: re-encoding the decoded state reproduces the
-    // original document exactly.
-    assert_eq!(
-        serialize_data(gate(decoded).get_inner_data()).expect("Decoded data should be writable"),
-        serialized
-    );
+    // Every id the document holds is now written down, week ids included,
+    // so the round trip is an identity on the state itself — not merely on
+    // the bytes it produces.
+    assert_eq!(gate(decoded), data);
     assert!(caveats.is_empty());
 }
 

@@ -10,11 +10,12 @@
 //! one.
 //!
 //! What is deliberately **not** an id, and therefore not visited: the
-//! colloscope's global week index and group numbers, the group numbers
-//! of a placement, the positional week bitmask of a week pattern, and
-//! the limit values of the settings. Week ids do not appear at all —
-//! weeks are positional in the file and their ids are synthesized by the
-//! decoder.
+//! colloscope's group numbers, the group numbers of a placement, and the
+//! limit values of the settings.
+//!
+//! Only the current shapes are walked. The reader's transitional
+//! `legacy_*` blocks are never visited because the encoder never fills
+//! them, and this module serves the writer.
 
 use super::Blocks;
 
@@ -23,6 +24,9 @@ pub fn visit_ids(blocks: &Blocks, f: &mut impl FnMut(u64)) {
     if let Some(block) = &blocks.general_planning {
         for period in block.periods.iter() {
             f(period.id);
+            for week in period.weeks.iter() {
+                f(week.id);
+            }
         }
     }
     if let Some(block) = &blocks.subjects {
@@ -53,6 +57,7 @@ pub fn visit_ids(blocks: &Blocks, f: &mut impl FnMut(u64)) {
     if let Some(block) = &blocks.week_patterns {
         for week_pattern in block.iter() {
             f(week_pattern.id);
+            visit_unique(&week_pattern.excluded_weeks, f);
         }
     }
     if let Some(block) = &blocks.slots {
@@ -127,6 +132,7 @@ pub fn visit_ids(blocks: &Blocks, f: &mut impl FnMut(u64)) {
     if let Some(block) = &blocks.colloscope {
         for row in block.interrogations.iter() {
             f(row.slot_id);
+            f(row.week_id);
         }
         for row in block.group_lists.iter() {
             f(row.group_list_id);

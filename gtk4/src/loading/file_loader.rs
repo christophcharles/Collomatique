@@ -152,6 +152,7 @@ impl FileLoader {
     fn id_kind_fr(kind: &IdKind) -> &'static str {
         match kind {
             IdKind::Period => "une période inconnue",
+            IdKind::Week => "une semaine inconnue",
             IdKind::Subject => "une matière inconnue",
             IdKind::Teacher => "un colleur inconnu",
             IdKind::Student => "un élève inconnu",
@@ -209,20 +210,28 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope référence un créneau inconnu, id {})",
                 slot_id
             ),
-            DecodeError::InvalidInterrogationCell { slot_id, week } => format!(
-                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur une case inexistante : créneau {}, semaine {})",
+            DecodeError::UnknownWeekInColloscope { week_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope référence une semaine inconnue, id {})",
+                week_id
+            ),
+            DecodeError::ColloscopeWeekIndexOutOfRange { slot_id, week } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur le créneau {} à la semaine numéro {}, en dehors du calendrier)",
                 slot_id, week
             ),
-            DecodeError::InterrogationGroupOutOfBounds { slot_id, week, group, group_count } => {
+            DecodeError::InvalidInterrogationCell { slot_id, week_id } => format!(
+                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur une case inexistante : créneau {}, semaine id {})",
+                slot_id, week_id
+            ),
+            DecodeError::InterrogationGroupOutOfBounds { slot_id, week_id, group, group_count } => {
                 if group_count == 0 {
                     format!(
-                        "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope assigne le groupe {} sur la case (créneau {}, semaine {}), mais aucune liste de groupes n'est associée à cette matière sur cette période)",
-                        group, slot_id, week
+                        "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope assigne le groupe {} sur la case (créneau {}, semaine id {}), mais aucune liste de groupes n'est associée à cette matière sur cette période)",
+                        group, slot_id, week_id
                     )
                 } else {
                     format!(
-                        "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope assigne le groupe {} sur la case (créneau {}, semaine {}), mais la liste de groupes associée n'a que {} groupes)",
-                        group, slot_id, week, group_count
+                        "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope assigne le groupe {} sur la case (créneau {}, semaine id {}), mais la liste de groupes associée n'a que {} groupes)",
+                        group, slot_id, week_id, group_count
                     )
                 }
             }

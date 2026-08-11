@@ -66,6 +66,32 @@ pub enum Block {
     ExportConfig(export_config::ExportConfig),
 }
 
+/// The three blocks that changed shape when week ids entered the format,
+/// in the shape they had before — read-only, externally tagged under the
+/// *same* block names as their current counterparts in [Block]
+///
+/// Transitional. A file written before the change carries these shapes;
+/// the decoder tries [Block] first and falls back to this. Nothing writes
+/// it, and it disappears once no such file is left. The per-block `Legacy*`
+/// structs explain why the two shapes can never be confused.
+#[derive(Clone, Debug, PartialEq, Deserialize)]
+pub enum LegacyBlock {
+    GeneralPlanning(general_planning::LegacyGeneralPlanning),
+    WeekPatterns(week_patterns::LegacyWeekPatterns),
+    Colloscope(colloscope::LegacyColloscope),
+}
+
+impl LegacyBlock {
+    /// The name of this block
+    pub fn name(&self) -> BlockName {
+        match self {
+            LegacyBlock::GeneralPlanning(_) => BlockName::GeneralPlanning,
+            LegacyBlock::WeekPatterns(_) => BlockName::WeekPatterns,
+            LegacyBlock::Colloscope(_) => BlockName::Colloscope,
+        }
+    }
+}
+
 /// The name of a spec-2 block, without its payload
 ///
 /// The variant declaration order is the canonical block order of the
@@ -175,14 +201,22 @@ impl Block {
 /// reconstructing, and the encoder fills it from the in-memory data
 /// before writing the entries out. Having one shape for both lets the id
 /// machinery of [id_visit] serve reading and writing alike.
+///
+/// The three `legacy_*` fields are the transitional half of [LegacyBlock]:
+/// a block name occupies either its current field or its legacy one, never
+/// both (the decoder rejects a second appearance of a name whichever shape
+/// it wears). The encoder never fills them, so [id_visit] — which serves
+/// the writer — has no reason to know about them.
 #[derive(Default)]
 pub struct Blocks {
     pub general_planning: Option<general_planning::GeneralPlanning>,
+    pub legacy_general_planning: Option<general_planning::LegacyGeneralPlanning>,
     pub subjects: Option<subjects::Subjects>,
     pub teachers: Option<teachers::Teachers>,
     pub students: Option<students::Students>,
     pub assignments: Option<assignments::Assignments>,
     pub week_patterns: Option<week_patterns::WeekPatterns>,
+    pub legacy_week_patterns: Option<week_patterns::LegacyWeekPatterns>,
     pub slots: Option<slots::Slots>,
     pub incompatibilities: Option<incompatibilities::Incompatibilities>,
     pub group_lists: Option<group_lists::GroupLists>,
@@ -192,6 +226,7 @@ pub struct Blocks {
     pub settings: Option<settings::Settings>,
     pub balancing: Option<balancing::Balancing>,
     pub colloscope: Option<colloscope::Colloscope>,
+    pub legacy_colloscope: Option<colloscope::LegacyColloscope>,
     pub export_config: Option<export_config::ExportConfig>,
 }
 

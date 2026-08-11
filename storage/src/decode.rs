@@ -71,14 +71,28 @@ pub enum DecodeError {
     IncompatibilitySlotCrossesMidnight { incompat_id: u64 },
     #[error("The colloscope references an unknown slot id ({0})")]
     UnknownSlotInColloscope(u64),
-    #[error("The colloscope interrogation cell (slot id {slot_id}, week {week}) does not exist")]
-    InvalidInterrogationCell { slot_id: u64, week: u32 },
+    #[error("The colloscope references an unknown week id ({week_id})")]
+    UnknownWeekInColloscope { week_id: u64 },
+    /// A pre-week-id file names a week by its global index, and the index
+    /// is past the end of the schedule
+    ///
+    /// Transitional: the current format names weeks by id, so this cannot
+    /// arise from a file written today. It disappears with the legacy
+    /// reader.
     #[error(
-        "The colloscope cell (slot id {slot_id}, week {week}) assigns group number {group}, but the associated group list has {group_count} groups"
+        "The colloscope interrogation cell (slot id {slot_id}, week index {week}) is outside the schedule"
+    )]
+    ColloscopeWeekIndexOutOfRange { slot_id: u64, week: u32 },
+    #[error(
+        "The colloscope interrogation cell (slot id {slot_id}, week id {week_id}) does not exist"
+    )]
+    InvalidInterrogationCell { slot_id: u64, week_id: u64 },
+    #[error(
+        "The colloscope cell (slot id {slot_id}, week id {week_id}) assigns group number {group}, but the associated group list has {group_count} groups"
     )]
     InterrogationGroupOutOfBounds {
         slot_id: u64,
-        week: u32,
+        week_id: u64,
         group: u32,
         group_count: u32,
     },
@@ -184,6 +198,11 @@ pub enum DecodeError {
     },
     #[error("The balancing options name subject id {subject_id}, which has no interrogations")]
     BalancingForSubjectWithoutInterrogations { subject_id: u64 },
+    /// A pre-week-id file carries a dense week bitmask whose length does
+    /// not match the schedule
+    ///
+    /// Transitional: the current format stores an exclusion set, which has
+    /// no length to be wrong. It disappears with the legacy reader.
     #[error(
         "Week pattern id {week_pattern_id} has {found} week entries but the schedule has {expected} weeks"
     )]
@@ -221,6 +240,7 @@ impl std::fmt::Display for RowKey {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum IdKind {
     Period,
+    Week,
     Subject,
     Teacher,
     Student,
@@ -233,6 +253,7 @@ impl std::fmt::Display for IdKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             IdKind::Period => "period",
+            IdKind::Week => "week",
             IdKind::Subject => "subject",
             IdKind::Teacher => "teacher",
             IdKind::Student => "student",

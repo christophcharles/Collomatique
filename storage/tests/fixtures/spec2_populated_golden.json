@@ -16,14 +16,17 @@
               "id": 0,
               "weeks": [
                 {
+                  "id": 1,
                   "interrogations": true,
                   "annotation": "Rentrée"
                 },
                 {
+                  "id": 2,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 3,
                   "interrogations": false,
                   "annotation": null
                 }
@@ -33,18 +36,22 @@
               "id": 4,
               "weeks": [
                 {
+                  "id": 5,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 6,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 7,
                   "interrogations": false,
                   "annotation": "Vacances"
                 },
                 {
+                  "id": 8,
                   "interrogations": true,
                   "annotation": null
                 }
@@ -301,28 +308,16 @@
           {
             "id": 21,
             "name": "Quinzaine A",
-            "weeks": [
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true
+            "excluded_weeks": [
+              2,
+              5,
+              7
             ]
           },
           {
             "id": 22,
             "name": "Toutes les semaines",
-            "weeks": [
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true
-            ]
+            "excluded_weeks": []
           }
         ]
       }
@@ -623,21 +618,21 @@
           "interrogations": [
             {
               "slot_id": 23,
-              "week": 0,
+              "week_id": 1,
               "assigned_groups": [
                 0
               ]
             },
             {
               "slot_id": 24,
-              "week": 0,
+              "week_id": 1,
               "assigned_groups": [
                 1
               ]
             },
             {
               "slot_id": 25,
-              "week": 1,
+              "week_id": 2,
               "assigned_groups": [
                 0,
                 2

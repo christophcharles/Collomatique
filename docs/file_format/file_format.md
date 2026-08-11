@@ -98,8 +98,8 @@ Rules for the block list:
 
 ### Identifiers
 
-Persistent objects — periods, subjects, teachers, students, week patterns, slots,
-incompatibilities, group lists, pairing rules, slot pairing rules — are identified
+Persistent objects — periods, weeks, subjects, teachers, students, week patterns,
+slots, incompatibilities, group lists, pairing rules, slot pairing rules — are identified
 by a bare JSON number holding a non-negative integer **at most 2⁶³ − 1**; larger
 values make the file invalid. Ids are drawn from a **single
 global id space**: an id value appears at most once across the whole file,
@@ -110,10 +110,6 @@ Nothing else is significant about id values: they need not be dense, ordered, or
 small. No id counter is stored. Writers should nevertheless strive to keep ids
 within the 32-bit range: small ids are easier on human readers, and we avoid
 potential bugs if the IDs exceed 2^63 while the application is running.
-
-Readers may reserve id headroom above the largest defining id (for synthesized
-ids); writers should stay far below the 2⁶³ − 1 ceiling — the 32-bit guidance
-above makes the reservation invisible in practice.
 
 ### Scalar encodings
 
@@ -137,8 +133,8 @@ invalid. Ids have their own ceiling of 2⁶³ − 1 (above). Apart from ids, eve
 unsigned integer field must fit in 32 bits: 0 to 2³² − 1, or 1 to 2³² − 1 where
 a minimum of 1 is stated. The single signed integer field — a slot's `cost`
 (§4.7) — must fit in a signed 32-bit integer: −2³¹ to 2³¹ − 1. This covers,
-among others, durations, week indices, group numbers, limit values, periodicity
-parameters, and the envelope's `minimum_spec_version`.
+among others, durations, group numbers, limit values, periodicity parameters, and
+the envelope's `minimum_spec_version`.
 
 ### Records and keyed collections
 
@@ -183,10 +179,10 @@ soft parameter is `null` or that record.
 
 Two kinds of arrays:
 
-- **Order-significant arrays**, whose order is part of the state: `periods`,
-  `Subjects`, the per-subject `slots` arrays, `group_names`, prefilled `groups`,
-  incompatibility `slots`, and periodicity `blocks`, as well as all positional
-  `weeks` arrays. Reordering them changes the document's meaning.
+- **Order-significant arrays**, whose order is part of the state: `periods`, the
+  per-period `weeks` arrays, `Subjects`, the per-subject `slots` arrays,
+  `group_names`, prefilled `groups`, incompatibility `slots`, and periodicity
+  `blocks`. Reordering them changes the document's meaning.
 - **Unordered collections** (every keyed collection): readers must accept any
   order; only key uniqueness matters.
 
@@ -202,20 +198,12 @@ and what the Collomatique application produces — is:
 - in collections with a derived key set, entries in neutral state are **omitted**;
 - present blocks appear in the canonical name order of §2;
 - unordered collections are sorted: object rows by `id`, association rows by their
-  full key ascending (e.g. `(period_id, subject_id)`, `(slot_id, week)`), id sets
+  full key ascending (e.g. `(period_id, subject_id)`, `(slot_id, week_id)`), id sets
   and group-number sets ascending, named entries (`extra_colors`) by name
   (by Unicode code point);
 - the JSON is pretty-printed with 2-space indentation.
 
 In canonical form, one state has exactly one byte sequence.
-
-### Week coordinates
-
-The schedule is a concatenation of periods; each period is a list of weeks. The
-**global week index** is the 0-based position of a week in that concatenation
-(period order is significant, so global week numbering is well defined). Wherever
-the format stores a per-week value outside `GeneralPlanning` — week-pattern `weeks`
-arrays, colloscope `week` fields — it uses global week indices.
 
 ## 4. Blocks
 
@@ -236,8 +224,8 @@ The period structure and start date. Payload: record.
     {
       "id": 1,
       "weeks": [
-        { "interrogations": true, "annotation": "Rentrée" },
-        { "interrogations": false, "annotation": null }
+        { "id": 4, "interrogations": true, "annotation": "Rentrée" },
+        { "id": 5, "interrogations": false, "annotation": null }
       ]
     }
   ]
@@ -246,12 +234,16 @@ The period structure and start date. Payload: record.
 
 | Field | Type | Meaning |
 |---|---|---|
-| `first_week` | week start or `null` | Monday of global week 0. `null` if not set. |
-| `periods` | array, **order-significant** | The periods in user order. Their concatenated `weeks` arrays define global week numbering. |
+| `first_week` | week start or `null` | Monday of the schedule's first week. `null` if not set. |
+| `periods` | array, **order-significant** | The periods in user order. |
 | `periods[].id` | id | Period id. |
-| `periods[].weeks` | array, positional | One record per week of the period. |
+| `periods[].weeks` | array, **order-significant** | The weeks of the period, in user order. |
+| `weeks[].id` | id | Week id. This block defines it; §4.6 and §4.15 reference it. |
 | `weeks[].interrogations` | bool | `false` marks a week with no interrogations at all (holidays, exams). |
 | `weeks[].annotation` | non-empty string or `null` | Free label displayed on exports. |
+
+This block owns the schedule's display order: the period order, and the week
+order inside each period.
 
 Constraints: a period may have zero weeks.
 
@@ -407,7 +399,7 @@ Named week masks used by slots and incompatibilities. Payload: keyed collection
 
 ```json
 [
-  { "id": 7, "name": "Quinzaine A", "weeks": [true, false, true, false, true, false, true] }
+  { "id": 7, "name": "Quinzaine A", "excluded_weeks": [5, 9] }
 ]
 ```
 
@@ -415,10 +407,10 @@ Named week masks used by slots and incompatibilities. Payload: keyed collection
 |---|---|---|
 | `id` | id | Week pattern id. |
 | `name` | string | Display name. |
-| `weeks` | array of bool, positional | `weeks[w]` = pattern active on **global week** `w`. |
+| `excluded_weeks` | id set | The weeks the pattern turns **off**. Every other week of the schedule is on. |
 
-Constraints: `weeks` has exactly one element per week of the schedule (the sum of
-all period lengths in `GeneralPlanning`) — no shorter, no longer.
+Constraints: every id in `excluded_weeks` is an existing week (§4.1). The set may
+be empty, which is a pattern active on every week.
 
 ### 4.7 `Slots`
 
@@ -728,8 +720,8 @@ group lists were filled. Payload: record.
 ```json
 {
   "interrogations": [
-    { "slot_id": 8, "week": 0, "assigned_groups": [0] },
-    { "slot_id": 8, "week": 2, "assigned_groups": [0, 1] }
+    { "slot_id": 8, "week_id": 4, "assigned_groups": [0] },
+    { "slot_id": 8, "week_id": 6, "assigned_groups": [0, 1] }
   ],
   "group_lists": [
     {
@@ -745,10 +737,9 @@ group lists were filled. Payload: record.
 
 #### `interrogations`
 
-A keyed collection of rows `{"slot_id", "week", "assigned_groups"}`, keyed by
-`(slot_id, week)`. `week` is a global week index (§3); the week determines the
-period, so no period appears in the row. `assigned_groups` is an array of 0-based
-group numbers.
+A keyed collection of rows `{"slot_id", "week_id", "assigned_groups"}`, keyed by
+`(slot_id, week_id)`. The week determines the period, so no period appears in the
+row. `assigned_groups` is an array of 0-based group numbers.
 
 The key set is derived: the (slot, week) cells that can host an interrogation are
 fully determined by the other blocks. A cell exists exactly when
@@ -756,9 +747,9 @@ fully determined by the other blocks. A cell exists exactly when
 1. the slot's subject runs on the period containing that week (the period is not in
    the subject's `excluded_periods`), and
 2. the week's `interrogations` flag (§4.1) is `true`, and
-3. the slot's week pattern (when it has one) is `true` on that week.
+3. the slot's week pattern (when it has one) does not exclude that week.
 
-A row on a non-existent cell — unknown slot, week out of range, or conditions 1–3
+A row on a non-existent cell — unknown slot, unknown week, or conditions 1–3
 not met — is invalid, whatever its content. An absent row means no groups are
 assigned to that cell; a row with an empty `assigned_groups` encodes the same
 thing — valid but redundant, omitted in canonical form.
@@ -916,8 +907,8 @@ therefore omitted.
             {
               "id": 1,
               "weeks": [
-                { "interrogations": true, "annotation": "Rentrée" },
-                { "interrogations": true, "annotation": null }
+                { "id": 9, "interrogations": true, "annotation": "Rentrée" },
+                { "id": 10, "interrogations": true, "annotation": null }
               ]
             }
           ]
@@ -998,7 +989,7 @@ therefore omitted.
       "needed_entry": true,
       "content": {
         "WeekPatterns": [
-          { "id": 6, "name": "Toutes les semaines", "weeks": [true, true] }
+          { "id": 6, "name": "Toutes les semaines", "excluded_weeks": [] }
         ]
       }
     },
@@ -1067,7 +1058,7 @@ therefore omitted.
       "content": {
         "Colloscope": {
           "interrogations": [
-            { "slot_id": 7, "week": 0, "assigned_groups": [0] }
+            { "slot_id": 7, "week_id": 9, "assigned_groups": [0] }
           ],
           "group_lists": [
             {

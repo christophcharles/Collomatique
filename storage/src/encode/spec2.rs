@@ -21,6 +21,11 @@ use std::collections::BTreeSet;
 fn build_blocks(inner: &InnerData) -> format::Blocks {
     let params = &inner.params;
     format::Blocks {
+        // The writer never produces the pre-week-id shapes: the three
+        // `legacy_*` fields exist for the reader alone.
+        legacy_general_planning: None,
+        legacy_week_patterns: None,
+        legacy_colloscope: None,
         general_planning: Some(build_general_planning(params)),
         subjects: Some(build_subjects(params)),
         teachers: Some(build_teachers(params)),
@@ -212,7 +217,8 @@ fn build_general_planning(
                     .weeks_for_period(period_id)
                     .into_iter()
                     .flatten()
-                    .map(|(_, week)| format::general_planning::Week {
+                    .map(|(week_id, week)| format::general_planning::Week {
+                        id: week_id.inner(),
                         interrogations: week.interrogations,
                         annotation: week.annotation.clone(),
                     })
@@ -354,12 +360,8 @@ fn build_assignments(
 fn build_week_patterns(
     params: &mem::colloscope_params::Parameters,
 ) -> format::week_patterns::WeekPatterns {
-    // Project the sparse exclusion set back to the frozen positional bitmask:
-    // one bit per week in global walk order, `true` iff not excluded.
-    let week_ids: Vec<_> = params
-        .walk_weeks()
-        .map(|(_period_id, week_id, _week)| week_id)
-        .collect();
+    // The exclusion set is written as it is held: a `BTreeSet<WeekId>`
+    // iterates ascending, which is the canonical order.
     keyed(
         params
             .week_patterns
@@ -369,10 +371,14 @@ fn build_week_patterns(
                 |(week_pattern_id, week_pattern)| format::week_patterns::WeekPattern {
                     id: week_pattern_id.inner(),
                     name: week_pattern.name.clone(),
-                    weeks: week_ids
-                        .iter()
-                        .map(|week_id| !week_pattern.excluded_weeks.contains(week_id))
-                        .collect(),
+                    excluded_weeks: format::keyed::UniqueVec::new(
+                        week_pattern
+                            .excluded_weeks
+                            .iter()
+                            .map(|week_id| week_id.inner())
+                            .collect(),
+                    )
+                    .expect("Week ids from a set are distinct"),
                 },
             )
             .collect(),
@@ -604,31 +610,22 @@ fn build_colloscope(inner: &mem::InnerData) -> format::colloscope::Colloscope {
     // The colloscope key structure is derived, so only non-neutral
     // cells are written: interrogations with assigned groups, group
     // lists with placed students. The sparse surface yields exactly the
-    // non-empty rows; interrogation rows carry `WeekId`s, projected back
-    // to global week indices and sorted by their (slot_id, week) key.
-    let params = &inner.params;
-    let mut interrogation_rows: Vec<_> = inner
+    // non-empty rows, already ascending on the `(slot_id, week_id)` key
+    // it is stored under — which is the canonical order of the block.
+    let interrogation_rows: Vec<_> = inner
         .colloscope
         .iter()
-        .map(|((slot_id, week_id), assigned_groups)| {
-            let week = u32::try_from(
-                params
-                    .weeks
-                    .global_week_position(&params.periods, week_id)
-                    .expect("colloscope week id is valid"),
-            )
-            .expect("Global week indices fit in u32");
-            format::colloscope::Interrogation {
+        .map(
+            |((slot_id, week_id), assigned_groups)| format::colloscope::Interrogation {
                 slot_id: slot_id.inner(),
-                week,
+                week_id: week_id.inner(),
                 assigned_groups: format::keyed::UniqueVec::new(
                     assigned_groups.iter().copied().collect(),
                 )
                 .expect("Group numbers from a set are distinct"),
-            }
-        })
+            },
+        )
         .collect();
-    interrogation_rows.sort_by_key(|row| (row.slot_id, row.week));
 
     let group_list_rows = inner
         .colloscope
