@@ -480,10 +480,18 @@ mod tests {
     }
 
     #[test]
-    // The rollback "Failed to reverse" panic remains as the release-mode
-    // safety net: in debug builds the canary below fires first during the
-    // forward replay, so it has no direct debug-mode coverage.
-    #[should_panic(expected = "stored backward op is inconsistent")]
+    // Which panic fires depends on the profile: in debug builds the canary
+    // fires first during the forward replay, in release builds (debug
+    // assertions off) the canary is gone and the rollback safety net fires
+    // instead. Both are expected, hence the two `cfg_attr`s.
+    #[cfg_attr(
+        debug_assertions,
+        should_panic(expected = "stored backward op is inconsistent")
+    )]
+    #[cfg_attr(
+        not(debug_assertions),
+        should_panic(expected = "Failed to reverse failed aggregated operations")
+    )]
     fn replay_panics_if_stored_backward_is_inconsistent() {
         let mut state = new_state(0);
         let broken_backward = ReversibleOp {
