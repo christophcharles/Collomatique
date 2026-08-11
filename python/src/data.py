@@ -37,6 +37,8 @@ if TYPE_CHECKING:
         Color,
         Enforcement,
         Filling,
+        GroupList,
+        GroupListId,
         Limit,
         Orientation,
         Period,
@@ -44,6 +46,8 @@ if TYPE_CHECKING:
         Periodicity,
         Slot,
         SlotId,
+        Student,
+        StudentId,
         Subject,
         SubjectId,
         Teacher,
@@ -76,6 +80,7 @@ __all__ = [
     "ExportStudentGroupsConfigData",
     "ExportGroupListConfigData",
     "ExportConfigData",
+    "ColloscopeData",
 ]
 
 
@@ -894,3 +899,38 @@ class ExportConfigData:
         default_factory=ExportStudentGroupsConfigData.prefilled_groups)
     per_group_list_config: ExportGroupListConfigData = field(
         default_factory=ExportGroupListConfigData)
+
+
+@dataclass
+class ColloscopeData:
+    """The whole colloscope, detached.
+
+    `doc.colloscope.to_data()` hands one back, and the ops mirror's
+    `doc.colloscope.install` will take one when it lands:
+
+        clm.ColloscopeData(
+            interrogations={(first_slot, first_week): {0, 2}},
+            group_lists={automatic: {harry: 0, hermione: 2}})
+
+    The result of a resolution, in the two sparse tables the model stores:
+    `interrogations` says which group numbers sit in which `(slot, week)`
+    cell, and `group_lists` says how each automatic group list was filled,
+    student by student. The group numbers in the first are indices into the
+    group list the cell's subject uses on that week's period — the same
+    numbers the read surface hands out, so a value and a handle agree. A
+    prefilled list never appears in the second: it has groups of its own.
+
+    The keys of both tables name entities, so they take handles and ids
+    interchangeably, in any mix, like every other place in this API;
+    `to_data()` fills them with ids, so that a value carries no document
+    around with it.
+
+    A hand-built value need not be canonical: an empty group set or an empty
+    placement map just means "no row", which is what the payload promises
+    its callers.
+    """
+
+    interrogations: dict[tuple[Slot | SlotId, Week | WeekId], set[int]] = field(
+        default_factory=dict)
+    group_lists: dict[GroupList | GroupListId, dict[Student | StudentId, int]] = field(
+        default_factory=dict)

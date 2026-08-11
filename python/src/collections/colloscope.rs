@@ -18,6 +18,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict, PyFrozenSet};
 
+use collomatique_ops::ColloscopeContents;
 use collomatique_state_colloscopes::GroupListId as RawGroupListId;
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::SlotId as RawSlotId;
@@ -29,6 +30,8 @@ use crate::collections::group_lists::GroupList;
 use crate::collections::slots::Slot;
 use crate::collections::students::Student;
 use crate::collections::weeks::Week;
+use crate::data::ColloscopeData;
+use crate::data::Value as _;
 use crate::handles::{Handle, argument};
 
 /// The colloscope of one document
@@ -166,6 +169,21 @@ impl Colloscope {
     /// to read: `group_list` answers `None` there.
     fn group_lists(&self, py: Python<'_>) -> ColloscopeGroupListIter {
         ColloscopeGroupListIter::new(self.doc.clone_ref(py), self.placements(py))
+    }
+
+    /// The whole colloscope, detached — a `ColloscopeData` holding the two
+    /// sparse tables as the document stores them
+    ///
+    /// A fresh object every call. Nothing here can go stale: the view is
+    /// bound to the document alone, so this never raises `StaleHandleError`.
+    /// `doc.colloscope.install` — the ops mirror's job — puts one back.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let contents = self.with_data(py, |data| ColloscopeContents::from(&data.colloscope));
+
+        ColloscopeData::to_py(py, &contents)
     }
 
     /// The view itself — `<collomatique.Colloscope>`

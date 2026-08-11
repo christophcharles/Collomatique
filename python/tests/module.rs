@@ -15,11 +15,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    BalancingData, ExportColloscopeConfigData, ExportConfigData, ExportGlobalConfigData,
-    ExportGroupListConfigData, ExportStudentGroupsConfigData, GroupListData, IncompatData,
-    InterrogationData, LimitsData, PairingRuleData, PairingRuleSideData, SlotData,
-    SlotPairingRuleData, SlotPairingRuleSideData, StudentData, SubjectData, TeacherData,
-    WeekPatternData,
+    BalancingData, ColloscopeData, ExportColloscopeConfigData, ExportConfigData,
+    ExportGlobalConfigData, ExportGroupListConfigData, ExportStudentGroupsConfigData,
+    GroupListData, IncompatData, InterrogationData, LimitsData, PairingRuleData,
+    PairingRuleSideData, SlotData, SlotPairingRuleData, SlotPairingRuleSideData, StudentData,
+    SubjectData, TeacherData, WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -7865,6 +7865,211 @@ fn the_colloscope_reads_back_cell_by_cell() {
     };
     assert!(slots_of(&fixture).is_disjoint(&slots_of(&example)));
     assert!(group_lists_of(&fixture).is_disjoint(&group_lists_of(&example)));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The colloscope comes back detached, out and back
+///
+/// The script walks `doc.colloscope.to_data()` and leaves the value and the
+/// readings it took through the handle surface; rust compares the value with
+/// the same colloscope read straight from the model — the whole tree in one
+/// extraction — the handle- and id-keyed spellings of one row both extracting
+/// to the very row the model holds, the empty row accepted as "no row", and
+/// the model's own default pinned so the python side cannot drift.
+#[test]
+fn the_colloscope_comes_back_detached() {
+    use collomatique_ops::ColloscopeContents;
+
+    let dir = workspace("colloscope-data");
+    let source = dir.join("colloscope.collomatique");
+    colloscope_document(&source);
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let globals = run(include_str!("scripts/colloscope_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let colloscope = &data.get_inner_data().colloscope;
+
+    // The whole colloscope, out and back: the value extracts to the very
+    // contents the model holds, rows and all.
+    assert_eq!(
+        extracted::<ColloscopeData>(&globals, "tree"),
+        ColloscopeContents::from(colloscope)
+    );
+
+    // The readings the script took through the handles agree, position by
+    // position: the slot's place within its subject, the week's global
+    // index, and the sorted group numbers.
+    let cells: Vec<_> = colloscope.iter().collect();
+    let placements: Vec<_> = colloscope.group_lists_iter().collect();
+    let week_ids: Vec<_> = params.week_ids().collect();
+    let expected_cells: Vec<(usize, usize, Vec<u32>)> = cells
+        .iter()
+        .map(|((slot, week), groups)| {
+            let slot_index = params
+                .slots
+                .find_slot_subject_and_position(*slot)
+                .expect("a stored cell names a live slot")
+                .1;
+            let week_index = week_ids
+                .iter()
+                .position(|id| id == week)
+                .expect("a stored cell names a live week");
+            (slot_index, week_index, groups.iter().copied().collect())
+        })
+        .collect();
+    assert_eq!(
+        global::<Vec<(usize, usize, Vec<u32>)>>(&globals, "cell_reads"),
+        expected_cells
+    );
+
+    // And the placements rows: the list's position in `doc.group_lists`, and
+    // the placements by surname.
+    let list_ids: Vec<_> = params.group_lists.group_list_map.keys().collect();
+    let mut expected_rows: Vec<(usize, Vec<(String, u32)>)> = placements
+        .iter()
+        .map(|(group_list, placed)| {
+            let index = list_ids
+                .iter()
+                .position(|id| id == group_list)
+                .expect("a stored row names a live group list");
+            let mut items: Vec<(String, u32)> = placed
+                .iter()
+                .map(|(student, group)| {
+                    (
+                        params
+                            .students
+                            .student_map
+                            .get(student)
+                            .expect("a placement names a live student")
+                            .desc
+                            .surname
+                            .clone(),
+                        *group,
+                    )
+                })
+                .collect();
+            items.sort();
+            (index, items)
+        })
+        .collect();
+    expected_rows.sort_by_key(|(index, _)| *index);
+    assert_eq!(
+        global::<Vec<(usize, Vec<(String, u32)>)>>(&globals, "row_reads"),
+        expected_rows
+    );
+
+    // A handle and an id name the same row: both spellings of the first
+    // stored cell and the first placed student extract to the same payload.
+    let first_cell = *cells.first().expect("the fixture has cells");
+    let (first_list, first_placements) = placements.first().expect("the fixture fills one list");
+    let mut placed = BTreeMap::new();
+    let (first_student, first_group) = first_placements
+        .iter()
+        .next()
+        .expect("the fixture places a student");
+    placed.insert(*first_student, *first_group);
+    let expected_row = ColloscopeContents {
+        interrogations: [(first_cell.0, first_cell.1.clone())].into_iter().collect(),
+        group_lists: [(*first_list, placed)].into_iter().collect(),
+    };
+    assert_eq!(
+        extracted::<ColloscopeData>(&globals, "by_handles"),
+        expected_row
+    );
+    assert_eq!(
+        extracted::<ColloscopeData>(&globals, "by_ids"),
+        expected_row
+    );
+
+    // The empty row is "no row": an empty group set and an empty placement
+    // map extract as the rows the payload promises its callers, without a
+    // word of canonicalization.
+    let mut empty = ColloscopeContents::default();
+    empty.interrogations.insert(first_cell.0, BTreeSet::new());
+    empty.group_lists.insert(*first_list, BTreeMap::new());
+    assert_eq!(
+        extracted::<ColloscopeData>(&globals, "with_empty_rows"),
+        empty
+    );
+
+    // The default: the empty colloscope, what `clm.new_document()` holds —
+    // pinned so the python side cannot drift.
+    assert_eq!(
+        extracted::<ColloscopeData>(&globals, "defaults"),
+        ColloscopeContents::default()
+    );
+
+    // The refusals, each with the sentence it raises: the class a script
+    // wrote down, the field, and what was given. The key refusals are the
+    // argument convention's own — the same sentences the read surface's
+    // coordinates raise.
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_table"),
+        (
+            "TypeError".to_owned(),
+            "a ColloscopeData's interrogations is a mapping of (slot, week) pairs to sets of \
+             group numbers, and [0] is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_cell_key"),
+        (
+            "TypeError".to_owned(),
+            "a ColloscopeData's interrogations holds (slot, week) pairs, and 3 is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_week_key"),
+        (
+            "TypeError".to_owned(),
+            "a week argument takes a Week or a WeekId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_groups"),
+        (
+            "TypeError".to_owned(),
+            "a ColloscopeData's interrogations holds sets of group numbers, and 'x' is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_list_key"),
+        (
+            "TypeError".to_owned(),
+            "a group list argument takes a GroupList or a GroupListId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_student_key"),
+        (
+            "TypeError".to_owned(),
+            "a student argument takes a Student or a StudentId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeData>(&globals, "bad_group_number"),
+        (
+            "TypeError".to_owned(),
+            "a ColloscopeData's group_lists holds group numbers, and 'x' is not one".to_owned(),
+        )
+    );
+
+    // A reference that belongs to another document is stale, whatever its id
+    // says — the same refusal every method of this api already makes.
+    for name in ["foreign_slot", "foreign_group_list"] {
+        let (kind, _message) = refused::<ColloscopeData>(&globals, name);
+        assert_eq!(kind, "StaleHandleError");
+    }
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

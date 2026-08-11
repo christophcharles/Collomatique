@@ -20,6 +20,7 @@ use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
+use collomatique_ops::ColloscopeContents;
 use collomatique_state_colloscopes::export_config::{
     ColloscopeConfig as RawColloscopeConfig, Color as RawColor, ExportConfig as RawExportConfig,
     GlobalConfig as RawGlobalConfig, PageOrientation, PerGroupListConfig as RawPerGroupListConfig,
@@ -32,10 +33,10 @@ use collomatique_state_colloscopes::{
 };
 
 use crate::Document;
-use crate::collections::{Period, Slot, Student, Subject, Teacher, Week, WeekPattern};
+use crate::collections::{GroupList, Period, Slot, Student, Subject, Teacher, Week, WeekPattern};
 use crate::handles::{Handle, RawId, argument, shown};
 use crate::ids::{
-    IdClass, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
+    GroupListId, IdClass, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 use crate::values;
 
@@ -1924,6 +1925,205 @@ impl Value for ExportConfigData {
             "per_group_list_config",
             ExportGroupListConfigData::to_py(py, &config.per_group_list_config)?,
         )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The interrogation rows of a colloscope value — the cells, and their groups
+///
+/// The same shape as `ColloscopeContents`'s field of the same name, written
+/// out as a name so the boundary's two directions agree with the model and
+/// with each other.
+type InterrogationRows = BTreeMap<(RawId<Slot>, RawId<Week>), BTreeSet<u32>>;
+
+/// The placements rows of a colloscope value — the lists, and their placements
+///
+/// The same shape as `ColloscopeContents`'s field of the same name, written
+/// out as a name so the boundary's two directions agree with the model and
+/// with each other.
+type PlacementRows = BTreeMap<RawId<GroupList>, BTreeMap<RawId<Student>, u32>>;
+
+/// A field holding the interrogation rows of a colloscope
+///
+/// A mapping of `(slot, week)` pairs to sets of group numbers — one of the
+/// two sparse tables of the colloscope, read out as a value. Each end of a
+/// pair resolves like every other entity reference: a handle or an id,
+/// against this document, so a foreign handle and a dead id are refused
+/// here, by the same [crate::handles::argument] check every method uses.
+/// The group numbers are plain ints, and an empty set is the "no row" the
+/// payload promises rather than a shape to correct.
+fn interrogation_rows(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<InterrogationRows> {
+    let value = field(site, name, obj)?;
+    let items = value.call_method0("items").map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a mapping of (slot, week) pairs to sets of group numbers, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    let mut rows = BTreeMap::new();
+    for item in items.try_iter()? {
+        let item = item?;
+        let (key, groups): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item.extract().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} holds pairs of a (slot, week) pair and a set of group numbers, and {} is \
+                 not one",
+                site.field(name),
+                shown(&item, "that pair"),
+            ))
+        })?;
+        let (slot, week): (Bound<'_, PyAny>, Bound<'_, PyAny>) = key.extract().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} holds (slot, week) pairs, and {} is not one",
+                site.field(name),
+                shown(&key, "that key"),
+            ))
+        })?;
+        let groups: BTreeSet<u32> = groups.extract().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} holds sets of group numbers, and {} is not one",
+                site.field(name),
+                shown(&groups, "that value"),
+            ))
+        })?;
+
+        rows.insert(
+            (argument::<Slot>(doc, &slot)?, argument::<Week>(doc, &week)?),
+            groups,
+        );
+    }
+
+    Ok(rows)
+}
+
+/// A field holding the placements rows of a colloscope
+///
+/// The second of the two sparse tables: a mapping of group lists to student
+/// placements. The outer keys resolve like every other entity reference —
+/// a `GroupList` handle or a `GroupListId` — and so do the inner ones, the
+/// placed students. A prefilled list never appears here: it has groups of
+/// its own, so the model never fills it. An empty placement map is the "no
+/// row" the payload promises rather than a shape to correct.
+fn placement_rows(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<PlacementRows> {
+    let value = field(site, name, obj)?;
+    let items = value.call_method0("items").map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a mapping of group lists to student placements, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    let mut rows = BTreeMap::new();
+    for item in items.try_iter()? {
+        let item = item?;
+        let (group_list, placements): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+            item.extract().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} holds pairs of a group list and a student placement, and {} is not one",
+                    site.field(name),
+                    shown(&item, "that pair"),
+                ))
+            })?;
+        let group_list = argument::<GroupList>(doc, &group_list)?;
+
+        let placed_items = placements.call_method0("items").map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} holds a mapping of students to group numbers, and {} is not one",
+                site.field(name),
+                shown(&placements, "that value"),
+            ))
+        })?;
+        let mut placed = BTreeMap::new();
+        for entry in placed_items.try_iter()? {
+            let entry = entry?;
+            let (student, group): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                entry.extract().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "{} holds pairs of a student and a group number, and {} is not one",
+                        site.field(name),
+                        shown(&entry, "that pair"),
+                    ))
+                })?;
+            let group: u32 = group.extract().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} holds group numbers, and {} is not one",
+                    site.field(name),
+                    shown(&group, "that value"),
+                ))
+            })?;
+
+            placed.insert(argument::<Student>(doc, &student)?, group);
+        }
+
+        rows.insert(group_list, placed);
+    }
+
+    Ok(rows)
+}
+
+/// The whole colloscope — the two sparse tables, detached
+///
+/// The result of a resolution: the assigned group numbers per `(slot, week)`
+/// cell, and the placements of each automatic group list. The op payload and
+/// the entity are the same shape here — [ColloscopeContents] is the
+/// plain-map twin of the state's sparse `Colloscope`, and
+/// `InstallColloscope` takes it whole — so §2.0 of the design says nothing
+/// new. The group *numbers* are not ids. An empty group set or an empty
+/// placement map means "no row", which is what the payload promises its
+/// callers: the boundary is dumb, and the canonical form stays with the
+/// write that reads the value back.
+pub struct ColloscopeData;
+
+impl Value for ColloscopeData {
+    type Model = ColloscopeContents;
+
+    const CLASS: &'static str = "ColloscopeData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<ColloscopeContents> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(ColloscopeContents {
+            interrogations: interrogation_rows(doc, site, "interrogations", obj)?,
+            group_lists: placement_rows(doc, site, "group_lists", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, contents: &ColloscopeContents) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+
+        let interrogations = PyDict::new(py);
+        for ((slot, week), groups) in &contents.interrogations {
+            interrogations.set_item(
+                (SlotId::wrap(*slot), WeekId::wrap(*week)),
+                PySet::new(py, groups)?,
+            )?;
+        }
+        kwargs.set_item("interrogations", interrogations)?;
+
+        let group_lists = PyDict::new(py);
+        for (group_list, placements) in &contents.group_lists {
+            let placed = PyDict::new(py);
+            for (student, group) in placements {
+                placed.set_item(StudentId::wrap(*student), group)?;
+            }
+            group_lists.set_item(GroupListId::wrap(*group_list), placed)?;
+        }
+        kwargs.set_item("group_lists", group_lists)?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }
