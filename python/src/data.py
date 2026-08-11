@@ -34,7 +34,9 @@ if TYPE_CHECKING:
 
     from collomatique import (
         AutomaticGroups,
+        Enforcement,
         Filling,
+        Limit,
         Period,
         PeriodId,
         Periodicity,
@@ -65,6 +67,8 @@ __all__ = [
     "PairingRuleData",
     "SlotPairingRuleSideData",
     "SlotPairingRuleData",
+    "LimitsData",
+    "BalancingData",
 ]
 
 
@@ -531,3 +535,92 @@ class SlotPairingRuleData:
     consequent: SlotPairingRuleSideData
     excluded_periods: set[Period | PeriodId] = field(default_factory=set)
     soft: bool = False
+
+
+def _objective_rotation() -> Enforcement:
+    """The rotation goal a new `BalancingData` comes with.
+
+    A function rather than a value, because there is no value to write here:
+    `Enforcement` is one of the rust classes, and this file is compiled while
+    `collomatique` is still initializing, so nothing of it can be imported at
+    that moment. A `default_factory` runs when a value is built instead, which
+    is long after the module is whole.
+    """
+
+    import collomatique
+
+    return collomatique.Enforcement.OBJECTIVE
+
+
+@dataclass
+class LimitsData:
+    """The limits a student's interrogation schedule is held to, detached.
+
+    `doc.settings.global_limits.to_data()` and the `Limits` sub-views hand one
+    back, and the settings mutators will take one:
+
+        clm.LimitsData(
+            interrogations_per_week_min=clm.Limit(2, clm.Enforcement.STRICT))
+
+    An entry is a whole: a field left at `None` does not mean "inherit" — it
+    **disables** the corresponding limit of the entry the student inherits
+    from. That is the model's whole-entry rule, and it stays in the model:
+    this value is dumb, and only the write that reads it back decides.
+
+    Each field is a `Limit` or `None` — a count with the `Enforcement` that
+    says whether it is an objective for the solver or a hard constraint:
+
+        clm.Limit(3, clm.Enforcement.STRICT)
+
+    `interrogations_per_week_min` and `interrogations_per_week_max` take any
+    count, zero included — the model types them that way. A
+    `max_interrogations_per_day` of zero is refused when the value is used,
+    since a day in which no interrogation may happen at all is not a limit.
+
+    Every field defaults to `None`, which is the model's own default: an empty
+    entry disables every limit, and it is what a document with no limits set
+    holds.
+    """
+
+    interrogations_per_week_min: Limit | None = None
+    interrogations_per_week_max: Limit | None = None
+    max_interrogations_per_day: Limit | None = None
+
+
+@dataclass
+class BalancingData:
+    """The balancing goals one subject's colles are scheduled under, detached.
+
+    `doc.balancing.global_options.to_data()` and the `BalancingOptions`
+    sub-views hand one back, and the balancing mutators will take one:
+
+        clm.BalancingData(
+            teacher_rotation=clm.Enforcement.OBJECTIVE,
+            year_teacher_rotation=True)
+
+    Like a `LimitsData`, an entry is a whole: a rotation goal left at `None`
+    is **not pursued** — it neither constrains the solver nor weighs in its
+    objective — and it never inherits the goal of the entry the subject
+    inherits from. That is the model's whole-entry rule, and it stays in the
+    model.
+
+    The three rotation goals are each an `Enforcement` or `None` — the
+    `OBJECTIVE` spelling optimizes for the goal, `STRICT` makes it a hard
+    constraint:
+
+        clm.Enforcement.OBJECTIVE   # optimize for it
+        clm.Enforcement.STRICT      # a constraint
+
+    `year_teacher_rotation` and `period_teacher_rotation` are whether each
+    teacher is asked to see the same number of interrogations, over the whole
+    year and within each period.
+
+    The defaults are the model's own: teacher rotation pursued as an objective
+    and nothing else.
+    """
+
+    teacher_rotation: Enforcement | None = field(default_factory=_objective_rotation)
+    slot_rotation: Enforcement | None = None
+    avoid_twice_in_a_row: Enforcement | None = None
+    year_teacher_rotation: bool = False
+    period_teacher_rotation: bool = False

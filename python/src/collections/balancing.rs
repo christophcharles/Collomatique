@@ -23,6 +23,8 @@ use collomatique_state_colloscopes::balancing::BalancingOptions as RawBalancingO
 
 use crate::Document;
 use crate::collections::subjects::Subject;
+use crate::data::BalancingData;
+use crate::data::Value as _;
 use crate::errors::StaleHandleError;
 use crate::handles::{Handle, argument};
 use crate::ids::{IdClass, SubjectId};
@@ -305,6 +307,26 @@ impl BalancingOptions {
     #[getter]
     fn period_teacher_rotation(&self, py: Python<'_>) -> PyResult<bool> {
         self.read(py, |options| options.period_teacher_rotation)
+    }
+
+    /// This entry, detached — a `BalancingData` holding what the view shows
+    ///
+    /// A fresh object every call, the whole entry as the document holds it: a
+    /// goal the entry does not pursue comes out as `None`, which is the
+    /// whole-entry override rule — not pursued means disabled, never inherited
+    /// — and that meaning stays with the write, not with this value
+    /// (`docs/python/values.md` §3.8).
+    ///
+    /// What the view is bound to is what comes out: the resolved view of a
+    /// subject without an override hands back the global entry. A stale handle
+    /// raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let options = self.read(py, |options| options.clone())?;
+
+        BalancingData::to_py(py, &options)
     }
 
     /// Whether two views are bound to the same thing of the same document

@@ -22,8 +22,8 @@ use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
-    group_lists, incompats, pairings, slot_pairings, slots, students, subjects, teachers,
-    week_patterns,
+    balancing, group_lists, incompats, pairings, settings, slot_pairings, slots, students,
+    subjects, teachers, week_patterns,
 };
 
 use crate::Document;
@@ -372,6 +372,93 @@ fn non_zero_count(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResul
     })?;
 
     values::at_least_one(&site.field(name), count)
+}
+
+/// A field the model stores as an optional limit on interrogations
+///
+/// A `Limit` leaf or `None`. The leaf was born whole, so nothing about its
+/// range is checked here: a limit of zero is a value the per-week fields of
+/// the model hold, and only the per-day field refuses it, in its own helper.
+fn optional_limit(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Option<settings::SoftParam<u32>>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let limit: values::Limit = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a Limit or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(Some(settings::SoftParam {
+        soft: limit.enforcement.to_model(),
+        value: limit.value,
+    }))
+}
+
+/// The same, for a count the model stores as at least one
+///
+/// The per-day limit is the one field the model types non-zero, so a `Limit`
+/// of zero is refused here, in the words `values.rs` already uses for that
+/// rule — the promise `Limit`'s own docstring makes.
+fn optional_nonzero_limit(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Option<settings::SoftParam<NonZeroU32>>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let limit: values::Limit = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a Limit or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(Some(settings::SoftParam {
+        soft: limit.enforcement.to_model(),
+        value: values::at_least_one(&site.field(name), limit.value)?,
+    }))
+}
+
+/// A field the model stores as an optional rotation goal
+///
+/// An `Enforcement` or `None` — the balancing goals carry no value of their
+/// own, the model's `SoftParam<()>` is a three-state switch, so only the
+/// enforcement crosses.
+fn optional_enforcement(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Option<settings::SoftParam<()>>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let enforcement: values::Enforcement = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is an Enforcement or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(Some(settings::SoftParam {
+        soft: enforcement.to_model(),
+        value: (),
+    }))
 }
 
 /// A field naming one entity
@@ -1252,6 +1339,154 @@ impl Value for SlotPairingRuleData {
             )?,
         )?;
         kwargs.set_item("soft", rule.soft())?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The python limit for one model limit whose count is a plain int
+fn limit_to_py<'py>(
+    py: Python<'py>,
+    soft: &settings::SoftParam<u32>,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(Py::new(py, values::limit(soft))?.into_bound(py).into_any())
+}
+
+/// The same, for a count the model stores as at least one
+fn nonzero_limit_to_py<'py>(
+    py: Python<'py>,
+    soft: &settings::SoftParam<NonZeroU32>,
+) -> PyResult<Bound<'py, PyAny>> {
+    Ok(Py::new(py, values::nonzero_limit(soft))?
+        .into_bound(py)
+        .into_any())
+}
+
+/// One whole limits entry — the three limits, or the fields that disable them
+///
+/// The whole-entry rule is the model's: a field set to `None` does not mean
+/// "inherit", it **disables** the corresponding limit of the entry the student
+/// inherits from. That semantic stays in the model — this boundary only ever
+/// carries a whole raw entry across, never a merge, and the dataclass is dumb
+/// about what a `None` means.
+pub struct LimitsData;
+
+impl Value for LimitsData {
+    type Model = settings::Limits;
+
+    const CLASS: &'static str = "LimitsData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<settings::Limits> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(settings::Limits {
+            interrogations_per_week_min: optional_limit(site, "interrogations_per_week_min", obj)?,
+            interrogations_per_week_max: optional_limit(site, "interrogations_per_week_max", obj)?,
+            max_interrogations_per_day: optional_nonzero_limit(
+                site,
+                "max_interrogations_per_day",
+                obj,
+            )?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, limits: &settings::Limits) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "interrogations_per_week_min",
+            limits
+                .interrogations_per_week_min
+                .as_ref()
+                .map(|soft| limit_to_py(py, soft))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "interrogations_per_week_max",
+            limits
+                .interrogations_per_week_max
+                .as_ref()
+                .map(|soft| limit_to_py(py, soft))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "max_interrogations_per_day",
+            limits
+                .max_interrogations_per_day
+                .as_ref()
+                .map(|soft| nonzero_limit_to_py(py, soft))
+                .transpose()?,
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One whole balancing entry — the rotation goals, and the fairness switches
+///
+/// Like a [LimitsData], a whole-entry override record: a goal set to `None` is
+/// *not pursued*, and that is a choice, never a fallback to the inherited
+/// entry. The semantic stays in the model; this boundary carries whole raw
+/// entries across.
+pub struct BalancingData;
+
+impl Value for BalancingData {
+    type Model = balancing::BalancingOptions;
+
+    const CLASS: &'static str = "BalancingData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(
+        _doc: &Py<Document>,
+        obj: &Bound<'_, PyAny>,
+    ) -> PyResult<balancing::BalancingOptions> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(balancing::BalancingOptions {
+            teacher_rotation: optional_enforcement(site, "teacher_rotation", obj)?,
+            slot_rotation: optional_enforcement(site, "slot_rotation", obj)?,
+            avoid_twice_in_a_row: optional_enforcement(site, "avoid_twice_in_a_row", obj)?,
+            year_teacher_rotation: flag(site, "year_teacher_rotation", obj)?,
+            period_teacher_rotation: flag(site, "period_teacher_rotation", obj)?,
+        })
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        options: &balancing::BalancingOptions,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "teacher_rotation",
+            options
+                .teacher_rotation
+                .as_ref()
+                .map(|goal| values::Enforcement::from_model(goal.soft)),
+        )?;
+        kwargs.set_item(
+            "slot_rotation",
+            options
+                .slot_rotation
+                .as_ref()
+                .map(|goal| values::Enforcement::from_model(goal.soft)),
+        )?;
+        kwargs.set_item(
+            "avoid_twice_in_a_row",
+            options
+                .avoid_twice_in_a_row
+                .as_ref()
+                .map(|goal| values::Enforcement::from_model(goal.soft)),
+        )?;
+        kwargs.set_item("year_teacher_rotation", options.year_teacher_rotation)?;
+        kwargs.set_item("period_teacher_rotation", options.period_teacher_rotation)?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

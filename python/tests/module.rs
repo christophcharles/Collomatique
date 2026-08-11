@@ -15,9 +15,9 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    GroupListData, IncompatData, InterrogationData, PairingRuleData, PairingRuleSideData, SlotData,
-    SlotPairingRuleData, SlotPairingRuleSideData, StudentData, SubjectData, TeacherData,
-    WeekPatternData,
+    BalancingData, GroupListData, IncompatData, InterrogationData, LimitsData, PairingRuleData,
+    PairingRuleSideData, SlotData, SlotPairingRuleData, SlotPairingRuleSideData, StudentData,
+    SubjectData, TeacherData, WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -6948,6 +6948,384 @@ fn removing_a_balancing_override_stales_only_the_raw_view() {
                 )
                 .expect("Métamorphose's balancing override is removable");
         },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The limits come back detached, out and back
+///
+/// The script walks `doc.settings` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the global entry,
+/// Hermione's override (whose every field is set), Harry's resolved entry
+/// (the global one), a partial entry built by hand with its `None` fields
+/// intact, a zero per-week limit, and the model-default pin.
+#[test]
+fn the_limits_come_back_detached() {
+    use collomatique_state_colloscopes::settings::Limits;
+    use collomatique_state_colloscopes::settings::SoftParam;
+
+    let dir = workspace("limits-data");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/limits_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let settings = &data.get_inner_data().params.settings;
+
+    // The global entry and Hermione's override, whole — the same records the
+    // document holds.
+    assert_eq!(
+        extracted::<LimitsData>(&globals, "global_value"),
+        settings.global.clone()
+    );
+    let hermione = data
+        .get_inner_data()
+        .params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Granger")
+        .expect("the example has Hermione")
+        .0;
+    assert_eq!(
+        extracted::<LimitsData>(&globals, "hermione_value"),
+        settings
+            .students
+            .get(&hermione)
+            .expect("Hermione has an override")
+            .clone()
+    );
+
+    // A student without an override resolves to the global entry, and the
+    // value is that resolved entry.
+    let harry = data
+        .get_inner_data()
+        .params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Potter")
+        .expect("the example has Harry")
+        .0;
+    assert_eq!(
+        extracted::<LimitsData>(&globals, "harry_value"),
+        settings.limits_for(harry).clone()
+    );
+
+    // The defaults: every field `None` — the model's own default, pinned so
+    // the python side cannot drift.
+    assert_eq!(
+        extracted::<LimitsData>(&globals, "defaults"),
+        Limits::default()
+    );
+
+    // The partial entry built by hand: one limit set, the two other fields
+    // `None` — which is the whole-entry point, a `None` field disables the
+    // inherited limit rather than inheriting it, and the value must carry the
+    // `None`s across exactly as the model stores them.
+    let partial = Limits {
+        interrogations_per_week_min: Some(SoftParam {
+            soft: true,
+            value: 4,
+        }),
+        interrogations_per_week_max: None,
+        max_interrogations_per_day: None,
+    };
+    assert_eq!(extracted::<LimitsData>(&globals, "partial"), partial);
+
+    // A zero per-week limit is a value the model holds — a week with no
+    // interrogation at all is a thing to say.
+    assert_eq!(
+        extracted::<LimitsData>(&globals, "week_min_zero"),
+        Limits {
+            interrogations_per_week_min: Some(SoftParam {
+                soft: true,
+                value: 0,
+            }),
+            interrogations_per_week_max: None,
+            max_interrogations_per_day: None,
+        }
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<LimitsData>(&globals, "day_zero"),
+        (
+            "ValueError".to_owned(),
+            "a LimitsData's max_interrogations_per_day is at least 1, and 0 was given".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<LimitsData>(&globals, "not_a_limit"),
+        (
+            "TypeError".to_owned(),
+            "a LimitsData's interrogations_per_week_min is a Limit or None, and 3 is neither"
+                .to_owned(),
+        )
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// An override appearing and vanishing stales the value that names it
+///
+/// The mutation comes from rust, between the three halves, exactly as the
+/// read surface's own staleness test stages it: a partial override for Harry
+/// is installed, its raw view and its detached value are taken, and the
+/// override is removed again. `to_data()` through the held raw view must then
+/// die loudly — the message saying which entry is gone — while the value
+/// built while the entry stood still extracts to the very entry that stood.
+#[test]
+fn an_override_appearing_and_vanishing_stales_the_value_that_names_it() {
+    use collomatique_state_colloscopes::settings::Limits;
+    use collomatique_state_colloscopes::settings::SoftParam;
+
+    let dir = workspace("limits-data-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so this copy names the same student the script is holding.
+    let harry = reload(&source)
+        .get_inner_data()
+        .params
+        .students
+        .student_map
+        .iter()
+        .find(|(_id, student)| student.desc.surname == "Potter")
+        .expect("the example has Harry")
+        .0;
+
+    // The whole-entry override installed between the first two stages: a
+    // minimum of four a week, objective rather than strict, and the two other
+    // fields unset — which is the point, they must disable the set global
+    // limits rather than inherit them.
+    let partial = Limits {
+        interrogations_per_week_min: Some(SoftParam {
+            soft: true,
+            value: 4,
+        }),
+        interrogations_per_week_max: None,
+        max_interrogations_per_day: None,
+    };
+
+    let mut stage = 0;
+    let globals = run_stages(
+        &[
+            include_str!("scripts/limits_data_stale_before.py"),
+            include_str!("scripts/limits_data_stale_override.py"),
+            include_str!("scripts/limits_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let op = match stage {
+                0 => {
+                    collomatique_ops::SettingsUpdateOp::UpdateStudentLimits(harry, partial.clone())
+                }
+                _ => collomatique_ops::SettingsUpdateOp::RemoveStudentLimits(harry),
+            };
+            stage += 1;
+
+            document_of(globals)
+                .borrow_mut(py)
+                .update(py, collomatique_ops::UpdateOp::Settings(op))
+                .expect("Harry's override is settable and removable");
+        },
+    );
+
+    // The value written down while the entry stood is untouched, and still
+    // extracts to the very entry that stood — the `None` fields included.
+    assert_eq!(extracted::<LimitsData>(&globals, "partial_value"), partial);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The balancing comes back detached, out and back
+///
+/// The script walks `doc.balancing` and leaves what it saw; rust compares it
+/// with the same document read straight from the model — the global entry
+/// (whose `avoid_twice_in_a_row` is the `None` field, kept `None`),
+/// Métamorphose's override (which hardens a rotation the global entry does
+/// not pursue at all), a subject inheriting the global entry, a partial entry
+/// built by hand with a goal left un-pursued, and the model-default pin.
+#[test]
+fn the_balancing_comes_back_detached() {
+    use collomatique_state_colloscopes::balancing::BalancingOptions;
+    use collomatique_state_colloscopes::settings::SoftParam;
+
+    let dir = workspace("balancing-data");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/balancing_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let balancing = &params.balancing;
+    let subjects = &params.subjects;
+
+    // The global entry, whole — with the goal it does not pursue kept `None`.
+    assert_eq!(
+        extracted::<BalancingData>(&globals, "global_value"),
+        balancing.global.clone()
+    );
+
+    // Métamorphose's override wins verbatim: its avoid_twice_in_a_row is
+    // strict where the global entry does not pursue the goal at all, and its
+    // year switch is on where the global one is off.
+    let metamorphose = subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(_id, subject)| subject.parameters.name == "Métamorphose")
+        .expect("the example has Métamorphose")
+        .0;
+    assert_eq!(
+        extracted::<BalancingData>(&globals, "metamorphose_value"),
+        balancing
+            .subjects
+            .get(&metamorphose)
+            .expect("Métamorphose has an override")
+            .clone()
+    );
+
+    // A subject without an override resolves to the global entry, and the
+    // value is that resolved entry.
+    let arithmancie = subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(_id, subject)| subject.parameters.name == "Arithmancie")
+        .expect("the example has Arithmancie")
+        .0;
+    assert_eq!(
+        extracted::<BalancingData>(&globals, "arithmancie_value"),
+        balancing.options_for(arithmancie).clone()
+    );
+
+    // The defaults: teacher rotation pursued as an objective, and nothing
+    // else — the model's own default, pinned so the python side cannot drift.
+    assert_eq!(
+        extracted::<BalancingData>(&globals, "defaults"),
+        BalancingOptions::default()
+    );
+
+    // The partial entry built by hand: one goal pursued, one hardened, one
+    // left un-pursued — which is the whole-entry point, a `None` goal is
+    // *not pursued*, never inherited — and the year switch on.
+    assert_eq!(
+        extracted::<BalancingData>(&globals, "hand_built"),
+        BalancingOptions {
+            teacher_rotation: Some(SoftParam {
+                soft: true,
+                value: (),
+            }),
+            slot_rotation: None,
+            avoid_twice_in_a_row: Some(SoftParam {
+                soft: false,
+                value: (),
+            }),
+            year_teacher_rotation: true,
+            period_teacher_rotation: false,
+        }
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<BalancingData>(&globals, "not_an_enforcement"),
+        (
+            "TypeError".to_owned(),
+            "a BalancingData's teacher_rotation is an Enforcement or None, and 3 is neither"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<BalancingData>(&globals, "not_a_goal"),
+        (
+            "TypeError".to_owned(),
+            "a BalancingData's slot_rotation is an Enforcement or None, and 'OBJECTIVE' is neither"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<BalancingData>(&globals, "not_a_switch"),
+        (
+            "TypeError".to_owned(),
+            "a BalancingData's year_teacher_rotation is True or False, and 1 is neither".to_owned(),
+        )
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed balancing override stales the value that names it
+///
+/// The mutation comes from rust, between the two halves: Métamorphose's
+/// balancing override goes. `to_data()` through the raw view held from the
+/// first half must then die loudly, while the resolved view re-resolves to
+/// the global entry — and the value built before the removal still extracts
+/// to the entry the file held.
+#[test]
+fn a_removed_balancing_override_stales_the_value_that_names_it() {
+    let dir = workspace("balancing-data-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so this copy names the same subject the script is holding.
+    let data = reload(&source);
+    let metamorphose = data
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(_id, subject)| subject.parameters.name == "Métamorphose")
+        .expect("the example has Métamorphose")
+        .0;
+    let expected = data
+        .get_inner_data()
+        .params
+        .balancing
+        .subjects
+        .get(&metamorphose)
+        .expect("Métamorphose has an override")
+        .clone();
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/balancing_data_stale_before.py"),
+            include_str!("scripts/balancing_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            document_of(globals)
+                .borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Balancing(
+                        collomatique_ops::BalancingUpdateOp::RemoveSubjectOptions(metamorphose),
+                    ),
+                )
+                .expect("Métamorphose's balancing override is removable");
+        },
+    );
+
+    // The value built before the removal is untouched, and still extracts to
+    // the entry the file held.
+    assert_eq!(
+        extracted::<BalancingData>(&globals, "doomed_value"),
+        expected
     );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");

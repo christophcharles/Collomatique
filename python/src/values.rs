@@ -758,6 +758,13 @@ impl Enforcement {
             Enforcement::Strict
         }
     }
+
+    /// The model `soft` flag for one python enforcement — the inverse of
+    /// [from_model], the way the boundary turns a value's field back into a
+    /// `SoftParam`
+    pub(crate) fn to_model(self) -> bool {
+        matches!(self, Enforcement::Objective)
+    }
 }
 
 /// One limit on a student's interrogations
@@ -779,8 +786,8 @@ impl Enforcement {
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Limit {
-    value: u32,
-    enforcement: Enforcement,
+    pub(crate) value: u32,
+    pub(crate) enforcement: Enforcement,
 }
 
 #[pymethods]
