@@ -636,6 +636,34 @@ impl Document {
             .is_interrogation_possible(slot_id, week_id))
     }
 
+    /// The whole document, detached — every section in one tree
+    ///
+    /// ```python
+    /// tree = doc.snapshot()    # DocumentData
+    /// ```
+    ///
+    /// The same conversion `to_data()` is, run over everything at once: a
+    /// `DocumentData` mirroring the document section by section, the params
+    /// tables as dicts and lists whose order is the document's own user order,
+    /// the colloscope and the export configuration as values of their own.
+    /// The ids in it are the document's, so the tree is a read-modify-write
+    /// starting point — rename, delete, rewire — and step 4's `replace_all`
+    /// will take it back. This milestone only hands trees out.
+    ///
+    /// A pure read: it borrows the document, walks its data and builds the
+    /// tree, so it cannot fail on a document that exists. A script that wants
+    /// one section still calls the handle's own `to_data()`.
+    fn snapshot<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the tree calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let inner = self.state.get_data().get_inner_data().clone();
+
+        crate::data::DocumentData::to_py(py, &inner)
+    }
+
     /// Groups every write in a block into one undo slot
     ///
     /// ```python

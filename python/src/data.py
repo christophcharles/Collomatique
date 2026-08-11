@@ -39,13 +39,16 @@ if TYPE_CHECKING:
         Filling,
         GroupList,
         GroupListId,
+        IncompatId,
         Limit,
         Orientation,
+        PairingRuleId,
         Period,
         PeriodId,
         Periodicity,
         Slot,
         SlotId,
+        SlotPairingRuleId,
         Student,
         StudentId,
         Subject,
@@ -82,6 +85,7 @@ __all__ = [
     "ExportConfigData",
     "ColloscopeData",
     "WeekData",
+    "DocumentData",
 ]
 
 
@@ -977,3 +981,63 @@ class WeekData:
     period: Period | PeriodId
     interrogations: bool = True
     annotation: str | None = None
+
+
+@dataclass
+class DocumentData:
+    """The whole document, detached.
+
+    `doc.snapshot()` hands one back — the same conversion `to_data()` is, run
+    over everything at once:
+
+        tree = doc.snapshot()   # DocumentData
+
+    The tree mirrors the document section by section: `params` in the first
+    nineteen fields, then the colloscope and the export configuration. The
+    entity sections are dicts keyed by id, so the order of a section is the
+    order of its dict — python has preserved insertion order since 3.7, and
+    that is what carries the document's user orders: `subjects` in the order
+    `doc.subjects` shows them, `slots` in the `doc.slots` walk order, `weeks`
+    in global week order. `periods` is a plain list, because a period has
+    nothing but its identity and its place.
+
+    Every field is defaulted to an empty document, so `clm.DocumentData()` is
+    exactly what `clm.new_document()` holds.
+
+    The keys and the entity references inside name entities, so they take
+    handles and ids interchangeably, like every other place in this API;
+    `snapshot()` always fills them with ids, so that a tree carries no
+    document around with it.
+
+    The two junction tables hold the stored rows only: an absent row is
+    simply not there, exactly as the model stores it.
+
+    The coarse door's `doc.replace_all(tree, label)` — step 4 of the
+    migration — will take one of these back. Nothing in this milestone does:
+    `snapshot()` is a read, and a tree only ever travels out of the document.
+    A script that wants one section still calls the handle's own `to_data()`.
+    """
+
+    first_week: datetime.date | None = None
+    periods: list[PeriodId] = field(default_factory=list)
+    weeks: dict[WeekId, WeekData] = field(default_factory=dict)
+    subjects: dict[SubjectId, SubjectData] = field(default_factory=dict)
+    teachers: dict[TeacherId, TeacherData] = field(default_factory=dict)
+    students: dict[StudentId, StudentData] = field(default_factory=dict)
+    assignments: dict[tuple[PeriodId, SubjectId], set[StudentId]] = field(
+        default_factory=dict)
+    week_patterns: dict[WeekPatternId, WeekPatternData] = field(default_factory=dict)
+    slots: dict[SlotId, SlotData] = field(default_factory=dict)
+    incompats: dict[IncompatId, IncompatData] = field(default_factory=dict)
+    group_lists: dict[GroupListId, GroupListData] = field(default_factory=dict)
+    group_list_associations: dict[tuple[PeriodId, SubjectId], GroupListId] = field(
+        default_factory=dict)
+    pairings: dict[PairingRuleId, PairingRuleData] = field(default_factory=dict)
+    slot_pairings: dict[SlotPairingRuleId, SlotPairingRuleData] = field(
+        default_factory=dict)
+    global_limits: LimitsData = field(default_factory=LimitsData)
+    student_limits: dict[StudentId, LimitsData] = field(default_factory=dict)
+    global_balancing: BalancingData = field(default_factory=BalancingData)
+    subject_balancing: dict[SubjectId, BalancingData] = field(default_factory=dict)
+    colloscope: ColloscopeData = field(default_factory=ColloscopeData)
+    export_config: ExportConfigData = field(default_factory=ExportConfigData)

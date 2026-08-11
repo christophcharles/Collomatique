@@ -21,22 +21,29 @@ use pyo3::pyclass::boolean_struct::True;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
 use collomatique_ops::ColloscopeContents;
+use collomatique_state::{OrderedTable, Table};
 use collomatique_state_colloscopes::export_config::{
     ColloscopeConfig as RawColloscopeConfig, Color as RawColor, ExportConfig as RawExportConfig,
     GlobalConfig as RawGlobalConfig, PageOrientation, PerGroupListConfig as RawPerGroupListConfig,
     PerStudentGroupsConfig as RawPerStudentGroupsConfig,
 };
 use collomatique_state_colloscopes::{
-    NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
-    balancing, group_lists, incompats, pairings, settings, slot_pairings, slots, students,
-    subjects, teachers, week_patterns, weeks,
+    InnerData, NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters,
+    SubjectPeriodicity, assignments, balancing, colloscope_params, colloscopes, group_lists,
+    incompats, pairings, periods, settings, slot_pairings, slots, students, subjects, teachers,
+    week_patterns, weeks,
 };
+use collomatique_time::WeekStart;
 
 use crate::Document;
-use crate::collections::{GroupList, Period, Slot, Student, Subject, Teacher, Week, WeekPattern};
+use crate::collections::{
+    GroupList, Incompat, PairingRule, Period, Slot, SlotPairingRule, Student, Subject, Teacher,
+    Week, WeekPattern,
+};
 use crate::handles::{Handle, RawId, argument, shown};
 use crate::ids::{
-    GroupListId, IdClass, PeriodId, SlotId, StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
+    GroupListId, IdClass, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId,
+    StudentId, SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 use crate::values;
 
@@ -625,15 +632,77 @@ where
     H::IdClass: PyClass<Frozen = True> + Sync,
 {
     let value = field(site, name, obj)?;
+    entity_members::<H>(doc, site, name, &value)
+}
+
+/// The members of one iterable of entities, each resolved like every entity
+/// reference
+///
+/// The body of [entity_set], split out so that a set read *inside* another
+/// value — the students of one `assignments` row of a `DocumentData` — goes
+/// through the same door as a field that is itself a set.
+fn entity_members<H>(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    value: &Bound<'_, PyAny>,
+) -> PyResult<BTreeSet<RawId<H>>>
+where
+    H: Handle + PyClass<Frozen = True> + Sync,
+    H::IdClass: PyClass<Frozen = True> + Sync,
+{
     let items = value.try_iter().map_err(|_| {
         PyTypeError::new_err(format!(
             "{} is a set of entities, and {} cannot be iterated over",
+            site.field(name),
+            shown(value, "that value"),
+        ))
+    })?;
+
+    items.map(|item| argument::<H>(doc, &item?)).collect()
+}
+
+/// A field holding a whole section keyed by entity ids
+///
+/// The tree of `DocumentData` is a dict per entity section. The keys follow
+/// §2.3 like every other entity reference — a handle and an id name the same
+/// entity, against this document — and each entry is a value of its own class,
+/// extracted the way every other value is, at the site of the section it
+/// sits in.
+fn entity_dict<H, V>(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Vec<(RawId<H>, V::Model)>>
+where
+    H: Handle + PyClass<Frozen = True> + Sync,
+    H::IdClass: PyClass<Frozen = True> + Sync,
+    V: Value,
+{
+    let value = field(site, name, obj)?;
+    let items = value.call_method0("items").map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a mapping of entities to values, and {} is not one",
             site.field(name),
             shown(&value, "that value"),
         ))
     })?;
 
-    items.map(|item| argument::<H>(doc, &item?)).collect()
+    let mut entries = Vec::new();
+    for item in items.try_iter()? {
+        let item = item?;
+        let (key, entry): (Bound<'_, PyAny>, Bound<'_, PyAny>) = item.extract().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} holds pairs of an entity and a value, and {} is not one",
+                site.field(name),
+                shown(&item, "that pair"),
+            ))
+        })?;
+        entries.push((argument::<H>(doc, &key)?, V::from_py(doc, &entry)?));
+    }
+
+    Ok(entries)
 }
 
 /// A field holding the busy windows of an incompatibility
@@ -2162,6 +2231,452 @@ impl Value for WeekData {
         kwargs.set_item(
             "annotation",
             week.annotation.as_ref().map(|text| text.to_string()),
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The weeks of a whole-document tree, regrouped by period
+///
+/// The shape [weeks::Weeks::from_period_rows] wants: one row per period, its
+/// weeks in tree order. Written out as a name so the reconstruction agrees
+/// with the model's constructor and the two sides cannot drift.
+type WeekRows = Vec<(RawId<Period>, Vec<(RawId<Week>, weeks::WeekDesc)>)>;
+
+/// The slots of a whole-document tree, regrouped by subject
+///
+/// The shape [slots::Slots::from_subject_rows] wants, the twin of [WeekRows].
+type SlotRows = Vec<(RawId<Subject>, Vec<(RawId<Slot>, slots::Slot)>)>;
+
+/// The whole document, detached — one value holding every section
+///
+/// The tree `doc.snapshot()` assembles (§3.12 of `docs/python/values.md`):
+/// every section of `InnerData` as a field, with the user orders carried by
+/// the python containers themselves. No op takes one and nothing reads one
+/// back in this milestone — `replace_all`, the coarse door's other half, is
+/// step 4's, and it will take this same tree through `Data::from_inner_data` —
+/// but the value is full two-direction like every other, and the round-trip
+/// test drives the inbound half through the same public door.
+pub struct DocumentData;
+
+impl Value for DocumentData {
+    /// The whole document, and [InnerData] rather than [crate::Document]'s
+    /// `Data`: the snapshot is a pure read of what the document holds, and the
+    /// invariants `Data` adds on top are the coarse door's business.
+    type Model = InnerData;
+
+    const CLASS: &'static str = "DocumentData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<InnerData> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        let first_week = field(site, "first_week", obj)?;
+        let first_week = if first_week.is_none() {
+            None
+        } else {
+            let date: chrono::NaiveDate = first_week.extract().map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} is a date or None, and {} is neither",
+                    site.field("first_week"),
+                    shown(&first_week, "that value"),
+                ))
+            })?;
+            // The model only ever stores a Monday, so a tree that names another
+            // day is refused here, in the words `set_first_week` already uses
+            // for the same rule.
+            Some(WeekStart::new(date).ok_or_else(|| {
+                PyValueError::new_err(format!(
+                    "{} is a Monday, and {date} is not one",
+                    site.field("first_week"),
+                ))
+            })?)
+        };
+
+        let periods = field(site, "periods", obj)?;
+        let period_ids: Vec<RawId<Period>> = periods
+            .try_iter()
+            .map_err(|_| {
+                PyTypeError::new_err(format!(
+                    "{} is a list of periods, and {} is not one",
+                    site.field("periods"),
+                    shown(&periods, "that value"),
+                ))
+            })?
+            .map(|item| argument::<Period>(doc, &item?))
+            .collect::<PyResult<_>>()?;
+        let periods = periods::Periods::from_ordered_ids(first_week, period_ids)
+            .map_err(|e| PyValueError::new_err(format!("a DocumentData's periods: {e}")))?;
+
+        let weeks = entity_dict::<Week, WeekData>(doc, site, "weeks", obj)?;
+        // Regrouped by period, in order of first appearance: a tree whose weeks
+        // run in global week order — every snapshot — rebuilds the same walk,
+        // each period keeping its own order and the periods keeping the display
+        // order the `periods` list carried.
+        let mut week_rows: WeekRows = Vec::new();
+        for (week_id, week) in weeks {
+            let period = week.period_id;
+            match week_rows
+                .iter_mut()
+                .find(|(period_id, _)| *period_id == period)
+            {
+                Some((_, list)) => list.push((week_id, week.desc())),
+                None => week_rows.push((period, vec![(week_id, week.desc())])),
+            }
+        }
+        let weeks = weeks::Weeks::from_period_rows(week_rows)
+            .map_err(|e| PyValueError::new_err(format!("a DocumentData's weeks: {e}")))?;
+
+        let subjects = entity_dict::<Subject, SubjectData>(doc, site, "subjects", obj)?;
+        let ordered_subject_list: OrderedTable<_, _> = subjects
+            .try_into()
+            .map_err(|e| PyValueError::new_err(format!("a DocumentData's subjects: {e}")))?;
+        let subjects = subjects::Subjects {
+            ordered_subject_list,
+        };
+
+        let teachers = entity_dict::<Teacher, TeacherData>(doc, site, "teachers", obj)?
+            .into_iter()
+            .collect::<Table<_, _>>();
+        let students = entity_dict::<Student, StudentData>(doc, site, "students", obj)?
+            .into_iter()
+            .collect::<Table<_, _>>();
+
+        let assignments_value = field(site, "assignments", obj)?;
+        let items = assignments_value.call_method0("items").map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} is a mapping of (period, subject) pairs to sets of students, and {} is not \
+                 one",
+                site.field("assignments"),
+                shown(&assignments_value, "that value"),
+            ))
+        })?;
+        let mut assignments = Table::new();
+        for item in items.try_iter()? {
+            let item = item?;
+            let (key, students): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                item.extract().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "{} holds pairs of a (period, subject) pair and a set of students, and \
+                         {} is not one",
+                        site.field("assignments"),
+                        shown(&item, "that pair"),
+                    ))
+                })?;
+            let (period, subject): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                key.extract().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "{} holds (period, subject) pairs, and {} is not one",
+                        site.field("assignments"),
+                        shown(&key, "that key"),
+                    ))
+                })?;
+            assignments.insert(
+                (
+                    argument::<Period>(doc, &period)?,
+                    argument::<Subject>(doc, &subject)?,
+                ),
+                entity_members::<Student>(doc, site, "assignments", &students)?,
+            );
+        }
+
+        let week_patterns =
+            entity_dict::<WeekPattern, WeekPatternData>(doc, site, "week_patterns", obj)?
+                .into_iter()
+                .collect::<Table<_, _>>();
+
+        let slots = entity_dict::<Slot, SlotData>(doc, site, "slots", obj)?;
+        // Regrouped by subject the same way the weeks are: subject-then-position
+        // order in the tree rebuilds the same per-subject order and the same
+        // walk.
+        let mut slot_rows: SlotRows = Vec::new();
+        for (slot_id, slot) in slots {
+            let subject = slot.subject_id;
+            match slot_rows
+                .iter_mut()
+                .find(|(subject_id, _)| *subject_id == subject)
+            {
+                Some((_, list)) => list.push((slot_id, slot)),
+                None => slot_rows.push((subject, vec![(slot_id, slot)])),
+            }
+        }
+        let slots = slots::Slots::from_subject_rows(slot_rows)
+            .map_err(|e| PyValueError::new_err(format!("a DocumentData's slots: {e}")))?;
+
+        let incompats = entity_dict::<Incompat, IncompatData>(doc, site, "incompats", obj)?
+            .into_iter()
+            .collect::<Table<_, _>>();
+
+        let group_lists_value =
+            entity_dict::<GroupList, GroupListData>(doc, site, "group_lists", obj)?;
+        let group_list_map = group_lists_value.into_iter().collect::<Table<_, _>>();
+        let associations_value = field(site, "group_list_associations", obj)?;
+        let items = associations_value.call_method0("items").map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} is a mapping of (period, subject) pairs to group lists, and {} is not one",
+                site.field("group_list_associations"),
+                shown(&associations_value, "that value"),
+            ))
+        })?;
+        let mut subjects_associations = Table::new();
+        for item in items.try_iter()? {
+            let item = item?;
+            let (key, group_list): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                item.extract().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "{} holds pairs of a (period, subject) pair and a group list, and {} is \
+                         not one",
+                        site.field("group_list_associations"),
+                        shown(&item, "that pair"),
+                    ))
+                })?;
+            let (period, subject): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                key.extract().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "{} holds (period, subject) pairs, and {} is not one",
+                        site.field("group_list_associations"),
+                        shown(&key, "that key"),
+                    ))
+                })?;
+            subjects_associations.insert(
+                (
+                    argument::<Period>(doc, &period)?,
+                    argument::<Subject>(doc, &subject)?,
+                ),
+                argument::<GroupList>(doc, &group_list)?,
+            );
+        }
+        let group_lists = group_lists::GroupLists {
+            group_list_map,
+            subjects_associations,
+        };
+
+        let pairings = entity_dict::<PairingRule, PairingRuleData>(doc, site, "pairings", obj)?
+            .into_iter()
+            .collect::<Table<_, _>>();
+        let slot_pairings =
+            entity_dict::<SlotPairingRule, SlotPairingRuleData>(doc, site, "slot_pairings", obj)?
+                .into_iter()
+                .collect::<Table<_, _>>();
+
+        let global_limits = LimitsData::from_py(doc, &field(site, "global_limits", obj)?)?;
+        let student_limits = entity_dict::<Student, LimitsData>(doc, site, "student_limits", obj)?
+            .into_iter()
+            .collect::<Table<_, _>>();
+
+        let global_balancing = BalancingData::from_py(doc, &field(site, "global_balancing", obj)?)?;
+        let subject_balancing =
+            entity_dict::<Subject, BalancingData>(doc, site, "subject_balancing", obj)?
+                .into_iter()
+                .collect::<Table<_, _>>();
+
+        let colloscope_value = field(site, "colloscope", obj)?;
+        let contents = ColloscopeData::from_py(doc, &colloscope_value)?;
+        let mut colloscope = colloscopes::Colloscope::default();
+        for ((slot, week), groups) in &contents.interrogations {
+            colloscope.set_interrogation(*slot, *week, groups.clone());
+        }
+        for (group_list, placements) in &contents.group_lists {
+            colloscope.set_group_list(*group_list, placements.clone());
+        }
+
+        let export_config = ExportConfigData::from_py(doc, &field(site, "export_config", obj)?)?;
+
+        Ok(InnerData {
+            params: colloscope_params::Parameters {
+                periods,
+                weeks,
+                subjects,
+                teachers: teachers::Teachers {
+                    teacher_map: teachers,
+                },
+                students: students::Students {
+                    student_map: students,
+                },
+                assignments: assignments::Assignments { map: assignments },
+                week_patterns: week_patterns::WeekPatterns {
+                    week_pattern_map: week_patterns,
+                },
+                slots,
+                incompats: incompats::Incompats {
+                    incompat_map: incompats,
+                },
+                group_lists,
+                settings: settings::Settings {
+                    global: global_limits,
+                    students: student_limits,
+                },
+                pairings: pairings::Pairings {
+                    pairing_rule_map: pairings,
+                },
+                slot_pairings: slot_pairings::SlotPairings {
+                    slot_pairing_rule_map: slot_pairings,
+                },
+                balancing: balancing::Balancing {
+                    global: global_balancing,
+                    subjects: subject_balancing,
+                },
+            },
+            colloscope,
+            export_config,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, inner: &InnerData) -> PyResult<Bound<'py, PyAny>> {
+        let params = &inner.params;
+        let kwargs = PyDict::new(py);
+
+        kwargs.set_item(
+            "first_week",
+            params
+                .periods
+                .first_week
+                .as_ref()
+                .map(|week| *week.monday()),
+        )?;
+        kwargs.set_item(
+            "periods",
+            PyList::new(py, params.periods.period_ids().map(PeriodId::wrap))?,
+        )?;
+
+        let weeks = PyDict::new(py);
+        for (_, week_id, week) in params.walk_weeks() {
+            weeks.set_item(WeekId::wrap(week_id), WeekData::to_py(py, week)?)?;
+        }
+        kwargs.set_item("weeks", weeks)?;
+
+        let subjects = PyDict::new(py);
+        for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
+            subjects.set_item(
+                SubjectId::wrap(subject_id),
+                SubjectData::to_py(py, subject)?,
+            )?;
+        }
+        kwargs.set_item("subjects", subjects)?;
+
+        let teachers = PyDict::new(py);
+        for (teacher_id, teacher) in params.teachers.teacher_map.iter() {
+            teachers.set_item(
+                TeacherId::wrap(teacher_id),
+                TeacherData::to_py(py, teacher)?,
+            )?;
+        }
+        kwargs.set_item("teachers", teachers)?;
+
+        let students = PyDict::new(py);
+        for (student_id, student) in params.students.student_map.iter() {
+            students.set_item(
+                StudentId::wrap(student_id),
+                StudentData::to_py(py, student)?,
+            )?;
+        }
+        kwargs.set_item("students", students)?;
+
+        let assignments = PyDict::new(py);
+        for ((period, subject), students) in params.assignments.map.iter() {
+            assignments.set_item(
+                (PeriodId::wrap(period), SubjectId::wrap(subject)),
+                PySet::new(py, students.iter().map(|id| StudentId::wrap(*id)))?,
+            )?;
+        }
+        kwargs.set_item("assignments", assignments)?;
+
+        let week_patterns = PyDict::new(py);
+        for (pattern_id, pattern) in params.week_patterns.week_pattern_map.iter() {
+            week_patterns.set_item(
+                WeekPatternId::wrap(pattern_id),
+                WeekPatternData::to_py(py, pattern)?,
+            )?;
+        }
+        kwargs.set_item("week_patterns", week_patterns)?;
+
+        let slots = PyDict::new(py);
+        for subject_id in params.subjects.ordered_subject_list.keys() {
+            if let Some(list) = params.slots.slots_for_subject(subject_id) {
+                for (slot_id, slot) in list {
+                    slots.set_item(SlotId::wrap(*slot_id), SlotData::to_py(py, slot)?)?;
+                }
+            }
+        }
+        kwargs.set_item("slots", slots)?;
+
+        let incompats = PyDict::new(py);
+        for (incompat_id, incompat) in params.incompats.incompat_map.iter() {
+            incompats.set_item(
+                IncompatId::wrap(incompat_id),
+                IncompatData::to_py(py, incompat)?,
+            )?;
+        }
+        kwargs.set_item("incompats", incompats)?;
+
+        let group_lists = PyDict::new(py);
+        for (group_list_id, group_list) in params.group_lists.group_list_map.iter() {
+            group_lists.set_item(
+                GroupListId::wrap(group_list_id),
+                GroupListData::to_py(py, group_list)?,
+            )?;
+        }
+        kwargs.set_item("group_lists", group_lists)?;
+
+        let associations = PyDict::new(py);
+        for ((period, subject), group_list) in params.group_lists.subjects_associations.iter() {
+            associations.set_item(
+                (PeriodId::wrap(period), SubjectId::wrap(subject)),
+                GroupListId::wrap(*group_list),
+            )?;
+        }
+        kwargs.set_item("group_list_associations", associations)?;
+
+        let pairings = PyDict::new(py);
+        for (rule_id, rule) in params.pairings.pairing_rule_map.iter() {
+            pairings.set_item(
+                PairingRuleId::wrap(rule_id),
+                PairingRuleData::to_py(py, rule)?,
+            )?;
+        }
+        kwargs.set_item("pairings", pairings)?;
+
+        let slot_pairings = PyDict::new(py);
+        for (rule_id, rule) in params.slot_pairings.slot_pairing_rule_map.iter() {
+            slot_pairings.set_item(
+                SlotPairingRuleId::wrap(rule_id),
+                SlotPairingRuleData::to_py(py, rule)?,
+            )?;
+        }
+        kwargs.set_item("slot_pairings", slot_pairings)?;
+
+        kwargs.set_item(
+            "global_limits",
+            LimitsData::to_py(py, &params.settings.global)?,
+        )?;
+        let student_limits = PyDict::new(py);
+        for (student_id, limits) in params.settings.students.iter() {
+            student_limits.set_item(StudentId::wrap(student_id), LimitsData::to_py(py, limits)?)?;
+        }
+        kwargs.set_item("student_limits", student_limits)?;
+
+        kwargs.set_item(
+            "global_balancing",
+            BalancingData::to_py(py, &params.balancing.global)?,
+        )?;
+        let subject_balancing = PyDict::new(py);
+        for (subject_id, options) in params.balancing.subjects.iter() {
+            subject_balancing.set_item(
+                SubjectId::wrap(subject_id),
+                BalancingData::to_py(py, options)?,
+            )?;
+        }
+        kwargs.set_item("subject_balancing", subject_balancing)?;
+
+        kwargs.set_item(
+            "colloscope",
+            ColloscopeData::to_py(py, &ColloscopeContents::from(&inner.colloscope))?,
+        )?;
+        kwargs.set_item(
+            "export_config",
+            ExportConfigData::to_py(py, &inner.export_config)?,
         )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))

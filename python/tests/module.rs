@@ -15,7 +15,7 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    BalancingData, ColloscopeData, ExportColloscopeConfigData, ExportConfigData,
+    BalancingData, ColloscopeData, DocumentData, ExportColloscopeConfigData, ExportConfigData,
     ExportGlobalConfigData, ExportGroupListConfigData, ExportStudentGroupsConfigData,
     GroupListData, IncompatData, InterrogationData, LimitsData, PairingRuleData,
     PairingRuleSideData, SlotData, SlotPairingRuleData, SlotPairingRuleSideData, StudentData,
@@ -9607,6 +9607,656 @@ fn a_removed_entity_makes_its_referenced_by_raise() {
                 .expect("the subject is removable");
         },
     );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A document exercising every section of the snapshot, written to `path`
+///
+/// The completeness check of the whole milestone needs a document that has
+/// something in every section: both shapes of every optional field, stored
+/// rows in both junction tables, a filled colloscope, and non-default
+/// settings, balancing and export configuration. The ids are picked by hand
+/// the way `refs_document` does, every reference stays live, and every stored
+/// row keeps off the pairs its subject or its students exclude — so the
+/// document passes `Data::from_inner_data` on the way in.
+fn snapshot_document(path: &Path) {
+    use collomatique_state_colloscopes::assignments::Assignments;
+    use collomatique_state_colloscopes::balancing::{Balancing, BalancingOptions};
+    use collomatique_state_colloscopes::export_config::{
+        ColloscopeConfig, Color, ExportConfig, GlobalConfig, PageOrientation, PerGroupListConfig,
+        PerStudentGroupsConfig,
+    };
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
+    };
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::incompats::{Incompatibility, Incompats};
+    use collomatique_state_colloscopes::pairings::{PairingRule, Pairings, RulePart};
+    use collomatique_state_colloscopes::settings::{Limits, Settings, SoftParam};
+    use collomatique_state_colloscopes::slot_pairings::{
+        SlotPairingRule, SlotPairings, SlotRulePart,
+    };
+    use collomatique_state_colloscopes::slots::{Slot, Slots};
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::teachers::{Teacher, Teachers};
+    use collomatique_state_colloscopes::week_patterns::{WeekPattern, WeekPatterns};
+    use collomatique_state_colloscopes::weeks::{WeekDesc, Weeks};
+    use collomatique_state_colloscopes::{
+        Data, GroupListId, IncompatId, InnerData, PairingRuleId, PeriodId, SlotId,
+        SlotPairingRuleId, StudentId, Subject, SubjectId, SubjectInterrogationParameters,
+        SubjectParameters, SubjectPeriodicity, TeacherId, WeekId, WeekPatternId,
+    };
+
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let week = |n: u64| unsafe { WeekId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let teacher = |n: u64| unsafe { TeacherId::new(n) };
+    let slot = |n: u64| unsafe { SlotId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+    let group_list = |n: u64| unsafe { GroupListId::new(n) };
+    let week_pattern = |n: u64| unsafe { WeekPatternId::new(n) };
+    let incompat = |n: u64| unsafe { IncompatId::new(n) };
+    let pairing_rule = |n: u64| unsafe { PairingRuleId::new(n) };
+    let slot_pairing_rule = |n: u64| unsafe { SlotPairingRuleId::new(n) };
+
+    // The model's optional non-empty string, reached without naming its crate:
+    // the field says what the conversion lands in, so the fixture needs no
+    // dependency of its own to build one.
+    let named = |text: &str| {
+        text.to_owned()
+            .try_into()
+            .expect("the fixture's names are not empty")
+    };
+
+    let periods = vec![period(1), period(2)];
+
+    // The colles start on a Monday — the one date the model stores. One week
+    // carries an annotation and one runs no colles, the two shapes of the
+    // weeks' optional halves.
+    let first_week = collomatique_time::WeekStart::new(
+        chrono::NaiveDate::from_ymd_opt(2026, 8, 10).expect("a date"),
+    )
+    .expect("a Monday");
+    let weeks = vec![
+        (
+            period(1),
+            vec![
+                (
+                    week(81),
+                    WeekDesc {
+                        interrogations: true,
+                        annotation: Some(named("Rentrée")),
+                    },
+                ),
+                (week(82), WeekDesc::new(true)),
+            ],
+        ),
+        (
+            period(2),
+            vec![
+                (week(83), WeekDesc::new(true)),
+                (week(84), WeekDesc::new(false)),
+            ],
+        ),
+    ];
+
+    // The first subject excludes the second period, and the second student
+    // does too — the two exclusion shapes, each kept off every row it would
+    // trip.
+    let subject_with = |name: &str, excluded_periods: BTreeSet<PeriodId>| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range((2, 3)),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods,
+    };
+    let subjects = vec![
+        (
+            subject(11),
+            subject_with("Sortilèges", BTreeSet::from([period(2)])),
+        ),
+        (subject(12), subject_with("Métamorphose", BTreeSet::new())),
+    ];
+
+    // One teacher with contact details and one without, so both shapes of the
+    // optional halves of a person are in the tree.
+    let teachers = vec![
+        (
+            teacher(21),
+            Teacher {
+                desc: person(
+                    "Minerva",
+                    "McGonagall",
+                    Some("0601020304"),
+                    Some("minerva@lycee.fr"),
+                ),
+                subjects: BTreeSet::from([subject(11), subject(12)]),
+            },
+        ),
+        (
+            teacher(22),
+            Teacher {
+                desc: person("Severus", "Rogue", None, None),
+                subjects: BTreeSet::from([subject(12)]),
+            },
+        ),
+    ];
+
+    let slot_start = |weekday, hour, minute| collomatique_time::SlotStart {
+        weekday,
+        start_time: collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a clock time"),
+        )
+        .expect("a whole minute"),
+    };
+    let slots = vec![
+        (
+            subject(11),
+            vec![
+                (
+                    slot(71),
+                    Slot {
+                        subject_id: subject(11),
+                        teacher_id: teacher(21),
+                        start_time: slot_start(
+                            collomatique_time::Weekday(chrono::Weekday::Mon),
+                            9,
+                            0,
+                        ),
+                        extra_info: "Bâtiment B".to_owned(),
+                        week_pattern: None,
+                        cost: 0,
+                    },
+                ),
+                (
+                    slot(72),
+                    Slot {
+                        subject_id: subject(11),
+                        teacher_id: teacher(21),
+                        start_time: slot_start(
+                            collomatique_time::Weekday(chrono::Weekday::Tue),
+                            10,
+                            0,
+                        ),
+                        extra_info: String::new(),
+                        week_pattern: Some(week_pattern(41)),
+                        cost: -1,
+                    },
+                ),
+            ],
+        ),
+        (
+            subject(12),
+            vec![(
+                slot(73),
+                Slot {
+                    subject_id: subject(12),
+                    teacher_id: teacher(22),
+                    start_time: slot_start(collomatique_time::Weekday(chrono::Weekday::Wed), 14, 0),
+                    extra_info: String::new(),
+                    week_pattern: None,
+                    cost: 0,
+                },
+            )],
+        ),
+    ];
+
+    let students = vec![
+        (
+            student(31),
+            Student {
+                desc: person("Harry", "Potter", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(32),
+            Student {
+                desc: person("Hermione", "Granger", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+        (
+            student(33),
+            Student {
+                desc: person("Ron", "Weasley", None, None),
+                excluded_periods: BTreeSet::from([period(2)]),
+            },
+        ),
+        (
+            student(34),
+            Student {
+                desc: person("Neville", "Londubat", None, None),
+                excluded_periods: BTreeSet::new(),
+            },
+        ),
+    ];
+
+    let week_patterns = vec![(
+        week_pattern(41),
+        WeekPattern {
+            name: "Semaine B".to_owned(),
+            excluded_weeks: BTreeSet::from([week(84)]),
+        },
+    )];
+
+    let window = |day: chrono::Weekday, hour, minute| {
+        collomatique_time::SlotWithDuration::new(
+            slot_start(collomatique_time::Weekday(day), hour, minute),
+            collomatique_time::NonZeroMinutes::from(
+                NonZeroU32::new(60).expect("an hour is a while"),
+            ),
+        )
+        .expect("the window stays inside the day")
+    };
+
+    let incompats = vec![(
+        incompat(91),
+        Incompatibility {
+            subject_id: subject(11),
+            name: "Cours de potions".to_owned(),
+            slots: vec![window(chrono::Weekday::Mon, 8, 0)],
+            minimum_free_slots: NonZeroU32::new(1).expect("at least one"),
+            week_pattern_id: Some(week_pattern(41)),
+        },
+    )];
+
+    // Both rule families exclude the first period, and a rule whose antecedent
+    // and consequent name different entities — the two value-internal
+    // invariants the sealed constructors enforce.
+    let rules = vec![(
+        pairing_rule(101),
+        PairingRule::new(
+            RulePart {
+                subject_id: subject(11),
+                should_have: true,
+            },
+            RulePart {
+                subject_id: subject(12),
+                should_have: false,
+            },
+            BTreeSet::from([period(1)]),
+            true,
+        )
+        .expect("the antecedent and the consequent name different subjects"),
+    )];
+
+    let slot_rules = vec![(
+        slot_pairing_rule(111),
+        SlotPairingRule::new(
+            SlotRulePart {
+                slot_id: slot(71),
+                should_have: true,
+            },
+            SlotRulePart {
+                slot_id: slot(72),
+                should_have: false,
+            },
+            BTreeSet::from([period(1)]),
+            false,
+        )
+        .expect("the antecedent and the consequent name different slots"),
+    )];
+
+    let automatic = GroupList::new(
+        GroupListParameters {
+            name: "Automatique".to_owned(),
+            students_per_group: nonzero_range((1, 2)),
+            group_names: vec![None, None, None],
+        },
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::from([student(33)]),
+        },
+    )
+    .expect("an automatic list is always internally consistent");
+
+    let prefilled = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![Some(named("Aurore")), None],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([student(31), student(32)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(34)]),
+                },
+            ],
+        },
+    )
+    .expect("the prefilled groups match the names and share no student");
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods = collomatique_state_colloscopes::periods::Periods::from_ordered_ids(
+        Some(first_week),
+        periods,
+    )
+    .expect("the fixture names each period once");
+    inner_data.params.weeks =
+        Weeks::from_period_rows(weeks).expect("the fixture names each week once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    // An id-keyed table takes the last of a duplicated id without a word,
+    // where the ordered lists above refuse one. So the counts are checked by
+    // hand: a fixture that named an entity twice would otherwise quietly ship
+    // one fewer than the script is about to read.
+    let (teacher_count, student_count) = (teachers.len(), students.len());
+    inner_data.params.teachers = Teachers {
+        teacher_map: teachers.into_iter().collect(),
+    };
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.teachers.teacher_map.len(),
+        teacher_count,
+        "the fixture names each teacher once"
+    );
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+    inner_data.params.slots =
+        Slots::from_subject_rows(slots).expect("the fixture names each slot once");
+    inner_data.params.week_patterns = WeekPatterns {
+        week_pattern_map: week_patterns.into_iter().collect(),
+    };
+    inner_data.params.incompats = Incompats {
+        incompat_map: incompats.into_iter().collect(),
+    };
+    let (rule_count, slot_rule_count) = (rules.len(), slot_rules.len());
+    inner_data.params.pairings = Pairings {
+        pairing_rule_map: rules.into_iter().collect(),
+    };
+    inner_data.params.slot_pairings = SlotPairings {
+        slot_pairing_rule_map: slot_rules.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.pairings.pairing_rule_map.len(),
+        rule_count,
+        "the fixture names each pairing rule once"
+    );
+    assert_eq!(
+        inner_data.params.slot_pairings.slot_pairing_rule_map.len(),
+        slot_rule_count,
+        "the fixture names each slot pairing rule once"
+    );
+    // The automatic list serves every pair a stored cell stands on, and the
+    // prefilled one serves nothing at all.
+    inner_data.params.group_lists = GroupLists {
+        group_list_map: [(group_list(51), automatic), (group_list(52), prefilled)]
+            .into_iter()
+            .collect(),
+        subjects_associations: [
+            ((period(1), subject(11)), group_list(51)),
+            ((period(2), subject(12)), group_list(51)),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    inner_data.params.assignments = Assignments {
+        map: [
+            (
+                (period(1), subject(11)),
+                BTreeSet::from([student(31), student(32)]),
+            ),
+            ((period(2), subject(12)), BTreeSet::from([student(34)])),
+        ]
+        .into_iter()
+        .collect(),
+    };
+    // The global limits entry and the per-student override, both whole and
+    // non-default: Hermione's override disables the per-day limit, which the
+    // whole-entry rule says stays a `None` field.
+    inner_data.params.settings = Settings {
+        global: Limits {
+            interrogations_per_week_min: Some(SoftParam {
+                soft: true,
+                value: 2,
+            }),
+            interrogations_per_week_max: Some(SoftParam {
+                soft: false,
+                value: 4,
+            }),
+            max_interrogations_per_day: Some(SoftParam {
+                soft: true,
+                value: NonZeroU32::new(3).expect("three interrogations"),
+            }),
+        },
+        students: [(
+            student(32),
+            Limits {
+                interrogations_per_week_min: Some(SoftParam {
+                    soft: true,
+                    value: 1,
+                }),
+                interrogations_per_week_max: Some(SoftParam {
+                    soft: false,
+                    value: 4,
+                }),
+                max_interrogations_per_day: None,
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+    inner_data.params.balancing = Balancing {
+        global: BalancingOptions {
+            teacher_rotation: Some(SoftParam {
+                soft: true,
+                value: (),
+            }),
+            slot_rotation: None,
+            avoid_twice_in_a_row: Some(SoftParam {
+                soft: false,
+                value: (),
+            }),
+            year_teacher_rotation: true,
+            period_teacher_rotation: false,
+        },
+        subjects: [(
+            subject(12),
+            BalancingOptions {
+                teacher_rotation: Some(SoftParam {
+                    soft: false,
+                    value: (),
+                }),
+                slot_rotation: None,
+                avoid_twice_in_a_row: None,
+                year_teacher_rotation: false,
+                period_teacher_rotation: true,
+            },
+        )]
+        .into_iter()
+        .collect(),
+    };
+
+    // The colloscope itself, written through the canonical sparse writers:
+    // three cells on three slots and three weeks — one of them carrying two
+    // groups — and the automatic list filled. Every stored cell is possible:
+    // its subject runs on the week's period, the week holds colles, and the
+    // pattern's exclusion is the switched-off week.
+    inner_data
+        .colloscope
+        .set_interrogation(slot(71), week(81), BTreeSet::from([0, 2]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(72), week(82), BTreeSet::from([0]));
+    inner_data
+        .colloscope
+        .set_interrogation(slot(73), week(83), BTreeSet::from([2]));
+    inner_data.colloscope.set_group_list(
+        group_list(51),
+        [(student(31), 0), (student(32), 2), (student(34), 1)]
+            .into_iter()
+            .collect(),
+    );
+
+    // The export configuration, deliberately far from the defaults: sheet
+    // names and colors a user chose, the annotations hidden, the tel column
+    // on and the emails off, and one extra cell color.
+    inner_data.export_config = ExportConfig {
+        global: GlobalConfig {
+            background_color: Color {
+                red: 240,
+                green: 240,
+                blue: 245,
+            },
+            stripes_color_enabled: false,
+            stripes_color: Color {
+                red: 220,
+                green: 220,
+                blue: 230,
+            },
+        },
+        colloscope_enabled: true,
+        all_groups_enabled: true,
+        automatic_groups_enabled: true,
+        prefilled_groups_enabled: false,
+        per_group_list_enabled: true,
+        colloscope_config: ColloscopeConfig {
+            sheet_name: "Colles".to_owned(),
+            extra_info_column_enabled: true,
+            extra_info_column_name: "Salle".to_owned(),
+            teacher_email_enabled: false,
+            teacher_email: "Contact".to_owned(),
+            teacher_tel_enabled: true,
+            teacher_tel: "0601020304".to_owned(),
+            orientation: PageOrientation::Landscape,
+            display_week_dates: true,
+            display_annotations: false,
+            no_interrogation_color: Color {
+                red: 200,
+                green: 200,
+                blue: 200,
+            },
+            annotation_color_enabled: true,
+            annotation_color: Color {
+                red: 255,
+                green: 255,
+                blue: 0,
+            },
+            extra_colors: [(
+                "Vacances".to_owned(),
+                Color {
+                    red: 255,
+                    green: 240,
+                    blue: 200,
+                },
+            )]
+            .into_iter()
+            .collect(),
+        },
+        all_groups_config: PerStudentGroupsConfig::default_all_groups(),
+        automatic_groups_config: {
+            let mut config = PerStudentGroupsConfig::default_automatic_groups();
+            config.orientation = Some(PageOrientation::Portrait);
+            config.show_tel = true;
+            config
+        },
+        prefilled_groups_config: PerStudentGroupsConfig::default_prefilled_groups(),
+        per_group_list_config: PerGroupListConfig {
+            orientation: PageOrientation::Portrait,
+            show_emails: true,
+            show_tel: false,
+            center_vertically: true,
+        },
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The snapshot holds the whole document, section by section
+///
+/// The tree `doc.snapshot()` hands out is the value milestone's payoff: the
+/// same conversion `to_data()` is, run over everything at once. Rust extracts
+/// the tree the script left behind and compares it with the document read
+/// straight from the model — the completeness check of the whole milestone in
+/// one assertion, since every section must come back exactly for the two to
+/// be equal. A field this document's own design forgot would fail here even
+/// if no test ever named it.
+#[test]
+fn the_snapshot_holds_the_whole_document() {
+    let dir = workspace("snapshot");
+    let source = dir.join("snapshot.collomatique");
+    snapshot_document(&source);
+    let other_source = example_copy(&dir, "other.collomatique");
+
+    let globals = run(include_str!("scripts/document_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let inner = data.get_inner_data();
+
+    // The whole tree, out and back — every section, every row, every order.
+    assert_eq!(extracted::<DocumentData>(&globals, "tree"), *inner);
+
+    // The handle- and id-keyed spellings of one tree extract to the same
+    // document — the §2.3 rule at tree scale.
+    assert_eq!(
+        extracted::<DocumentData>(&globals, "by_handles"),
+        extracted::<DocumentData>(&globals, "by_ids"),
+    );
+
+    // The empty tree is the model's own empty document, pinned the way every
+    // default is, so the python side cannot drift.
+    assert_eq!(
+        extracted::<DocumentData>(&globals, "defaults"),
+        collomatique_state_colloscopes::InnerData::default(),
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the section, and what was given.
+    assert_eq!(
+        refused::<DocumentData>(&globals, "not_a_tree"),
+        (
+            "TypeError".to_owned(),
+            "a DocumentData is expected here, and 3 has no first_week".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<DocumentData>(&globals, "not_a_monday"),
+        (
+            "ValueError".to_owned(),
+            "a DocumentData's first_week is a Monday, and 2026-08-12 is not one".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<DocumentData>(&globals, "not_a_section"),
+        (
+            "TypeError".to_owned(),
+            "a DocumentData's subjects is a mapping of entities to values, and 3 is not one"
+                .to_owned(),
+        )
+    );
+
+    // A week of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<DocumentData>(&globals, "with_a_foreign_week");
+    assert_eq!(kind, "StaleHandleError");
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
