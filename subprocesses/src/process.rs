@@ -573,6 +573,10 @@ mod tests {
 
         let mut cmd = CommandBuilder::new("sleep");
         cmd.arg("300");
+        // Without an explicit cwd, portable_pty starts the child in `$HOME`, and the
+        // spawn fails with ENOENT if that directory does not exist (the nix build
+        // sandbox sets `HOME=/homeless-shelter`). Any existing directory will do here.
+        cmd.cwd(std::env::current_dir().expect("current dir"));
         let mut child = pair.slave.spawn_command(cmd).expect("spawn");
         drop(pair.slave);
 
