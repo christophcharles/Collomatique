@@ -12,10 +12,10 @@
 //! what broke — the same op can arrive under two variants precisely when the two
 //! sentences differ ([Fix::DeleteSlot] and [Fix::DeleteOverflowingSlot]).
 //!
-//! Entities are named through [crate::rendering], the vocabulary gtk4 shares, so
-//! a warning and the window behind it describe the same thing with the same
-//! words. The renderer owns the noun, the article and the agreement; the
-//! renderers are noun-less on purpose.
+//! Entities are named through [`collomatique_ui_text::rendering`], the
+//! vocabulary gtk4 and the python module share, so a warning and the window
+//! behind it describe the same thing with the same words. The renderer owns the
+//! noun, the article and the agreement; the renderers are noun-less on purpose.
 //!
 //! # Conventions
 //!
@@ -23,8 +23,8 @@
 //!   week patterns, incompatibility names, both rule notations); bare for
 //!   proper-noun-like names (subjects, people) and for numbers.
 //! - A period joins a sentence as « sur la période {…} », never as a
-//!   parenthetical: [crate::rendering::render_period]'s own output carries
-//!   parentheses and nesting them reads badly.
+//!   parenthetical: [`collomatique_ui_text::rendering::render_period`]'s own
+//!   output carries parentheses and nesting them reads badly.
 //! - A coordinate that *every* producer of a variant implies is dropped, but
 //!   only from the complement position — the grammatical subject always stays.
 //!   The four period-exclusion sentences name no period because only the death
@@ -40,7 +40,7 @@
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::{Fix, GroupListId, PeriodId, SlotId, SubjectId, WeekId};
 
-use crate::rendering::{
+use collomatique_ui_text::rendering::{
     MissingId, join_french, render_group, render_group_list, render_incompat, render_pairing_rule,
     render_period, render_slot, render_slot_pairing_rule, render_student, render_subject,
     render_teacher, render_week, render_week_pattern,

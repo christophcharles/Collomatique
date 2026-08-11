@@ -27,7 +27,7 @@ use collomatique_ops::{DuplicatePreviousPeriodAssociationsError, UpdateError};
 use pyo3::exceptions::PyValueError;
 
 #[pymodule]
-pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
+pub fn collomatique_old(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Session>()?;
     m.add_class::<general_planning::Period>()?;
     m.add_class::<subjects::Subject>()?;

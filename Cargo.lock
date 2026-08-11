@@ -398,6 +398,7 @@ dependencies = [
  "collomatique-strategies",
  "collomatique-subprocesses",
  "collomatique-time",
+ "collomatique-ui-text",
  "collomatique-xlsx",
  "gtk4",
  "libadwaita",
@@ -464,6 +465,7 @@ dependencies = [
  "collomatique-storage",
  "collomatique-testgen-colloscopes",
  "collomatique-time",
+ "collomatique-ui-text",
  "non-empty-string",
  "serde",
  "thiserror 1.0.69",
@@ -471,6 +473,23 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "chrono",
+ "collomatique-ops",
+ "collomatique-settings",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "collomatique-time",
+ "collomatique-ui-text",
+ "pyo3",
+ "rfd",
+ "tokio",
+]
+
+[[package]]
+name = "collomatique-python-old"
 version = "0.1.0-alpha.0.99"
 dependencies = [
  "anyhow",
@@ -481,6 +500,16 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-time",
  "non-empty-string",
+ "pyo3",
+]
+
+[[package]]
+name = "collomatique-python-runner"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "anyhow",
+ "collomatique-python",
+ "collomatique-python-old",
  "pyo3",
 ]
 
@@ -533,7 +562,7 @@ dependencies = [
  "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-python",
+ "collomatique-python-runner",
  "collomatique-rpc",
  "collomatique-state",
  "collomatique-state-colloscopes",
@@ -589,6 +618,7 @@ name = "collomatique-storage"
 version = "0.1.0-alpha.0.99"
 dependencies = [
  "chrono",
+ "collomatique-settings",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-time",
@@ -656,6 +686,18 @@ dependencies = [
  "chrono",
  "serde",
  "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "collomatique-ui-text"
+version = "0.1.0-alpha.0.99"
+dependencies = [
+ "chrono",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "collomatique-time",
  "thiserror 1.0.69",
 ]
 
@@ -2108,6 +2150,7 @@ version = "0.29.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4688ddedf473e32662b9b067670129a8afb8c18e351482c70d62ba4a88171e8b"
 dependencies = [
+ "chrono",
  "libc",
  "once_cell",
  "portable-atomic",

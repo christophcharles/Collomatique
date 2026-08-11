@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = [ "gtk4", "state", "state-derive", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "testgen-colloscopes" , "python", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "constraints-groups", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms", "rooms-model", "constraints-rooms", "strategies", "settings"]
+members = [ "gtk4", "state", "state-derive", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "testgen-colloscopes" , "python-old", "python", "python-runner", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "constraints-groups", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms", "rooms-model", "constraints-rooms", "strategies", "settings", "ui-text"]
 
 [workspace.package]
 version = "0.1.0-alpha.0.99"
@@ -21,3 +21,10 @@ async-trait = "0.1"
 chrono = "0.4"
 futures = "0.3"
 non-empty-string = "0.2.6"
+pyo3 = "0.29"
+# `rfd`: the features are the point of this entry, not the version. `xdg-portal`
+# keeps GTK3 and its C headers out of the build, and `tokio` is the runtime
+# `ashpd` — and through it `zbus` — expects to be spawned onto. Cargo unifies
+# features across the workspace, so a crate asking for `async-std` here would
+# hand every other crate a `zbus` with both runtimes turned on.
+rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }

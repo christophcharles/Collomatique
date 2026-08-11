@@ -317,7 +317,7 @@ fn objective(
 }
 
 fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeModel) {
-    use collomatique_subprocesses::{IlpSolverConfig, IlpStatus, SolverSubprocess};
+    use collomatique_subprocesses::{EngineExe, IlpSolverConfig, IlpStatus, SolverSubprocess};
     use std::sync::mpsc;
 
     let t = Instant::now();
@@ -343,6 +343,7 @@ fn subprocess_solve(model: &collomatique_constraints_colloscopes::ColloscopeMode
     eprintln!("Spawning solver subprocess...");
     let t = Instant::now();
     let handle = SolverSubprocess::spawn(
+        &EngineExe::Current,
         config,
         move |result| {
             let _ = tx.send(result);
@@ -442,7 +443,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
         DefaultPayload, DefaultStrategy, SolveProgress, SolveStatus, StrategyOutcome,
         StrategyProgressData,
     };
-    use collomatique_subprocesses::StrategySubprocess;
+    use collomatique_subprocesses::{EngineExe, StrategySubprocess};
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -472,6 +473,7 @@ fn subprocess_solve_strategy(model: &collomatique_constraints_colloscopes::Collo
     eprintln!("Spawning strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
+        &EngineExe::Current,
         model,
         &strategy,
         None,
@@ -560,7 +562,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
         NoObjectivePayload, NoObjectiveProgressData, NoObjectiveStrategy, SolveStatus,
         StrategyOutcome, StrategyProgressData,
     };
-    use collomatique_subprocesses::StrategySubprocess;
+    use collomatique_subprocesses::{EngineExe, StrategySubprocess};
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -590,6 +592,7 @@ fn no_objective_solve(model: &collomatique_constraints_colloscopes::ColloscopeMo
     eprintln!("Spawning no-objective strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
+        &EngineExe::Current,
         model,
         &strategy,
         None,
@@ -678,7 +681,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
         DefaultStrategy, NoObjectiveStarterPayload, NoObjectiveStarterProgress,
         NoObjectiveStarterStrategy, NoObjectiveStrategy, SolveStatus, StrategyOutcome,
     };
-    use collomatique_subprocesses::StrategySubprocess;
+    use collomatique_subprocesses::{EngineExe, StrategySubprocess};
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -720,6 +723,7 @@ fn no_objective_starter_solve(model: &collomatique_constraints_colloscopes::Coll
     eprintln!("Spawning no-objective-starter strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
+        &EngineExe::Current,
         model,
         &strategy,
         None,
@@ -811,7 +815,7 @@ fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeMod
         IncrementalPayload, IncrementalProgressData, IncrementalStrategy, SolveStatus,
         StrategyOutcome, StrategyProgressData,
     };
-    use collomatique_subprocesses::StrategySubprocess;
+    use collomatique_subprocesses::{EngineExe, StrategySubprocess};
     use std::sync::mpsc;
 
     type Outcome = StrategyOutcome<
@@ -855,6 +859,7 @@ fn incremental_solve(model: &collomatique_constraints_colloscopes::ColloscopeMod
     eprintln!("Spawning incremental strategy subprocess...");
     let t = Instant::now();
     let handle = StrategySubprocess::spawn(
+        &EngineExe::Current,
         model,
         &strategy,
         None,
@@ -943,7 +948,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
         ConductorPayload, ConductorProgress, ConductorStrategy, SolveStatus, Strategy,
         StrategyContext,
     };
-    use collomatique_subprocesses::SubprocessSolveBackend;
+    use collomatique_subprocesses::{EngineExe, SubprocessSolveBackend};
     use std::sync::Arc;
 
     type V = collomatique_ilp_modeler::InternalVar<
@@ -961,7 +966,7 @@ async fn conductor_solve(model: &collomatique_constraints_colloscopes::Colloscop
         t.elapsed()
     );
 
-    let backend = Arc::new(SubprocessSolveBackend::new());
+    let backend = Arc::new(SubprocessSolveBackend::new(EngineExe::Current));
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(|line: String| {
         eprint!("  [conductor] {}", line);
     });

@@ -13,7 +13,7 @@ use json::*;
 fn generate_header() -> Header {
     Header {
         file_type: FileType::ValidFileType(ValidFileType::Collomatique),
-        produced_with_version: current_version(),
+        produced_with_version: collomatique_settings::current_version(),
         file_content: FileContent::ValidFileContent(ValidFileContent::Colloscope),
     }
 }

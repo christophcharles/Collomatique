@@ -304,7 +304,7 @@ impl Display {
                                 assigned
                                     .iter()
                                     .map(|num| match group_list_id {
-                                        Some(list_id) => collomatique_ops::rendering::render_group(
+                                        Some(list_id) => collomatique_ui_text::rendering::render_group(
                                             &self.group_lists,
                                             *list_id,
                                             *num,

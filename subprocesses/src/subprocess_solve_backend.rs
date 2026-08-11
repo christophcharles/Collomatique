@@ -10,13 +10,16 @@ use futures::{FutureExt, StreamExt};
 
 use crate::ilp_solver::{IlpSolverConfig, IlpStatus, SolverSubprocess};
 use crate::strategy_solver::{StrategyResult, StrategySubprocess};
+use crate::worker::EngineExe;
 
 #[derive(Default)]
-pub struct SubprocessSolveBackend;
+pub struct SubprocessSolveBackend {
+    engine: EngineExe,
+}
 
 impl SubprocessSolveBackend {
-    pub fn new() -> Self {
-        Self
+    pub fn new(engine: EngineExe) -> Self {
+        Self { engine }
     }
 }
 
@@ -77,9 +80,14 @@ impl SolveBackend for SubprocessSolveBackend {
             let _ = echo_tx.unbounded_send(line.to_owned());
         };
 
-        let handle =
-            SolverSubprocess::spawn(config, result_callback, progress_callback, log_callback)
-                .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?;
+        let handle = SolverSubprocess::spawn(
+            &self.engine,
+            config,
+            result_callback,
+            progress_callback,
+            log_callback,
+        )
+        .map_err(|e| StrategyError::SolveError(format!("failed to spawn solver: {e}")))?;
 
         let mut result_rx = result_rx.fuse();
         let mut progress_rx = progress_rx.fuse();
@@ -143,6 +151,7 @@ impl SolveBackend for SubprocessSolveBackend {
         };
 
         let handle = StrategySubprocess::spawn_raw(
+            &self.engine,
             model_desc.clone(),
             strategy.clone(),
             warm_start,

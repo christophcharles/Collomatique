@@ -33,7 +33,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::{Data, Error, Fix, NewId, Op};
 
 use crate::Desc;
-use crate::rendering::MissingId;
+use collomatique_ui_text::rendering::MissingId;
 
 /// One warning attached to an update: a repair the cascade had to apply beyond
 /// the ops the user's own action asked for.

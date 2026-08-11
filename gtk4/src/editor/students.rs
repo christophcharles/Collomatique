@@ -266,9 +266,12 @@ impl Students {
         let mut list = vec!["Toutes les périodes".into(), "Aucune période".into()];
 
         for period_id in self.periods.period_ids() {
-            let period =
-                collomatique_ops::rendering::render_period(&self.periods, &self.weeks, period_id)
-                    .expect("the period comes from the document being displayed");
+            let period = collomatique_ui_text::rendering::render_period(
+                &self.periods,
+                &self.weeks,
+                period_id,
+            )
+            .expect("the period comes from the document being displayed");
             list.push(format!("La période {}", period));
         }
 

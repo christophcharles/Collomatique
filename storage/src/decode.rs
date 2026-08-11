@@ -255,14 +255,19 @@ impl std::fmt::Display for IdKind {
 pub enum Caveat {
     /// The file was opened but it was created with a newer version
     /// of Collomatique
-    CreatedWithNewerVersion(Version),
-    /// Unknown entries
+    CreatedWithNewerVersion { version: Version },
+    /// An unknown entry was skipped
     ///
-    /// Some entries are unknown. They are maarked as unneeded,
-    /// so the file can be decoded without them. But some information
-    /// might be missing and it is preferable to use a newer version
-    /// of Collomatique.
-    UnknownEntries,
+    /// The block claims a spec version this build does not support and is
+    /// marked as unneeded, so the file could be decoded without it. Its
+    /// content is lost if the file is written back.
+    ///
+    /// There is one caveat per skipped block, so the block name is the
+    /// answer to "what exactly was dropped".
+    UnknownEntry {
+        block_name: String,
+        minimum_spec_version: u32,
+    },
 }
 
 pub(crate) fn check_header(
@@ -282,10 +287,10 @@ pub(crate) fn check_header(
             header.produced_with_version.clone(),
         ));
     }
-    if header.produced_with_version > current_version() {
-        caveats.insert(Caveat::CreatedWithNewerVersion(
-            header.produced_with_version.clone(),
-        ));
+    if header.produced_with_version > collomatique_settings::current_version() {
+        caveats.insert(Caveat::CreatedWithNewerVersion {
+            version: header.produced_with_version.clone(),
+        });
     }
     Ok(())
 }

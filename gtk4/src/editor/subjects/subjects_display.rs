@@ -6,7 +6,7 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidget
 
 #[derive(Debug, Clone)]
 pub struct PeriodData {
-    /// The period as [collomatique_ops::rendering::render_period] names it.
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
     pub title: String,
     pub status: bool,
 }
@@ -394,7 +394,7 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct PeriodSwitchData {
-    /// The period as [collomatique_ops::rendering::render_period] names it.
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
     pub title: String,
     pub period_num: usize,
     pub state: bool,

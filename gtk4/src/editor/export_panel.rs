@@ -839,7 +839,7 @@ impl Component for ExportPanel {
         match message {
             ExportPanelCommandOutput::FileNotChosen => {}
             ExportPanelCommandOutput::FileChosen(path) => {
-                let xlsx_config = super::export::to_xlsx_config(&self.export_config);
+                let xlsx_config = collomatique_xlsx::Config::from(&self.export_config);
                 sender
                     .output(ExportPanelOutput::ExportColloscopeAs(path, xlsx_config))
                     .unwrap();

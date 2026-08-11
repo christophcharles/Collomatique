@@ -16,7 +16,7 @@ mod format;
 mod json;
 
 pub use decode::{Caveat, DecodeError, IdKind, RowKey};
-pub use json::{CURRENT_SPEC_VERSION, Version, current_version};
+pub use json::{CURRENT_SPEC_VERSION, Version};
 
 use collomatique_state_colloscopes::InnerData;
 use std::collections::BTreeSet;

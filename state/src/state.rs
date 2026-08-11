@@ -1,6 +1,6 @@
 //! State module
 //!
-//! Contains the definition of [AppState] and [AppSession].
+//! Contains the definition of [AppState], [AppSession] and [SessionStack].
 //! These are the principal interface for maintaining the
 //! state of a file in the application.
 
@@ -165,6 +165,141 @@ impl<T: traits::Manager, D: Description> traits::private::ManagerInternal for Ap
     }
 }
 
+/// A manager with a stack of open sessions
+///
+/// [AppSession] nests, but only in the *type*: each nesting is another layer of
+/// type, so a caller must know when it is compiled how deep it will go. A
+/// caller whose depth is decided when it runs — a script opening
+/// `with doc.transaction(...)` inside another one — needs the recursion in the
+/// value instead, which is what this is.
+///
+/// It is a [traits::Manager] itself, and the manager it behaves as is always
+/// the innermost open session: writes, [traits::Manager::undo] and
+/// [traits::Manager::redo] land there, and [SessionStack::commit] folds it into
+/// the level below as a single slot.
+#[derive(Debug, Clone)]
+pub struct SessionStack<T: InMemoryData, D: Description> {
+    /// Absent only between the `take` and the put-back inside the three
+    /// methods that move it; never absent between calls.
+    node: Option<Node<T, D>>,
+}
+
+/// One level of a [SessionStack]
+#[derive(Debug, Clone)]
+enum Node<T: InMemoryData, D: Description> {
+    /// No session open: the document and its own history
+    Base(AppState<T, D>),
+    /// One open session, over everything below it
+    Nested(Box<AppSession<SessionStack<T, D>, D>>),
+}
+
+const NODE_PRESENT: &str = "the node is only absent while a SessionStack method moves it";
+
+impl<T: InMemoryData, D: Description> SessionStack<T, D> {
+    /// A stack with no session open, over `data`
+    pub fn new(data: T) -> Self {
+        SessionStack {
+            node: Some(Node::Base(AppState::new(data))),
+        }
+    }
+
+    /// Opens a session
+    ///
+    /// From here on, writes land in it, and [traits::Manager::undo] reaches
+    /// back no further than this point.
+    pub fn begin(&mut self) {
+        let below = SessionStack {
+            node: Some(self.take_node()),
+        };
+        self.node = Some(Node::Nested(Box::new(AppSession::new(below))));
+    }
+
+    /// Closes the innermost session, folding everything it did into the level
+    /// below as one slot described by `desc`
+    ///
+    /// Returns `false`, and does nothing at all, when no session is open.
+    pub fn commit(&mut self, desc: D) -> bool {
+        match self.take_node() {
+            base @ Node::Base(_) => {
+                self.node = Some(base);
+                false
+            }
+            Node::Nested(session) => {
+                self.node = session.commit(desc).node;
+                true
+            }
+        }
+    }
+
+    /// Closes the innermost session, unwinding everything it did
+    ///
+    /// Returns `false`, and does nothing at all, when no session is open.
+    pub fn cancel(&mut self) -> bool {
+        match self.take_node() {
+            base @ Node::Base(_) => {
+                self.node = Some(base);
+                false
+            }
+            Node::Nested(session) => {
+                self.node = session.cancel().node;
+                true
+            }
+        }
+    }
+
+    /// How many sessions are open
+    pub fn depth(&self) -> usize {
+        let mut depth = 0;
+        let mut level = self;
+        loop {
+            match level.node.as_ref().expect(NODE_PRESENT) {
+                Node::Base(_) => return depth,
+                Node::Nested(session) => {
+                    depth += 1;
+                    level = &session.op_manager;
+                }
+            }
+        }
+    }
+
+    fn take_node(&mut self) -> Node<T, D> {
+        self.node.take().expect(NODE_PRESENT)
+    }
+}
+
+impl<T: InMemoryData, D: Description> traits::private::ManagerInternal for SessionStack<T, D> {
+    type Data = T;
+    type Desc = D;
+
+    fn get_in_memory_data(&self) -> &Self::Data {
+        match self.node.as_ref().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_in_memory_data(),
+            Node::Nested(session) => session.get_in_memory_data(),
+        }
+    }
+    fn get_in_memory_data_mut(&mut self) -> &mut Self::Data {
+        match self.node.as_mut().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_in_memory_data_mut(),
+            Node::Nested(session) => session.get_in_memory_data_mut(),
+        }
+    }
+
+    fn get_modification_history(&self) -> &ModificationHistory<T::AnnotatedOperation, D> {
+        match self.node.as_ref().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_modification_history(),
+            Node::Nested(session) => session.get_modification_history(),
+        }
+    }
+    fn get_modification_history_mut(
+        &mut self,
+    ) -> &mut ModificationHistory<T::AnnotatedOperation, D> {
+        match self.node.as_mut().expect(NODE_PRESENT) {
+            Node::Base(state) => state.get_modification_history_mut(),
+            Node::Nested(session) => session.get_modification_history_mut(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -177,6 +312,10 @@ mod tests {
 
     fn new_state(value: i64) -> AppState<FakeData, &'static str> {
         AppState::new(FakeData::new(value))
+    }
+
+    fn new_stack(value: i64) -> SessionStack<FakeData, &'static str> {
+        SessionStack::new(FakeData::new(value))
     }
 
     #[test]
@@ -319,5 +458,147 @@ mod tests {
         state.undo().expect("one op to undo");
         assert_eq!(state.get_data().value, 0);
         assert!(!state.can_undo());
+    }
+
+    #[test]
+    fn stack_with_no_session_open_is_the_plain_document() {
+        let mut stack = new_stack(0);
+        assert_eq!(stack.depth(), 0);
+
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        assert_eq!(stack.get_data().value, 2);
+
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 1);
+        stack.redo().expect("one op to redo");
+        assert_eq!(stack.get_data().value, 2);
+
+        // Closing what was never opened does nothing at all
+        assert!(!stack.commit("nothing"));
+        assert!(!stack.cancel());
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 2);
+        assert_eq!(stack.get_undo_name(), Some(&"set to 2"));
+        assert!(!stack.can_redo());
+    }
+
+    #[test]
+    fn commit_folds_the_session_into_one_slot_below() {
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        assert_eq!(stack.depth(), 1);
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        stack.apply(set(2, 3), "set to 3").expect("valid op");
+
+        assert!(stack.commit("batch"));
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 3);
+        assert_eq!(stack.get_undo_name(), Some(&"batch"));
+
+        // One undo cancels the three writes at once
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 0);
+        assert!(!stack.can_undo());
+
+        stack.redo().expect("one op to redo");
+        assert_eq!(stack.get_data().value, 3);
+    }
+
+    #[test]
+    fn cancel_unwinds_the_session_and_leaves_the_level_below_alone() {
+        let mut stack = new_stack(0);
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        stack.apply(set(2, 3), "set to 3").expect("valid op");
+
+        assert!(stack.cancel());
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 1);
+        assert_eq!(stack.get_undo_name(), Some(&"set to 1"));
+        assert!(!stack.can_redo());
+    }
+
+    #[test]
+    fn an_inner_cancel_keeps_what_the_outer_session_did() {
+        // The corner a single session with a counter cannot do: an inner block
+        // that rolls back takes its own writes only, and the outer one keeps
+        // everything it did before.
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        assert!(stack.cancel());
+
+        assert_eq!(stack.depth(), 1);
+        assert_eq!(stack.get_data().value, 1);
+
+        assert!(stack.commit("outer"));
+        assert_eq!(stack.depth(), 0);
+        assert_eq!(stack.get_data().value, 1);
+        assert_eq!(stack.get_undo_name(), Some(&"outer"));
+
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 0);
+    }
+
+    #[test]
+    fn depth_counts_the_open_sessions() {
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        stack.begin();
+        stack.begin();
+        assert_eq!(stack.depth(), 3);
+
+        assert!(stack.commit("innermost"));
+        assert_eq!(stack.depth(), 2);
+        assert!(stack.cancel());
+        assert_eq!(stack.depth(), 1);
+        assert!(stack.cancel());
+        assert_eq!(stack.depth(), 0);
+    }
+
+    #[test]
+    fn undo_inside_a_session_stops_at_its_start() {
+        let mut stack = new_stack(0);
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 1);
+
+        // The write made before the session is out of reach from inside it
+        assert_eq!(stack.undo(), Err(HistoryError::HistoryDepleted));
+        assert_eq!(stack.get_data().value, 1);
+    }
+
+    #[test]
+    fn a_write_lands_in_the_innermost_session() {
+        let mut stack = new_stack(0);
+
+        stack.begin();
+        stack.apply(set(0, 1), "set to 1").expect("valid op");
+        stack.begin();
+        stack.apply(set(1, 2), "set to 2").expect("valid op");
+        assert_eq!(stack.depth(), 2);
+
+        // Only the innermost session's write goes
+        assert!(stack.cancel());
+        assert_eq!(stack.get_data().value, 1);
+
+        // ... and the outer one still holds its own, undoable from inside it
+        assert_eq!(stack.get_undo_name(), Some(&"set to 1"));
+        stack.undo().expect("one op to undo");
+        assert_eq!(stack.get_data().value, 0);
     }
 }

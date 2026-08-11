@@ -203,7 +203,7 @@ impl Assignments {
 
                 Some(assignments_display::PeriodEntryData {
                     period_id: *id,
-                    title: collomatique_ops::rendering::render_period(
+                    title: collomatique_ui_text::rendering::render_period(
                         &self.periods,
                         &self.weeks,
                         *id,

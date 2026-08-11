@@ -115,7 +115,7 @@ fn decode_entry_with_unknown_field() {
 fn decode_more_recent_file() {
     // `Version::new` drops any prerelease, so the built version is a plain
     // release strictly above the current one whatever the package version is.
-    let current = current_version();
+    let current = collomatique_settings::current_version();
     let new_version = Version::new(current.major, current.minor + 1, current.patch);
 
     let content = format!(
@@ -135,7 +135,9 @@ fn decode_more_recent_file() {
         .expect("decoded documents must pass the invariant gate");
 
     let expected_data = collomatique_state_colloscopes::Data::new();
-    let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion(new_version)]);
+    let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion {
+        version: new_version,
+    }]);
     assert_eq!(data, expected_data);
     assert_eq!(caveats, expected_caveats);
 }
@@ -162,7 +164,9 @@ fn decode_file_produced_with_a_prerelease() {
         .expect("A prerelease version should not lead to invalid decoding");
 
     let expected_version = Version::parse("999.0.0-beta.2").expect("valid semver");
-    let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion(expected_version)]);
+    let expected_caveats = BTreeSet::from([Caveat::CreatedWithNewerVersion {
+        version: expected_version,
+    }]);
     assert_eq!(caveats, expected_caveats);
 }
 

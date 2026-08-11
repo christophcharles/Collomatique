@@ -103,7 +103,6 @@ pub enum EditorInput {
     RunScriptClicked,
     RunScript(PathBuf, String),
     NewStateFromSecondInstance(AppState<Data, Desc>),
-    UpdateFullColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportMpsClicked,
     ExportMpsAs(PathBuf),
@@ -874,7 +873,11 @@ impl Component for EditorPanel {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(op))
                     }
                     ColloscopeOutput::NewColloscope(colloscope) => {
-                        EditorInput::UpdateFullColloscope(colloscope)
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::Colloscope(
+                            collomatique_ops::ColloscopeUpdateOp::InstallColloscope(
+                                (&colloscope).into(),
+                            ),
+                        ))
                     }
                     ColloscopeOutput::UpdateIlpProblem(problem) => {
                         EditorInput::UpdateIlpProblem(problem)
@@ -1266,27 +1269,6 @@ impl Component for EditorPanel {
                 self.dirty = true;
                 self.send_msg_for_interface_update(sender);
             }
-            EditorInput::UpdateFullColloscope(new_colloscope) => {
-                let mut inner = self.data.get_data().get_inner_data().clone();
-                inner.colloscope = new_colloscope;
-                let op = collomatique_state_colloscopes::Op::GlobalUpdate(inner);
-                let desc = (
-                    collomatique_ops::OpCategory::None,
-                    "Résolution du colloscope".to_string(),
-                );
-                match Manager::apply(&mut self.data, op, desc) {
-                    Ok(_) => {
-                        self.dirty = true;
-                        self.send_msg_for_interface_update(sender);
-                    }
-                    Err(e) => {
-                        self.error_dialog
-                            .sender()
-                            .send(error_dialog::DialogInput::Show(e.to_string()))
-                            .unwrap();
-                    }
-                }
-            }
             EditorInput::ExportColloscopeAs(path, xlsx_config) => {
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("Export en cours de {}...", path.to_string_lossy()),
@@ -1552,7 +1534,7 @@ fn warning_lines(
 
 /// Names a run of consecutive weeks — a period, or a block inside a subject.
 ///
-/// Periods are named by [collomatique_ops::rendering::render_period], the
+/// Periods are named by [collomatique_ui_text::rendering::render_period], the
 /// shared vocabulary the warning texts use; this helper survives for the one
 /// caller that has no period to name at all, `subject_params::Block`, whose
 /// blocks are a week succession with no id behind them.

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import collomatique
+import collomatique_old as collomatique
 import csv
 
 def open_csv(file_path):

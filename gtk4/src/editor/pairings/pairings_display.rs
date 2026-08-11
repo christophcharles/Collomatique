@@ -11,7 +11,7 @@ use crate::tools::messages::MessageIcon;
 pub struct EntryData {
     pub rule_id: collomatique_state_colloscopes::PairingRuleId,
     pub rule: collomatique_state_colloscopes::pairings::PairingRule,
-    /// The rule as [collomatique_ops::rendering::render_pairing_rule] names it.
+    /// The rule as [collomatique_ui_text::rendering::render_pairing_rule] names it.
     /// Softness is not part of it — this row appends « (souple) » itself.
     pub summary: String,
     pub periods: collomatique_state_colloscopes::periods::Periods,
@@ -71,7 +71,7 @@ impl Entry {
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
                 "Désactivée sur les périodes {}",
-                collomatique_ops::rendering::join_french(&excluded_period_list)
+                collomatique_ui_text::rendering::join_french(&excluded_period_list)
             ),
         }
     }

@@ -31,7 +31,12 @@ fn decode_unknown_unneeded_entry() {
     let data = collomatique_state_colloscopes::Data::from_inner_data(inner)
         .expect("decoded documents must pass the invariant gate");
     let expected_data = collomatique_state_colloscopes::Data::new();
-    let expected_caveats = BTreeSet::from([Caveat::UnknownEntries]);
+    // The caveat names the block that was dropped, and the spec version it
+    // asked for: that is what makes it actionable to whoever reads it.
+    let expected_caveats = BTreeSet::from([Caveat::UnknownEntry {
+        block_name: "YouShouldReallyNeverCallAnEntryThisWay".to_string(),
+        minimum_spec_version: CURRENT_SPEC_VERSION + 1,
+    }]);
 
     assert_eq!(data, expected_data);
     assert_eq!(caveats, expected_caveats);

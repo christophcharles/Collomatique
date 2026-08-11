@@ -8,7 +8,7 @@ use collomatique_rpc::{
 };
 
 use crate::process::StdinWriter;
-use crate::worker::{Worker, WorkerEvent, WorkerSpawnError};
+use crate::worker::{EngineExe, Worker, WorkerEvent, WorkerSpawnError};
 
 pub struct IlpSolverConfig {
     pub problem_desc: collomatique_ilp::ProblemDesc,
@@ -99,6 +99,7 @@ impl SolverSubprocess {
     }
 
     pub fn spawn(
+        engine: &EngineExe,
         config: IlpSolverConfig,
         result_callback: impl Fn(IlpResult) + Send + 'static,
         progress_callback: impl Fn(&IlpProgress) + Send + 'static,
@@ -183,7 +184,7 @@ impl SolverSubprocess {
             _ => {}
         };
 
-        let worker = Worker::spawn(init_msg, callback)?;
+        let worker = Worker::spawn(engine, init_msg, callback)?;
 
         *stdin_slot.lock().unwrap() = Some(worker.get_stdin_writer());
 

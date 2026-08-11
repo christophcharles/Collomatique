@@ -12,7 +12,7 @@ pub struct Dialog {
     assigned_groups: std::collections::BTreeSet<u32>,
     /// One row title per group of the edited list, in group order — built by
     /// the panel that holds the document on top of
-    /// [collomatique_ops::rendering::render_group_name].
+    /// [collomatique_ui_text::rendering::render_group_name].
     group_titles: Vec<String>,
 
     group_entries: FactoryVecDeque<GroupEntry>,

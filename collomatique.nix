@@ -12,6 +12,7 @@
     libadwaita,
     adwaita-icon-theme,
     python3,
+    python3Packages,
     clippy,
 }:
 rustPlatform.buildRustPackage rec {
@@ -29,7 +30,10 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-zqk7SfICCLMj8k+j7tY2C7L+K7jhVCwl/Ahzr6gYQRo=";
+    cargoHash = "sha256-4/RGLLZ4nQ8Ejq0790gqmj3XuuIgra0tMQqJDp2oJro=";
+
+    # The test suite is run from the dev shell, not from the package build.
+    doCheck = false;
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
@@ -50,6 +54,7 @@ rustPlatform.buildRustPackage rec {
         wayland
         adwaita-icon-theme
         python3
+        python3Packages.xlsxwriter # For the xlsx export scripts
     ];
 
     preFixup = ''

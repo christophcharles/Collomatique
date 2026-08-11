@@ -6,7 +6,7 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidget
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
-    /// The period as [collomatique_ops::rendering::render_period] names it,
+    /// The period as [collomatique_ui_text::rendering::render_period] names it,
     /// rendered by the panel that holds the document.
     pub title: String,
     /// One `(week title, week state)` pair per week of the period, in order.
@@ -216,7 +216,7 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct WeekData {
-    /// The week as [collomatique_ops::rendering::render_week] names it.
+    /// The week as [collomatique_ui_text::rendering::render_week] names it.
     pub title: String,
     pub week_num_in_period: usize,
     pub state: collomatique_state_colloscopes::weeks::WeekDesc,

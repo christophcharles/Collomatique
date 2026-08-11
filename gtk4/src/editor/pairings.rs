@@ -233,7 +233,7 @@ impl Component for Pairings {
                     .map(|(rule_id, rule)| pairings_display::EntryData {
                         rule_id,
                         rule: rule.clone(),
-                        summary: collomatique_ops::rendering::render_pairing_rule(
+                        summary: collomatique_ui_text::rendering::render_pairing_rule(
                             &self.subjects,
                             &self.pairings,
                             rule_id,

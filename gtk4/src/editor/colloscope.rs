@@ -704,7 +704,7 @@ impl Component for Colloscope {
                 // here, because it is what the colloscope cell stores.
                 let group_titles: Vec<_> = (0..group_list.params().group_names.len() as u32)
                     .map(|num| {
-                        let name = collomatique_ops::rendering::render_group_name(
+                        let name = collomatique_ui_text::rendering::render_group_name(
                             &self.params.group_lists,
                             *group_list_id,
                             num,
