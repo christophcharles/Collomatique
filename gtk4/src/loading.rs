@@ -62,6 +62,11 @@ impl Component for LoadingPanel {
                     set_icon_name: "open-menu-symbolic",
                     set_menu_model: Some(&main_menu),
                 },
+                pack_end = &gtk::Image {
+                    set_icon_name: Some("dialog-warning-symbolic"),
+                    set_tooltip: &super::in_dev_tooltip(),
+                    set_visible: super::in_dev_shown(),
+                },
             },
             #[wrap(Some)]
             set_content = &gtk::Box {
@@ -76,7 +81,7 @@ impl Component for LoadingPanel {
                 adw::Spinner {
                     set_halign: gtk::Align::Center,
                     set_valign: gtk::Align::Center,
-                    set_size_request: (200, 200),
+                    set_size_request: (64, 64),
                 },
                 gtk::Label {
                     #[watch]

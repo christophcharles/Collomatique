@@ -1,5 +1,5 @@
+use crate::extras::{V, extra_var, subject_interrogation_params};
 use crate::ids::GlobalWeek;
-use crate::native_extras::{V, extra_var, subject_interrogation_params};
 use crate::types::ExtraVarName;
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
@@ -9,25 +9,29 @@ use collomatique_state_colloscopes::soft_param::SoftParam;
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 use std::collections::BTreeSet;
 
+pub(super) fn effective_balancing_flag(
+    env: &VarEnv,
+    subject_id: SubjectId,
+    extract: impl Fn(&BalancingOptions) -> bool,
+) -> bool {
+    extract(env.balancing.options_for(subject_id))
+}
+
+/// Same as [`effective_balancing_flag`] for the three-state goals: `None` means
+/// the goal is not pursued at all, `Some { soft }` says how it is pursued.
 pub(super) fn effective_balancing_option<'a>(
     env: &'a VarEnv,
     subject_id: SubjectId,
     extract: impl Fn(&BalancingOptions) -> &Option<SoftParam<()>>,
 ) -> Option<&'a SoftParam<()>> {
-    env.balancing
-        .subjects
-        .get(&subject_id)
-        .and_then(|b| extract(b).as_ref())
-        .or_else(|| extract(&env.balancing.global).as_ref())
+    extract(env.balancing.options_for(subject_id)).as_ref()
 }
 
 pub(super) fn teachers_for_subject(env: &VarEnv, subject_id: SubjectId) -> BTreeSet<TeacherId> {
-    let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
+    let Some(subject_slots) = env.slots.slots_for_subject(subject_id) else {
         return BTreeSet::new();
     };
     subject_slots
-        .ordered_slots
-        .iter()
         .map(|(_, slot_data)| slot_data.teacher_id)
         .collect()
 }
@@ -38,12 +42,10 @@ pub(super) fn slot_week_pairs_for_teacher(
     subject_id: SubjectId,
     teacher_id: TeacherId,
 ) -> Vec<(SlotId, GlobalWeek)> {
-    let Some(subject_slots) = env.slots.subject_map.get(&subject_id) else {
+    let Some(subject_slots) = env.slots.slots_for_subject(subject_id) else {
         return vec![];
     };
     let teacher_slots: BTreeSet<SlotId> = subject_slots
-        .ordered_slots
-        .iter()
         .filter(|(_, slot_data)| slot_data.teacher_id == teacher_id)
         .map(|(slot_id, _)| *slot_id)
         .collect();

@@ -161,6 +161,10 @@ impl<Id: Identifier> Entry<Id> {
         }
     }
 
+    fn generate_telephone_tooltip(&self) -> Option<String> {
+        self.data.contact.tel.clone().map(|t| t.into_inner())
+    }
+
     fn generate_email_text(&self) -> String {
         match &self.data.contact.email {
             Some(e) => e.clone().into_inner(),
@@ -183,7 +187,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
             set_hexpand: true,
             set_orientation: gtk::Orientation::Horizontal,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 set_tooltip_text: Some("Modifier le contact"),
                 connect_clicked => EntryInput::EditClicked,
@@ -196,9 +200,13 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 24,
+                set_max_width_chars: 24,
                 #[watch]
                 set_label: &self.generate_name_text(),
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.generate_name_text()),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -207,16 +215,21 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_halign: gtk::Align::Start,
                 set_margin_start: 5,
                 set_margin_end: 5,
-                set_icon_name: Some("contact-symbolic"),
+                set_icon_name: Some("phone-symbolic"),
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,
+                set_xalign: 0.,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 16,
+                set_max_width_chars: 16,
                 #[watch]
                 set_label: &self.generate_telephone_text(),
                 #[watch]
                 set_use_markup: self.data.contact.tel.is_none(),
-                set_size_request: (120, -1),
+                #[watch]
+                set_tooltip_text: self.generate_telephone_tooltip().as_deref(),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -225,7 +238,7 @@ impl<Id: Identifier> FactoryComponent for Entry<Id> {
                 set_halign: gtk::Align::Start,
                 set_margin_start: 5,
                 set_margin_end: 5,
-                set_icon_name: Some("emblem-mail-symbolic"),
+                set_icon_name: Some("mail-unread-symbolic"),
             },
             gtk::Label {
                 set_halign: gtk::Align::Start,

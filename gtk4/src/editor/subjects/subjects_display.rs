@@ -6,14 +6,14 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidget
 
 #[derive(Debug, Clone)]
 pub struct PeriodData {
-    pub week_count: usize,
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
+    pub title: String,
     pub status: bool,
 }
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
     pub subject_params: collomatique_state_colloscopes::SubjectParameters,
-    pub global_first_week: Option<collomatique_time::WeekStart>,
     pub periods: Vec<PeriodData>,
     pub subject_id: collomatique_state_colloscopes::SubjectId,
     pub subject_count: usize,
@@ -23,7 +23,6 @@ pub struct EntryData {
 pub struct Entry {
     index: DynamicIndex,
     subject_params: collomatique_state_colloscopes::SubjectParameters,
-    global_first_week: Option<collomatique_time::WeekStart>,
     periods: FactoryVecDeque<Period>,
     subject_id: collomatique_state_colloscopes::SubjectId,
     subject_count: usize,
@@ -160,20 +159,17 @@ impl Entry {
         )
     }
 
-    fn update_period(
-        global_first_week: Option<collomatique_time::WeekStart>,
-        period_num: usize,
-        first_week_in_period: usize,
-        week_count: usize,
-        state: bool,
-    ) -> PeriodSwitchData {
-        PeriodSwitchData {
-            global_first_week,
-            period_num,
-            first_week_in_period,
-            week_count,
-            state,
-        }
+    fn period_switch_data(
+        periods: Vec<PeriodData>,
+    ) -> impl ExactSizeIterator<Item = PeriodSwitchData> {
+        periods
+            .into_iter()
+            .enumerate()
+            .map(|(period_num, period_data)| PeriodSwitchData {
+                title: period_data.title,
+                period_num,
+                state: period_data.status,
+            })
     }
 }
 
@@ -201,7 +197,7 @@ impl FactoryComponent for Entry {
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                 },
                 gtk::Button {
-                    set_icon_name: "edit-symbolic",
+                    set_icon_name: "document-edit-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Modifier la matière"),
                     connect_clicked => EntryInput::EditClicked,
@@ -210,7 +206,7 @@ impl FactoryComponent for Entry {
                     set_hexpand: true,
                 },
                 gtk::Button {
-                    set_icon_name: "go-up",
+                    set_icon_name: "go-up-symbolic",
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: self.index.current_index() != 0,
@@ -218,7 +214,7 @@ impl FactoryComponent for Entry {
                     connect_clicked => EntryInput::MoveUpClicked,
                 },
                 gtk::Button {
-                    set_icon_name: "go-down",
+                    set_icon_name: "go-down-symbolic",
                     add_css_class: "flat",
                     #[watch]
                     set_sensitive: self.index.current_index() < self.subject_count-1,
@@ -323,32 +319,14 @@ impl FactoryComponent for Entry {
         let mut model = Self {
             index: index.clone(),
             subject_params: data.subject_params,
-            global_first_week: data.global_first_week,
             subject_id: data.subject_id,
             subject_count: data.subject_count,
             periods,
         };
 
-        let transformed_data: Vec<_> = data
-            .periods
-            .into_iter()
-            .enumerate()
-            .scan(0usize, |current_week, (num, period_data)| {
-                let new_period = Self::update_period(
-                    model.global_first_week.clone(),
-                    num,
-                    *current_week,
-                    period_data.week_count,
-                    period_data.status,
-                );
-                *current_week += period_data.week_count;
-                Some(new_period)
-            })
-            .collect();
-
         crate::tools::factories::update_vec_deque(
             &mut model.periods,
-            transformed_data.into_iter(),
+            Self::period_switch_data(data.periods),
             PeriodInput::UpdateData,
         );
 
@@ -371,30 +349,13 @@ impl FactoryComponent for Entry {
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             EntryInput::UpdateData(new_data) => {
-                self.global_first_week = new_data.global_first_week;
                 self.subject_params = new_data.subject_params;
                 self.subject_id = new_data.subject_id;
                 self.subject_count = new_data.subject_count;
 
-                let transformed_data: Vec<_> = new_data
-                    .periods
-                    .into_iter()
-                    .enumerate()
-                    .scan(0usize, |current_week, (num, period_data)| {
-                        let new_period = Self::update_period(
-                            self.global_first_week.clone(),
-                            num,
-                            *current_week,
-                            period_data.week_count,
-                            period_data.status,
-                        );
-                        *current_week += period_data.week_count;
-                        Some(new_period)
-                    })
-                    .collect();
                 crate::tools::factories::update_vec_deque(
                     &mut self.periods,
-                    transformed_data.into_iter(),
+                    Self::period_switch_data(new_data.periods),
                     PeriodInput::UpdateData,
                 );
             }
@@ -433,10 +394,9 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct PeriodSwitchData {
-    pub global_first_week: Option<collomatique_time::WeekStart>,
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
+    pub title: String,
     pub period_num: usize,
-    pub first_week_in_period: usize,
-    pub week_count: usize,
     pub state: bool,
 }
 
@@ -459,12 +419,7 @@ pub enum PeriodOutput {
 
 impl Period {
     fn generate_title_text(&self) -> String {
-        super::super::generate_period_title(
-            &self.data.global_first_week,
-            self.data.period_num,
-            self.data.first_week_in_period,
-            self.data.week_count,
-        )
+        format!("Période {}", self.data.title)
     }
 }
 

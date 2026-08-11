@@ -2,117 +2,267 @@
 //!
 //! This module defines the relevant types to describes the periods
 
-use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
+use collomatique_state::ContentOrd;
+use collomatique_state::partial_order::option_lift_discrete;
+
+use crate::OrderedTable;
 use crate::ids::PeriodId;
+use crate::ops::AnnotatedPeriodOp;
 
 /// Description of the periods
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// A period owns *existence and display order* only: `ordered_period_list` is
+/// the public ordered set of period ids (mirroring `Subjects.ordered_subject_list`),
+/// each mapping to `()` — a period carries no other data of its own.
+///
+/// Weeks and their per-period ordering live in the sibling [crate::weeks::Weeks]
+/// container, a sibling field on [crate::colloscope_params::Parameters].
+///
+/// The cross-container consistency (every `ordering` row names a live period,
+/// the row is non-empty, every week names its period, no week is left
+/// un-ordered) is checked by the week-ordering `LogicError`s in
+/// `InnerData::broken_invariants`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Periods {
     /// Start date for the colloscope
     ///
     /// The date might not be set but of course, this will hinder
     /// the eventual pretty output
+    // `WeekStart` is foreign, so it carries no `ContentOrd` impl of its own:
+    // the helper lifts the plain `Option` rule over it (unset is below set,
+    // two different dates are incomparable).
+    #[ord(with = option_lift_discrete)]
     pub first_week: Option<collomatique_time::WeekStart>,
 
-    /// Ordered list of periods
+    /// Ordered set of period ids — existence and display order only
     ///
-    /// This field gives the relative order of the different
-    /// periods identified by their ids
-    ///
-    /// For each period, we get also a list of boolean
-    /// Each boolean represents a week. If it is true
-    /// there is an interrogation on the given week
-    /// otherwise there isn't.
-    pub ordered_period_list: Vec<(PeriodId, Vec<WeekDesc>)>,
+    /// A period owns nothing else; week data and per-period week ordering live
+    /// in the sibling [crate::weeks::Weeks]. Public, mirroring
+    /// `Subjects.ordered_subject_list`.
+    pub ordered_period_list: OrderedTable<PeriodId, ()>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct WeekDesc {
-    pub interrogations: bool,
-    pub annotation: Option<non_empty_string::NonEmptyString>,
-}
-
-impl Default for WeekDesc {
-    fn default() -> Self {
-        WeekDesc {
-            interrogations: true,
-            annotation: None,
-        }
-    }
-}
-
-impl WeekDesc {
-    pub fn new(interrogations: bool) -> WeekDesc {
-        WeekDesc {
-            interrogations,
-            annotation: None,
-        }
-    }
-}
+/// Error returned when building [Periods] from ordered ids with a duplicate
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Error)]
+#[error("duplicated period id {0:?}")]
+pub struct DuplicatedPeriodIdError(pub PeriodId);
 
 impl Periods {
-    pub fn count_weeks(&self) -> usize {
-        self.ordered_period_list.iter().map(|x| x.1.len()).sum()
+    /// Builds a [Periods] from an ordered list of period ids (no weeks).
+    ///
+    /// The ids define the display order; the resulting periods have no weeks.
+    /// Returns an error on a duplicate id. This is the constructor storage
+    /// decode uses; the sibling [`crate::weeks::Weeks`] container is built
+    /// separately with [`crate::weeks::Weeks::from_period_rows`].
+    pub fn from_ordered_ids(
+        first_week: Option<collomatique_time::WeekStart>,
+        ids: Vec<PeriodId>,
+    ) -> Result<Self, DuplicatedPeriodIdError> {
+        let period_rows: Vec<(PeriodId, ())> = ids.into_iter().map(|id| (id, ())).collect();
+        let ordered_period_list = period_rows.try_into().map_err(
+            |collomatique_state::tables::DuplicatedIdError(id)| DuplicatedPeriodIdError(id),
+        )?;
+        Ok(Periods {
+            first_week,
+            ordered_period_list,
+        })
+    }
+
+    // ---- Read surface ----
+    //
+    // These methods are the sanctioned way to read the periods. Consumers go
+    // through them rather than the private `ordered_period_list` field. Week
+    // data is read from the sibling [`crate::weeks::Weeks`] container.
+
+    /// Period ids in display order.
+    pub fn period_ids(&self) -> impl Iterator<Item = PeriodId> + '_ {
+        self.ordered_period_list.keys()
+    }
+
+    /// Number of periods.
+    pub fn period_count(&self) -> usize {
+        self.ordered_period_list.len()
+    }
+
+    /// Whether there are no periods at all.
+    pub fn is_empty(&self) -> bool {
+        self.ordered_period_list.is_empty()
+    }
+
+    /// The period id at the given display position, if any.
+    pub fn period_id_at(&self, pos: usize) -> Option<PeriodId> {
+        self.ordered_period_list.get_at(pos).map(|(id, _)| id)
     }
 
     /// Finds the position of a period by id
     pub fn find_period_position(&self, id: PeriodId) -> Option<usize> {
-        self.ordered_period_list
-            .iter()
-            .position(|(current_id, _desc)| *current_id == id)
+        self.ordered_period_list.position_of(&id)
     }
+}
 
-    /// Finds the position of a period by id and gives the number of the first week
-    pub fn find_period_position_and_first_week(&self, id: PeriodId) -> Option<(usize, usize)> {
-        let mut first_week = 0usize;
-
-        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
-            if *period_id == id {
-                return Some((pos, first_week));
-            }
-            first_week += desc.len();
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl Periods {
+    pub(crate) fn collect_ids(&self, ids: &mut std::collections::BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for period_id in self.ordered_period_list.keys() {
+            ids.insert(period_id.inner());
         }
-
-        None
     }
 
-    /// Finds the position of a period by id and gives the total number of weeks up to and including the
-    /// given period
-    pub fn find_period_position_and_total_number_of_weeks(
-        &self,
-        id: PeriodId,
-    ) -> Option<(usize, usize)> {
-        let mut total_weeks = 0usize;
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        let rows: Vec<(PeriodId, ())> = self
+            .ordered_period_list
+            .into_iter()
+            .map(|(period_id, ())| (remap(map, period_id), ()))
+            .collect();
+        Periods {
+            first_week: self.first_week,
+            ordered_period_list: rows
+                .try_into()
+                .expect("An injective remap cannot create duplicate keys"),
+        }
+    }
+}
 
-        for (pos, (period_id, desc)) in self.ordered_period_list.iter().enumerate() {
-            total_weeks += desc.len();
-            if *period_id == id {
-                return Some((pos, total_weeks));
+/// Precondition errors of the forced period ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber and op-target existence (Remove
+/// target + `AddAfter` anchor both surface as [Self::InvalidPeriodId]). All
+/// reference scans are stripped, including the empty-first `PeriodStillHasWeeks`
+/// guard: force-removing a period with weeks leaves dangling `Week::period_id`
+/// FKs for the cascade, exactly like every other stripped reference scan.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum PeriodPrecheckError {
+    /// A period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(PeriodId),
+
+    /// The period id already exists
+    #[error("period id ({0:?}) already exists")]
+    PeriodIdAlreadyExists(PeriodId),
+}
+
+impl crate::Data {
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Force-applies a period op: carve-out guards kept (returned as
+    /// [PeriodPrecheckError] — no-clobber, target existence, `AddAfter` anchor),
+    /// invariant guards stripped (step-3 survey Table 1), including the
+    /// empty-first `PeriodStillHasWeeks` guard — force-removing a period with
+    /// weeks leaves dangling `Week::period_id` FKs. May leave the state invalid;
+    /// the caller owns checking and rollback.
+    pub(crate) fn force_apply_period(
+        &mut self,
+        period_op: &AnnotatedPeriodOp,
+    ) -> std::result::Result<AnnotatedPeriodOp, PeriodPrecheckError> {
+        match period_op {
+            AnnotatedPeriodOp::ChangeStartDate(new_date) => {
+                let old_date = std::mem::replace(
+                    &mut self.inner_data.params.periods.first_week,
+                    new_date.clone(),
+                );
+                Ok(AnnotatedPeriodOp::ChangeStartDate(old_date))
+            }
+            AnnotatedPeriodOp::AddFront(period_id) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(PeriodPrecheckError::PeriodIdAlreadyExists(*period_id));
+                }
+
+                // Periods are created week-less; weeks are spliced in by the
+                // week ops afterwards.
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .insert_at(0, *period_id, ())
+                    .expect("period id absence checked above");
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
+            }
+            AnnotatedPeriodOp::AddAfter(period_id, after_id) => {
+                if self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_some()
+                {
+                    return Err(PeriodPrecheckError::PeriodIdAlreadyExists(*period_id));
+                }
+
+                let Some(position) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*after_id)
+                else {
+                    return Err(PeriodPrecheckError::InvalidPeriodId(*after_id));
+                };
+
+                // Created week-less (see `AddFront` above).
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .insert_at(position + 1, *period_id, ())
+                    .expect("period id absence checked above");
+                Ok(AnnotatedPeriodOp::Remove(*period_id))
+            }
+            AnnotatedPeriodOp::Remove(period_id) => {
+                let Some(position) = self
+                    .inner_data
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                else {
+                    return Err(PeriodPrecheckError::InvalidPeriodId(*period_id));
+                };
+
+                // stripped: the empty-first `PeriodStillHasWeeks` guard (a
+                // period with weeks now removes, leaving dangling
+                // `Week::period_id` FKs — the ordering sidecar row and
+                // `week_map` entries are untouched, since force_apply fixes
+                // nothing) and the colloscope / subject / student / pairing /
+                // slot-pairing / assignment / group-list-association reference
+                // scans
+
+                let previous_id = (position > 0).then(|| {
+                    self.inner_data
+                        .params
+                        .periods
+                        .ordered_period_list
+                        .get_at(position - 1)
+                        .expect("position > 0 checked")
+                        .0
+                });
+
+                self.inner_data
+                    .params
+                    .periods
+                    .ordered_period_list
+                    .remove_at(position);
+                // stripped: the association-row cleanup the retired checked
+                // apply_period carried. There it was dead code (the also-retired
+                // PeriodStillHasNonTrivialGroupListAssociation guard rejected
+                // the removal while any row existed); alive here it would
+                // silently repair the would-be-dangling rows, landing a VALID
+                // state on an op the gate must reject — and irreversibly, since
+                // the reverse only re-adds the period. force_apply never fixes
+                // anything: the dangling rows are the checker's to report.
+
+                Ok(match previous_id {
+                    None => AnnotatedPeriodOp::AddFront(*period_id),
+                    Some(prev) => AnnotatedPeriodOp::AddAfter(*period_id, prev),
+                })
             }
         }
-
-        None
-    }
-
-    /// Finds a period by id
-    pub fn find_period(&self, id: PeriodId) -> Option<&Vec<WeekDesc>> {
-        let pos = self.find_period_position(id)?;
-
-        Some(&self.ordered_period_list[pos].1)
-    }
-
-    /// Finds the first week number and the length of a period
-    pub fn get_first_week_and_length_for_period(&self, id: PeriodId) -> Option<(usize, usize)> {
-        let mut first_week = 0usize;
-
-        for (period_id, desc) in &self.ordered_period_list {
-            if *period_id == id {
-                return Some((first_week, desc.len()));
-            }
-            first_week += desc.len();
-        }
-
-        None
     }
 }

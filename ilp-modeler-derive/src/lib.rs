@@ -1,6 +1,6 @@
 mod describe_var;
 
-/// Derive macro for [`collomatique_ilp_modeler::DescribeVar`].
+/// Derive macro for `collomatique_ilp_modeler::DescribeVar`.
 ///
 /// Generates `enumerate()` and `check_fix()` implementations from
 /// enum variants annotated with `#[env]`, `#[range]`, `#[var]`,

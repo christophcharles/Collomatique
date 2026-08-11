@@ -5,12 +5,22 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
+collomatique-ops = { path = "../ops" }
+collomatique-settings = { path = "../settings" }
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
-collomatique-ops = { path = "../ops" }
-collomatique-rpc = { path = "../rpc" }
+collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
-pyo3 = { version = "0.25", features = [ "py-clone" ] }
-anyhow.workspace = true
+# The entity renderers the pairing-rule reprs name a rule with.
+collomatique-ui-text = { path = "../ui-text" }
 chrono.workspace = true
-non-empty-string.workspace = true
+# `chrono`: `datetime.date` <-> `chrono::NaiveDate`, for the first week of the
+# colles.
+pyo3 = { workspace = true, features = [ "chrono" ] }
+rfd.workspace = true
+# `rfd`: the native file dialogs of the `dialogs` submodule
+# (`docs/python/new_api_design.md` §9.3).
+tokio = { workspace = true, features = [ "rt", "rt-multi-thread", "net", "time" ] }
+# `tokio`: nothing here calls it. `rfd`'s blocking calls go through `zbus`,
+# which spawns onto whatever runtime is in context, and a python interpreter
+# has none — so a dialog brings its own.

@@ -148,6 +148,28 @@ where
         }
     }
 
+    /// Construct equality constraints from a [`collomatique_ilp::ConfigData`]: for
+    /// each `(var, value)` entry, add `var == value`.
+    pub fn from_config_data(
+        config: &collomatique_ilp::ConfigData<B>,
+        desc_fn: impl Fn(&B, f64) -> C,
+    ) -> Self
+    where
+        B: Clone,
+    {
+        let constraints: Vec<_> = config
+            .get_values()
+            .into_iter()
+            .map(|(var, value)| {
+                let expr = LinExpr::var(Var::Base(var.clone()));
+                let constraint = expr.eq(&LinExpr::constant(value));
+                let desc = desc_fn(&var, value);
+                (constraint, desc)
+            })
+            .collect();
+        Self::from_constraints(constraints)
+    }
+
     /// Add a constraint with description.
     pub fn with_constraint(mut self, constraint: Constraint<Var<B, E>>, desc: C) -> Self {
         self.constraints.push((constraint, desc));
@@ -1019,6 +1041,80 @@ where
     ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
     }
+
+    /// Objectify as a plain weighted sum of per-constraint violations.
+    ///
+    /// Emits `penalty = Σ wᵢ·λᵢ` where each `λᵢ` bounds one
+    /// constraint's violation (via `objectify_single`) and `wᵢ` is
+    /// `weight_fn` applied to that constraint's description. Unlike
+    /// [`ConstraintBundle::objectify_with_balance_and_coef`] there is
+    /// **no `1/n` normalization and no global `L∞` bound**: the penalty
+    /// grows with the number and magnitude of violations, so the
+    /// gradient distinguishes close from far clustering.
+    ///
+    /// The weight is computed **eagerly**, while the description is
+    /// still available, then baked into the closure — the objective is
+    /// added with coefficient `1.0` since the weights are already in
+    /// `wᵢ`. Constraints are individually passed through
+    /// [`VarContext::fix_constraints`] to keep each weight aligned with
+    /// its constraint (a no-op for constraints with no base vars).
+    pub fn objectify_weighted_sum(
+        self,
+        var: E,
+        weight_fn: impl Fn(&C) -> f64,
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
+        if self.constraints.is_empty() {
+            return Err(EagerObjectifyError::EmptyConstraints);
+        }
+        if self.extras.contains_key(&var) {
+            return Err(EagerObjectifyError::DuplicateVariable(var));
+        }
+
+        // Description is still available here → compute weight now, then
+        // transmute the constraint into the extra-var space.
+        let weighted: Vec<(Constraint<ExtraVar<B, E>>, f64)> = self
+            .constraints
+            .into_iter()
+            .map(|(c, desc)| {
+                let w = weight_fn(&desc);
+                (c.transmute(|v| ExtraVar::from(v.clone())), w)
+            })
+            .collect();
+
+        let entry = ExtraEntry::new(
+            Variable::non_negative(),
+            move |factory: &mut HelperFactory<B, E>, ctx, e| {
+                let mut penalty: LinExpr<ExtraVar<B, E>> = LinExpr::constant(0.0);
+                let mut output = Vec::new();
+                for (c, w) in &weighted {
+                    let (reduced, _fixes) = ctx.fix_constraints(vec![c.clone()]);
+                    for rc in &reduced {
+                        let lambda = factory.new_helper(Variable::non_negative());
+                        output.extend(objectify_single(rc, lambda.clone()));
+                        penalty = penalty + *w * LinExpr::var(lambda);
+                    }
+                }
+                output.push(LinExpr::var(ExtraVar::Extra(e)).eq(&penalty));
+                Ok(output)
+            },
+        );
+
+        let mut extras = self.extras;
+        extras.insert(var.clone(), entry);
+
+        let mut objectives = self.objectives;
+        objectives.push((
+            1.0,
+            Objective::new(LinExpr::var(Var::Extra(var)), ObjectiveSense::Minimize),
+        ));
+
+        Ok(IntConstraintBundle {
+            constraints: Vec::new(),
+            objectives,
+            extras,
+            _phantom: PhantomData,
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1072,5 +1168,15 @@ where
         var: E,
     ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
         self.objectify_with_balance_and_coef(var, 0.5, 1.0)
+    }
+
+    /// Convenience wrapper: drops the int wrapping and delegates
+    /// to [`ConstraintBundle::objectify_weighted_sum`].
+    pub fn objectify_weighted_sum(
+        self,
+        var: E,
+        weight_fn: impl Fn(&C) -> f64,
+    ) -> Result<IntConstraintBundle<'m, B, E, C, Env, Err>, EagerObjectifyError<E>> {
+        self.into_general().objectify_weighted_sum(var, weight_fn)
     }
 }

@@ -134,6 +134,7 @@ impl Component for Incompats {
                     .ordered_subject_list
                     .iter()
                     .map(|(id, desc)| {
+                        let id = &id;
                         let subject_incompats = self
                             .incompats
                             .incompat_map
@@ -142,7 +143,7 @@ impl Component for Incompats {
                                 if incompat.subject_id != *id {
                                     return None;
                                 }
-                                Some((*incompat_id, incompat.clone()))
+                                Some((incompat_id, incompat.clone()))
                             })
                             .collect();
                         incompats_display::EntryData {

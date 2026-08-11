@@ -11,6 +11,7 @@ mod assignments_display;
 pub enum AssignmentsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::subjects::Subjects,
         collomatique_state_colloscopes::students::Students,
         collomatique_state_colloscopes::assignments::Assignments,
@@ -31,6 +32,7 @@ pub enum AssignmentsInput {
 
 pub struct Assignments {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     students: collomatique_state_colloscopes::students::Students,
     assignments: collomatique_state_colloscopes::assignments::Assignments,
@@ -57,7 +59,7 @@ impl Component for Assignments {
                 gtk::Label {
                     set_margin_top: 10,
                     #[watch]
-                    set_visible: model.periods.ordered_period_list.is_empty(),
+                    set_visible: model.periods.is_empty(),
                     set_halign: gtk::Align::Start,
                     set_label: "<big><b>Aucune période à afficher</b></big>",
                     set_use_markup: true,
@@ -99,6 +101,7 @@ impl Component for Assignments {
 
         let model = Assignments {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             students: collomatique_state_colloscopes::students::Students::default(),
             assignments: collomatique_state_colloscopes::assignments::Assignments::default(),
@@ -114,8 +117,15 @@ impl Component for Assignments {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            AssignmentsInput::Update(new_periods, new_subjects, new_students, new_assignments) => {
+            AssignmentsInput::Update(
+                new_periods,
+                new_weeks,
+                new_subjects,
+                new_students,
+                new_assignments,
+            ) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.subjects = new_subjects;
                 self.students = new_students;
                 self.assignments = new_assignments;
@@ -149,18 +159,19 @@ impl Assignments {
     fn update_period_factory(&mut self) {
         let new_data = self
             .periods
-            .ordered_period_list
-            .iter()
-            .scan(0usize, |acc, (id, desc)| {
+            .period_ids()
+            .scan(0usize, |acc, id| {
+                let period_len = self.weeks.week_count_for_period(id).unwrap_or(0);
+                let id = &id;
                 let current_first_week = *acc;
-                *acc += desc.len();
+                *acc += period_len;
 
                 let filtered_subjects = self
                     .subjects
                     .ordered_subject_list
                     .iter()
                     .filter(|(_subject_id, subject)| !subject.excluded_periods.contains(id))
-                    .cloned()
+                    .map(|(sid, s)| (sid, s.clone()))
                     .collect();
 
                 let mut filtered_students: Vec<_> = self
@@ -169,7 +180,7 @@ impl Assignments {
                     .iter()
                     .filter_map(|(student_id, student)| {
                         if !student.excluded_periods.contains(id) {
-                            Some((*student_id, student.clone()))
+                            Some((student_id, student.clone()))
                         } else {
                             None
                         }
@@ -192,17 +203,20 @@ impl Assignments {
 
                 Some(assignments_display::PeriodEntryData {
                     period_id: *id,
-                    global_first_week: self.periods.first_week.clone(),
+                    title: collomatique_ui_text::rendering::render_period(
+                        &self.periods,
+                        &self.weeks,
+                        *id,
+                    )
+                    .expect("the period comes from the document being displayed"),
                     first_week_num: current_first_week,
-                    week_count: desc.len(),
                     filtered_subjects,
                     filtered_students,
                     period_assignments: self
                         .assignments
-                        .period_map
-                        .get(id)
-                        .expect("Period id should be valid at this poind")
-                        .clone(),
+                        .subjects_for_period(*id)
+                        .map(|(subject_id, students)| (subject_id, students.clone()))
+                        .collect(),
                 })
             })
             .collect::<Vec<_>>();

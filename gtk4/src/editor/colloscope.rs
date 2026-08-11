@@ -1,4 +1,3 @@
-use collomatique_constraints_colloscopes::ConstraintSource;
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::prelude::FactoryVecDeque;
 use relm4::{
@@ -8,13 +7,36 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+use crate::editor::run_solver;
+
+/// The solver dialog instantiated for the configured colloscope ILP model. The solve path runs
+/// on the configured model (with pins/anchors/objectified cross-period constraints), so it is
+/// parameterized by [`ConfiguredExtra`]/[`ConfiguredConstraintDesc`] rather than the base model's
+/// spaces.
+///
+/// [`ConfiguredExtra`]: collomatique_constraints_colloscopes::ConfiguredExtra
+/// [`ConfiguredConstraintDesc`]: collomatique_constraints_colloscopes::ConfiguredConstraintDesc
+type SolverDialog = run_solver::Dialog<
+    collomatique_constraints_colloscopes::Var,
+    collomatique_constraints_colloscopes::ConfiguredExtra,
+    collomatique_constraints_colloscopes::ConfiguredConstraintDesc,
+>;
+
+/// Flattened variable of the configured colloscope model (the solve path's ILP variable).
+type ConfiguredInternalVar = collomatique_constraints_colloscopes::InternalVar<
+    collomatique_constraints_colloscopes::Var,
+    collomatique_constraints_colloscopes::ConfiguredExtra,
+>;
+
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
 
 mod blame_dialog;
 mod colloscope_display;
+mod config_dialog;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
+mod loading_dialog;
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -24,16 +46,27 @@ pub enum ColloscopeInput {
     ),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
-    GroupListAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeGroupList),
+    GroupListAccepted(std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>),
 
     EditInterrogation(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     ),
-    InterrogationAccepted(collomatique_state_colloscopes::colloscopes::ColloscopeInterrogation),
+    InterrogationAccepted(std::collections::BTreeSet<u32>),
 
     SolveColloscopeClicked,
+    ResetSolveConfig,
+    ConductorConfigAccepted(
+        collomatique_constraints_colloscopes::SolveConfig,
+        collomatique_strategies::ConductorStrategy,
+        collomatique_state_colloscopes::colloscope_params::Parameters,
+    ),
+    ConductorConfigCancelled,
+    ModelBuilt(
+        collomatique_constraints_colloscopes::ConfiguredColloscopeModel,
+        collomatique_strategies::ConductorPayload<collomatique_constraints_colloscopes::Var>,
+    ),
+    SolveResult(collomatique_ilp::ConfigData<ConfiguredInternalVar>),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
 
@@ -42,46 +75,80 @@ pub enum ColloscopeInput {
 
 #[derive(Debug)]
 pub enum ColloscopeCommandOutput {
-    DebouncedStart(std::time::Instant),
-    IlpProblemComputed(Result<IlpProblem, String>),
+    DebounceElapsed,
+    IlpProblemComputed {
+        env: collomatique_state_colloscopes::colloscope_params::Parameters,
+        result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String>,
+    },
     IlpReprComputed(IlpRepr),
 }
 
 #[derive(Debug)]
 pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
-    SolveColloscopeClicked,
-    UpdateIlpProblem(Option<super::export_panel::IlpInnerProblem>),
+    NewColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
+    UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
 }
 
+/// The ILP problem together with the parameters needed to rebuild a colloscope
+/// from a solver solution. Built on a debounce and handed to the solver dialog.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpProblem {
     env: collomatique_state_colloscopes::colloscope_params::Parameters,
-    problem: collomatique_constraints_colloscopes::Problem,
+    problem: collomatique_constraints_colloscopes::ColloscopeModel,
 }
 
+/// The verification result for a given colloscope under a given ILP problem:
+/// the colloscope it was computed for, together with the warnings it raised.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpRepr {
-    ilp_problem: IlpProblem,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<String>,
+    warnings: Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>,
 }
 
+/// The computation data we currently have (as opposed to the data in flight).
+///
+/// Building the ILP model either failed (`BuildFailed`, e.g. a database error)
+/// or succeeded (`Built`); in the latter case we may additionally have verified
+/// the current colloscope into an [`IlpRepr`]. Every variant retains the `env`
+/// it was computed from so its staleness can be checked against the latest
+/// `Update`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum ComputationState {
-    Debouncing(std::time::Instant),
-    ComputingConstraints,
-    RecomputingWarnings,
-    ResultAvailable(Result<IlpRepr, String>),
+pub enum ComputationArtifact {
+    BuildFailed {
+        env: collomatique_state_colloscopes::colloscope_params::Parameters,
+        message: String,
+    },
+    Built {
+        ilp_problem: IlpProblem,
+        ilp_repr: Option<IlpRepr>,
+    },
 }
 
-impl ComputationState {
-    fn as_ref(&self) -> Option<&Result<IlpRepr, String>> {
+impl ComputationArtifact {
+    /// The parameters this artifact was computed from.
+    fn env(&self) -> &collomatique_state_colloscopes::colloscope_params::Parameters {
         match self {
-            ComputationState::ResultAvailable(res) => Some(res),
-            _ => None,
+            ComputationArtifact::BuildFailed { env, .. } => env,
+            ComputationArtifact::Built { ilp_problem, .. } => &ilp_problem.env,
         }
     }
+}
+
+/// Which computation, if any, is currently in flight. Collomatique never runs
+/// two computations at once, and neither step is cancelable.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InflightComputation {
+    None,
+    IlpProblem,
+    IlpRepr,
+}
+
+/// What is currently in flight: a debounce timer, a computation, or both.
+#[derive(Debug, Clone, Copy)]
+pub struct InflightCommand {
+    debouncing: bool,
+    computation: InflightComputation,
 }
 
 pub struct Colloscope {
@@ -93,68 +160,147 @@ pub struct Colloscope {
     colloscope_display: Controller<colloscope_display::Display>,
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
+    run_solver_dialog: Controller<SolverDialog>,
+    config_dialog: Controller<config_dialog::Dialog>,
+    loading_dialog: Controller<loading_dialog::Dialog>,
+    /// The last-validated solve configuration, kept so the config dialog reopens pre-primed
+    /// instead of resetting every time.
+    solve_config: collomatique_constraints_colloscopes::SolveConfig,
+    /// The last-validated conductor strategy, bolted onto the solve request by this UI (the
+    /// modelization-only [`collomatique_constraints_colloscopes::SolveConfig`] does not carry
+    /// it). Defaults to the parallel strategy.
+    strategy: collomatique_strategies::ConductorStrategy,
 
     edited_group_list: Option<collomatique_state_colloscopes::GroupListId>,
     edited_interrogation: Option<(
         collomatique_state_colloscopes::SlotId,
-        collomatique_state_colloscopes::PeriodId,
-        usize,
+        collomatique_state_colloscopes::WeekId,
     )>,
 
-    computation_state: Option<ComputationState>,
+    // The instant of the last `Update` signal, used to debounce recomputation.
+    last_update: Option<std::time::Instant>,
+    // The latest finished computation data: the best data available apart from
+    // any in-flight computation. It may lag behind `params`/`colloscope`, but it
+    // is never surfaced while stale — `inflight_cmd.debouncing` stays `true`
+    // whenever it could be, and `check_state_and_launch_computation` reconciles
+    // it against the latest `Update` (rebuilding as needed).
+    computation_artifact: Option<ComputationArtifact>,
+    // What is currently in flight (debounce timer and/or a computation).
+    inflight_cmd: InflightCommand,
 }
 
 impl Colloscope {
-    fn get_ilp_repr(&self) -> Option<&Result<IlpRepr, String>> {
-        self.computation_state.as_ref().and_then(|s| s.as_ref())
+    /// Whether nothing is in flight: results (if any) may now be displayed.
+    fn is_settled(&self) -> bool {
+        self.last_update.is_some()
+            && !self.inflight_cmd.debouncing
+            && self.inflight_cmd.computation == InflightComputation::None
     }
 
-    fn is_debouncing(&self) -> bool {
-        match &self.computation_state {
-            None => true,
-            Some(s) => matches!(s, ComputationState::Debouncing(_)),
+    /// The warnings to display, available only once the computation is settled
+    /// on a successfully-built problem with a verified colloscope.
+    fn settled_warnings(
+        &self,
+    ) -> Option<&Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>> {
+        if !self.is_settled() {
+            return None;
+        }
+        match &self.computation_artifact {
+            Some(ComputationArtifact::Built {
+                ilp_repr: Some(ilp_repr),
+                ..
+            }) => Some(&ilp_repr.warnings),
+            _ => None,
         }
     }
 
+    /// The ILP problem, available for solving/exporting. Relies on the invariant
+    /// upheld by `check_state_and_launch_computation`: `debouncing` stays `true`
+    /// whenever the artifact could be stale (including while a leftover
+    /// computation blocks the slot), so `!debouncing && computation != IlpProblem`
+    /// implies the built problem is consistent with the latest `Update`.
+    fn get_ilp_problem(&self) -> Option<&IlpProblem> {
+        if self.inflight_cmd.debouncing
+            || self.inflight_cmd.computation == InflightComputation::IlpProblem
+        {
+            return None;
+        }
+        match &self.computation_artifact {
+            Some(ComputationArtifact::Built { ilp_problem, .. }) => Some(ilp_problem),
+            _ => None,
+        }
+    }
+
+    fn is_debouncing(&self) -> bool {
+        // Before the first `Update` there is no data yet: keep the startup
+        // spinner up until the first parameters arrive.
+        self.inflight_cmd.debouncing || self.last_update.is_none()
+    }
+
     fn is_constructing_constraints(&self) -> bool {
-        matches!(
-            &self.computation_state,
-            Some(ComputationState::ComputingConstraints)
-        )
+        !self.inflight_cmd.debouncing
+            && self.inflight_cmd.computation == InflightComputation::IlpProblem
     }
 
     fn is_rebuilding_warnings(&self) -> bool {
-        matches!(
-            &self.computation_state,
-            Some(ComputationState::RecomputingWarnings)
-        )
+        !self.inflight_cmd.debouncing
+            && self.inflight_cmd.computation == InflightComputation::IlpRepr
     }
 
     fn has_warnings(&self) -> bool {
-        match self.get_ilp_repr() {
-            Some(Ok(ilp_repr)) => !ilp_repr.warnings.is_empty(),
-            _ => false,
+        match self.settled_warnings() {
+            Some(warnings) => !warnings.is_empty(),
+            None => false,
         }
     }
 
     fn has_evaluation_error(&self) -> bool {
-        matches!(
-            &self.computation_state,
-            Some(ComputationState::ResultAvailable(Err(_)))
-        )
+        self.is_settled()
+            && matches!(
+                &self.computation_artifact,
+                Some(ComputationArtifact::BuildFailed { .. })
+            )
     }
 
     fn has_success(&self) -> bool {
-        match self.get_ilp_repr() {
-            Some(Ok(ilp_repr)) => ilp_repr.warnings.is_empty(),
-            _ => false,
+        match self.settled_warnings() {
+            Some(warnings) => warnings.is_empty(),
+            None => false,
         }
     }
 
     fn generate_warning_text(&self) -> String {
-        match self.get_ilp_repr() {
-            Some(Ok(ilp_repr)) => format!("<small><i>{}</i></small>", ilp_repr.warnings.len()),
-            _ => String::new(),
+        match self.settled_warnings() {
+            Some(warnings) => format!("<small><i>{}</i></small>", warnings.len()),
+            None => String::new(),
+        }
+    }
+
+    fn worst_severity_level(&self) -> Option<collomatique_constraints_colloscopes::SeverityLevel> {
+        match self.settled_warnings() {
+            Some(warnings) => warnings.first().map(|(s, _)| *s),
+            None => None,
+        }
+    }
+
+    fn warning_icon_name(&self) -> &'static str {
+        use collomatique_constraints_colloscopes::SeverityLevel;
+        match self.worst_severity_level() {
+            Some(SeverityLevel::Infeasibility) => "computer-fail-symbolic",
+            Some(SeverityLevel::Structural | SeverityLevel::Quality) => "dialog-error-symbolic",
+            Some(SeverityLevel::Progressive) => "dialog-warning-symbolic",
+            Some(SeverityLevel::Preference) => "dialog-information-symbolic",
+            None => "dialog-warning-symbolic",
+        }
+    }
+
+    fn warning_css_class(&self) -> &'static str {
+        use collomatique_constraints_colloscopes::SeverityLevel;
+        match self.worst_severity_level() {
+            Some(
+                SeverityLevel::Infeasibility | SeverityLevel::Structural | SeverityLevel::Quality,
+            ) => "error",
+            _ => "warning",
         }
     }
 }
@@ -187,7 +333,7 @@ impl Component for Colloscope {
                     },
                     gtk::Button {
                         #[watch]
-                        set_sensitive: !model.colloscope.is_empty(),
+                        set_sensitive: !model.colloscope.are_interrogations_empty(),
                         set_icon_name: "edit-delete-symbolic",
                         add_css_class: "flat",
                         set_tooltip_text: Some("Effacer le colloscope"),
@@ -249,7 +395,7 @@ impl Component for Colloscope {
                                 #[watch]
                                 set_visible: model.has_success(),
                                 gtk::Image {
-                                    set_icon_name: Some("emblem-ok-symbolic"),
+                                    set_icon_name: Some("object-select-symbolic"),
                                 },
                                 gtk::Label {
                                     set_label: "<i><small>Colloscope valide</small></i>",
@@ -273,11 +419,17 @@ impl Component for Colloscope {
                             gtk::Box {
                                 set_orientation: gtk::Orientation::Horizontal,
                                 set_spacing: 5,
-                                add_css_class: "warning",
+                                #[watch]
+                                remove_css_class: "error",
+                                #[watch]
+                                remove_css_class: "warning",
+                                #[watch]
+                                add_css_class: model.warning_css_class(),
                                 #[watch]
                                 set_visible: model.has_warnings(),
                                 gtk::Image {
-                                    set_icon_name: Some("dialog-warning-symbolic"),
+                                    #[watch]
+                                    set_icon_name: Some(model.warning_icon_name()),
                                 },
                                 gtk::Label {
                                     #[watch]
@@ -310,7 +462,12 @@ impl Component for Colloscope {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
                 #[watch]
-                set_visible: !model.colloscope.group_lists.is_empty(),
+                set_visible: model
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .iter()
+                    .any(|(_id, group_list)| !group_list.is_prefilled()),
                 gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
@@ -358,7 +515,7 @@ impl Component for Colloscope {
     }
 
     fn init(
-        _params: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -382,11 +539,9 @@ impl Component for Colloscope {
         let colloscope_display = colloscope_display::Display::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {
-                colloscope_display::DisplayOutput::InterrogationClicked(
-                    slot_id,
-                    period_id,
-                    week_in_period,
-                ) => ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period),
+                colloscope_display::DisplayOutput::InterrogationClicked(slot_id, week_id) => {
+                    ColloscopeInput::EditInterrogation(slot_id, week_id)
+                }
             },
         );
 
@@ -404,6 +559,36 @@ impl Component for Colloscope {
             .launch(())
             .detach();
 
+        let run_solver_dialog = SolverDialog::builder()
+            .transient_for(&root)
+            .launch(run_solver::DialogSettings {
+                title: "Résolution du colloscope".to_string(),
+                cancel_warning: "Toutes les modifications sur le colloscope seront perdues."
+                    .to_string(),
+            })
+            .forward(sender.input_sender(), |msg| match msg {
+                run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
+            });
+
+        let config_dialog = config_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                config_dialog::DialogOutput::Accepted(config, strategy, params) => {
+                    ColloscopeInput::ConductorConfigAccepted(config, strategy, params)
+                }
+                config_dialog::DialogOutput::Cancelled => ColloscopeInput::ConductorConfigCancelled,
+            });
+
+        let loading_dialog = loading_dialog::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                loading_dialog::DialogOutput::ModelReady(model, payload) => {
+                    ColloscopeInput::ModelBuilt(model, payload)
+                }
+            });
+
         let model = Colloscope {
             params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
@@ -413,8 +598,18 @@ impl Component for Colloscope {
             colloscope_display,
             interrogation_dialog,
             edited_interrogation: None,
-            computation_state: None,
             blame_dialog,
+            run_solver_dialog,
+            config_dialog,
+            loading_dialog,
+            solve_config: collomatique_constraints_colloscopes::SolveConfig::default(),
+            strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
+            last_update: None,
+            computation_artifact: None,
+            inflight_cmd: InflightCommand {
+                debouncing: false,
+                computation: InflightComputation::None,
+            },
         };
 
         let list_box = model.group_list_entries.widget();
@@ -429,26 +624,18 @@ impl Component for Colloscope {
             ColloscopeInput::Update(params, colloscope) => {
                 self.params = params;
                 self.colloscope = colloscope;
+                self.last_update = Some(std::time::Instant::now());
 
-                match &self.computation_state {
-                    None => {
-                        self.debounce_compute(sender.clone());
-                    }
-                    Some(ComputationState::ResultAvailable(Ok(ilp_repr))) => {
-                        if ilp_repr.ilp_problem.env != self.params {
-                            self.debounce_compute(sender.clone());
-                        } else if ilp_repr.colloscope != self.colloscope {
-                            let ilp_problem = ilp_repr.ilp_problem.clone();
-                            self.recompute_warnings(sender.clone(), ilp_problem);
-                        }
-                    }
-                    Some(_) => {
-                        self.debounce_compute(sender.clone());
-                    }
+                // (Re)arm the debounce so the UI shows "En attente des données...".
+                // The debounce timer, when it fires, drives the choke point; we do
+                // not call it directly here.
+                if !self.inflight_cmd.debouncing {
+                    self.launch_debounce(sender.clone());
                 }
 
                 self.update_group_list_entries();
                 self.update_colloscope_display();
+                self.notify_children(&sender);
             }
             ColloscopeInput::EditGroupList(group_list_id) => {
                 self.edited_group_list = Some(group_list_id);
@@ -463,14 +650,13 @@ impl Component for Colloscope {
                             .cloned()
                             .expect("Group list ID should be valid"),
                         self.colloscope
-                            .group_lists
-                            .get(&group_list_id)
+                            .group_list(group_list_id)
                             .cloned()
-                            .expect("Group list ID should be valid"),
+                            .unwrap_or_default(),
                     ))
                     .unwrap();
             }
-            ColloscopeInput::GroupListAccepted(collo_group_list) => {
+            ColloscopeInput::GroupListAccepted(groups_for_students) => {
                 let group_list_id = self
                     .edited_group_list
                     .take()
@@ -479,73 +665,83 @@ impl Component for Colloscope {
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeGroupList(
                             group_list_id,
-                            collo_group_list,
+                            groups_for_students,
                         ),
                     ))
                     .unwrap();
             }
-            ColloscopeInput::EditInterrogation(slot_id, period_id, week_in_period) => {
-                self.edited_interrogation = Some((slot_id, period_id, week_in_period));
+            ColloscopeInput::EditInterrogation(slot_id, week_id) => {
+                // The edit is only meaningful on a possible interrogation cell.
+                if !self.params.is_interrogation_possible(slot_id, week_id) {
+                    return;
+                }
+                self.edited_interrogation = Some((slot_id, week_id));
 
+                let (period_id, _pos) = self
+                    .params
+                    .weeks
+                    .week_position(week_id)
+                    .expect("week id should be valid");
                 let (subject_id, _pos) = self
                     .params
                     .slots
                     .find_slot_subject_and_position(slot_id)
                     .expect("Slot ID should be valid");
-                let period_associations = self
+                let group_list_id = self
                     .params
                     .group_lists
                     .subjects_associations
-                    .get(&period_id)
-                    .expect("Period ID should be valid");
-                let group_list_id = period_associations
-                    .get(&subject_id)
+                    .get(&(period_id, subject_id))
                     .expect("A group list is needed to be able to edit a slot");
                 let group_list = self
                     .params
                     .group_lists
                     .group_list_map
                     .get(group_list_id)
-                    .expect("Group list ID should be valid")
-                    .clone();
+                    .expect("Group list ID should be valid");
 
-                let collo_period = self
+                // « Groupe 3 » or « Groupe 3 : B2 » — the number always shows
+                // here, because it is what the colloscope cell stores.
+                let group_titles: Vec<_> = (0..group_list.params().group_names.len() as u32)
+                    .map(|num| {
+                        let name = collomatique_ui_text::rendering::render_group_name(
+                            &self.params.group_lists,
+                            *group_list_id,
+                            num,
+                        )
+                        .expect("the group comes from the document being displayed");
+                        match name {
+                            Some(name) => format!("Groupe {} : {}", num + 1, name),
+                            None => format!("Groupe {}", num + 1),
+                        }
+                    })
+                    .collect();
+
+                let assigned_groups = self
                     .colloscope
-                    .period_map
-                    .get(&period_id)
-                    .expect("Period ID should be valid");
-                let collo_slot = collo_period
-                    .slot_map
-                    .get(&slot_id)
-                    .expect("Slot ID should be valid for this period");
-                let interrogation_opt = collo_slot
-                    .interrogations
-                    .get(week_in_period)
-                    .expect("Week number should be valid");
-                let interrogation = interrogation_opt
-                    .clone()
-                    .expect("There should be an interrogation to edit!");
+                    .interrogation(slot_id, week_id)
+                    .cloned()
+                    .unwrap_or_default();
 
                 self.interrogation_dialog
                     .sender()
                     .send(interrogation_dialog::DialogInput::Show(
-                        group_list,
-                        interrogation,
+                        group_titles,
+                        assigned_groups,
                     ))
                     .unwrap();
             }
-            ColloscopeInput::InterrogationAccepted(interrogation) => {
-                let (slot_id, period_id, week_in_period) = self
+            ColloscopeInput::InterrogationAccepted(assigned_groups) => {
+                let (slot_id, week_id) = self
                     .edited_interrogation
                     .take()
                     .expect("Interrogation information should have been stored for edition");
                 sender
                     .output(ColloscopeOutput::UpdateOp(
                         ColloscopeUpdateOp::UpdateColloscopeInterrogation(
-                            period_id,
                             slot_id,
-                            week_in_period,
-                            interrogation,
+                            week_id,
+                            assigned_groups,
                         ),
                     ))
                     .unwrap();
@@ -565,9 +761,81 @@ impl Component for Colloscope {
                     .unwrap();
             }
             ColloscopeInput::SolveColloscopeClicked => {
-                sender
-                    .output(ColloscopeOutput::SolveColloscopeClicked)
+                // The model is (re)built at solve time from the current parameters, so this no
+                // longer depends on the debounce artifact being ready. The solve dialogs are
+                // modal and freeze `params`, so the built model matches what is on screen.
+                self.config_dialog
+                    .sender()
+                    .send(config_dialog::DialogInput::Show(
+                        self.solve_config.clone(),
+                        self.strategy.clone(),
+                        self.params.clone(),
+                    ))
                     .unwrap();
+            }
+            ColloscopeInput::ConductorConfigAccepted(config, strategy, params) => {
+                // Configuration confirmed: persist the config and strategy so the next solve
+                // reopens pre-primed, then build the (possibly refined) model for this solve in
+                // the loading dialog, which streams the build log and hands back the model.
+                self.solve_config = config.clone();
+                self.strategy = strategy;
+                self.loading_dialog
+                    .sender()
+                    .send(loading_dialog::DialogInput::Show(
+                        config,
+                        params,
+                        self.colloscope.clone(),
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::ModelBuilt(model, payload) => {
+                // The model has been built: launch the solver with the stored strategy and the
+                // incremental epoch payload.
+                self.run_solver_dialog
+                    .sender()
+                    .send(run_solver::DialogInput::Run(
+                        self.strategy.clone(),
+                        model,
+                        payload,
+                    ))
+                    .unwrap();
+            }
+            ColloscopeInput::ConductorConfigCancelled => {
+                // The solve was abandoned before it started; nothing to undo.
+            }
+            ColloscopeInput::ResetSolveConfig => {
+                // A new document was loaded; drop the previous file's stored config and strategy
+                // back to the defaults so the config dialog reopens on the parallel default.
+                self.solve_config = collomatique_constraints_colloscopes::SolveConfig::default();
+                self.strategy =
+                    collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
+            }
+            ColloscopeInput::SolveResult(config_data) => {
+                // Translate the raw ILP config back into a colloscope, using the
+                // current problem (still the dispatched one thanks to modal dialogs).
+                if let Some(ilp_problem) = self.get_ilp_problem() {
+                    // Drop the non-base variables straight from the config the solver returned,
+                    // rather than rebuilding and re-checking a full Solution (~100ms on the UI
+                    // thread) only to throw it away and keep the base values. The solved config
+                    // is over the *configured* model's variables, so strip to base variables
+                    // directly (the base export model's extra space no longer matches).
+                    let base_config = config_data.filter_transmute(|var| match var {
+                        collomatique_constraints_colloscopes::InternalVar::Base(b) => {
+                            Some(b.clone())
+                        }
+                        _ => None,
+                    });
+                    if let Some(colloscope) =
+                        collomatique_constraints_colloscopes::convert::build_colloscope(
+                            &ilp_problem.env,
+                            &base_config,
+                        )
+                    {
+                        sender
+                            .output(ColloscopeOutput::NewColloscope(colloscope))
+                            .unwrap();
+                    }
+                }
             }
             ColloscopeInput::ShowBlamedConstraints => {
                 self.blame_dialog
@@ -585,45 +853,88 @@ impl Component for Colloscope {
         _root: &Self::Root,
     ) {
         match message {
-            ColloscopeCommandOutput::IlpProblemComputed(result) => {
-                match result {
-                    Ok(ilp_problem) => {
-                        if ilp_problem.env != self.params {
-                            return; // Ignore old computation that are no longer relevant
-                        }
-                        self.recompute_warnings(sender, ilp_problem);
-                    }
-                    Err(msg) => {
-                        self.update_ilp_repr(ComputationState::ResultAvailable(Err(msg)), &sender);
-                    }
+            ColloscopeCommandOutput::DebounceElapsed => {
+                self.inflight_cmd.debouncing = false;
+            }
+            ColloscopeCommandOutput::IlpProblemComputed { env, result } => {
+                self.inflight_cmd.computation = InflightComputation::None;
+                // Keep the result only if it still matches the latest `Update`;
+                // otherwise discard it (the choke point will rebuild as needed).
+                if env == self.params {
+                    self.computation_artifact = Some(match result {
+                        Ok(problem) => ComputationArtifact::Built {
+                            ilp_problem: IlpProblem { env, problem },
+                            ilp_repr: None,
+                        },
+                        Err(message) => ComputationArtifact::BuildFailed { env, message },
+                    });
                 }
             }
             ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
-                if ilp_repr.ilp_problem.env != self.params {
-                    return; // Ignore old computation that are no longer relevant
-                }
-                self.update_ilp_repr(ComputationState::ResultAvailable(Ok(ilp_repr)), &sender);
-            }
-            ColloscopeCommandOutput::DebouncedStart(instant) => {
-                if matches!(
-                    &self.computation_state,
-                    Some(ComputationState::Debouncing(t)) if *t == instant
-                ) {
-                    self.compute_ilp_repr(sender);
+                self.inflight_cmd.computation = InflightComputation::None;
+                // Attach the verification only if the problem is still the one it
+                // was computed against and the colloscope still matches.
+                if ilp_repr.colloscope == self.colloscope {
+                    if let Some(ComputationArtifact::Built {
+                        ilp_problem,
+                        ilp_repr: slot,
+                    }) = &mut self.computation_artifact
+                    {
+                        if ilp_problem.env == self.params {
+                            *slot = Some(ilp_repr);
+                        }
+                    }
                 }
             }
         }
+
+        self.check_state_and_launch_computation(sender.clone());
+        self.notify_children(&sender);
     }
 }
 
 impl Colloscope {
-    fn recompute_warnings(&mut self, sender: ComponentSender<Self>, ilp_problem: IlpProblem) {
-        self.update_ilp_repr(ComputationState::RecomputingWarnings, &sender);
+    /// (Re)arm the debounce timer. At most one timer exists at a time, so this
+    /// must only be called when no timer is already running.
+    fn launch_debounce(&mut self, sender: ComponentSender<Self>) {
+        assert!(!self.inflight_cmd.debouncing);
+        self.inflight_cmd.debouncing = true;
 
-        let inner_problem = ilp_problem.problem.get_inner_problem().clone();
-        sender
-            .output(ColloscopeOutput::UpdateIlpProblem(Some(inner_problem)))
-            .unwrap();
+        sender.oneshot_command(async move {
+            tokio::time::sleep(DEBOUNCE_DURATION).await;
+            ColloscopeCommandOutput::DebounceElapsed
+        });
+    }
+
+    /// Build the ILP model from the current parameters/colloscope. Requires that
+    /// no computation is already in flight.
+    fn launch_ilp_problem(&mut self, sender: ComponentSender<Self>) {
+        assert!(self.inflight_cmd.computation == InflightComputation::None);
+        self.inflight_cmd.computation = InflightComputation::IlpProblem;
+
+        let params = self.params.clone();
+
+        sender.spawn_oneshot_command(move || {
+            let result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String> =
+                Ok(collomatique_constraints_colloscopes::build_model(&params));
+
+            ColloscopeCommandOutput::IlpProblemComputed {
+                env: params,
+                result,
+            }
+        });
+    }
+
+    /// Verify the current colloscope against the built ILP problem, producing the
+    /// warnings. Requires no computation in flight and a successfully built
+    /// problem in the artifact.
+    fn launch_ilp_repr(&mut self, sender: ComponentSender<Self>) {
+        assert!(self.inflight_cmd.computation == InflightComputation::None);
+        let ilp_problem = match &self.computation_artifact {
+            Some(ComputationArtifact::Built { ilp_problem, .. }) => ilp_problem.clone(),
+            _ => panic!("launch_ilp_repr requires a built ILP problem"),
+        };
+        self.inflight_cmd.computation = InflightComputation::IlpRepr;
 
         let colloscope = self.colloscope.clone();
 
@@ -632,109 +943,140 @@ impl Colloscope {
                 &ilp_problem.env,
                 &colloscope,
             );
-            let solver = collomatique_ilp::solvers::coin_cbc::CbcSolver::with_disable_logging(true);
+            let solver =
+                collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
             let sol = ilp_problem
                 .problem
-                .solution_from_data(&config_data, &solver)
+                .checker_solution_from_data(&config_data, &solver)
                 .expect("There should be a complete ilp config for the colloscope");
-            let warnings = sol
-                .blame()
-                .filter_map(|(_constraint, desc)| match desc {
-                    ConstraintSource::User(desc) => Some(desc.user_readable(&ilp_problem.env)),
-                    ConstraintSource::DefiningExtra { .. } => None,
-                })
+            let mut warnings: Vec<_> = sol
+                .minimal_blame()
+                .iter()
+                .map(|desc| (desc.severity_level(), desc.user_readable(&ilp_problem.env)))
                 .collect();
+            warnings.sort_by_key(|(s, _)| *s);
             ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
-                ilp_problem,
                 colloscope,
                 warnings,
             })
         });
     }
 
-    fn debounce_compute(&mut self, sender: ComponentSender<Self>) {
-        let instant = std::time::Instant::now();
-        self.update_ilp_repr(ComputationState::Debouncing(instant.clone()), &sender);
-
-        sender.oneshot_command(async move {
-            tokio::time::sleep(DEBOUNCE_DURATION).await;
-            ColloscopeCommandOutput::DebouncedStart(instant)
-        });
-    }
-
-    fn compute_ilp_repr(&mut self, sender: ComponentSender<Self>) {
-        self.update_ilp_repr(ComputationState::ComputingConstraints, &sender);
-
-        let params = self.params.clone();
-        let colloscope = self.colloscope.clone();
-
-        sender.oneshot_command(async move {
-            let result: Result<IlpProblem, String> = async {
-                let inner_data = collomatique_state_colloscopes::InnerData {
-                    params,
-                    colloscope,
-                    ..Default::default()
-                };
-                let env = inner_data.params.clone();
-
-                let pool = sqlx::SqlitePool::connect(":memory:")
-                    .await
-                    .map_err(|e| format!("{}", e))?;
-                collomatique_sqlite_state::create_schema(&pool)
-                    .await
-                    .map_err(|e| format!("{}", e))?;
-                collomatique_sqlite_state::inner_data_to_sqlite(&pool, &inner_data)
-                    .await
-                    .map_err(|e| format!("{}", e))?;
-
-                let problem = collomatique_constraints_colloscopes::build_problem(&pool).await;
-                Ok(IlpProblem { env, problem })
-            }
-            .await;
-
-            match result {
-                Ok(ilp_problem) => ColloscopeCommandOutput::IlpProblemComputed(Ok(ilp_problem)),
-                Err(msg) => ColloscopeCommandOutput::IlpProblemComputed(Err(msg)),
-            }
-        });
-    }
-
-    fn update_blame_dialog(&self) {
-        let ilp_repr_opt = match &self.computation_state {
-            Some(ComputationState::Debouncing(_)) => blame_dialog::ComputationState::Debouncing,
-            Some(ComputationState::ComputingConstraints) => {
-                blame_dialog::ComputationState::ComputingConstraints
-            }
-            Some(ComputationState::RecomputingWarnings) => {
-                blame_dialog::ComputationState::RecomputingWarnings
-            }
-            Some(ComputationState::ResultAvailable(r)) => {
-                blame_dialog::ComputationState::ResultAvailable(
-                    r.as_ref()
-                        .map(|x| x.warnings.clone())
-                        .map_err(|e| e.clone()),
-                )
-            }
-            None => blame_dialog::ComputationState::ComputingConstraints,
+    /// The single choke point deciding what to compute next. Called after every
+    /// command message (debounce timer or a completed computation). It compares
+    /// the artifact against the latest `Update` data and launches at most one
+    /// computation (or re-arms the debounce).
+    fn check_state_and_launch_computation(&mut self, sender: ComponentSender<Self>) {
+        let Some(last_update) = self.last_update else {
+            return; // No data received yet.
         };
 
-        self.blame_dialog
-            .sender()
-            .send(blame_dialog::DialogInput::Update(ilp_repr_opt))
-            .unwrap();
+        let quiet_elapsed = last_update.elapsed() >= DEBOUNCE_DURATION;
+        let slot_free = self.inflight_cmd.computation == InflightComputation::None;
+
+        // Not ready to act: either we are still within the debounce window, or a
+        // (possibly now-stale) computation still occupies the single slot. In both
+        // cases keep debouncing, so the latest data stays marked stale until we
+        // can rebuild for it. The running command (or the timer) will call us
+        // again once it completes.
+        if !quiet_elapsed || !slot_free {
+            if !self.inflight_cmd.debouncing {
+                self.launch_debounce(sender);
+            }
+            return;
+        }
+
+        // The slot is free and enough time has passed, but a debounce timer is
+        // still pending; wait for it to fire and re-resolve the state.
+        if self.inflight_cmd.debouncing {
+            return;
+        }
+
+        // Settled: reconcile the artifact with the current data and launch the
+        // next step if needed.
+        enum Next {
+            BuildProblem,
+            BuildRepr,
+            Nothing,
+        }
+
+        let next = match &self.computation_artifact {
+            None => Next::BuildProblem,
+            Some(artifact) if *artifact.env() != self.params => Next::BuildProblem,
+            Some(ComputationArtifact::BuildFailed { .. }) => Next::Nothing,
+            Some(ComputationArtifact::Built { ilp_repr: None, .. }) => Next::BuildRepr,
+            Some(ComputationArtifact::Built {
+                ilp_repr: Some(ilp_repr),
+                ..
+            }) => {
+                if ilp_repr.colloscope != self.colloscope {
+                    Next::BuildRepr
+                } else {
+                    Next::Nothing
+                }
+            }
+        };
+
+        match next {
+            Next::BuildProblem => {
+                // The current artifact (if any) is stale for the new parameters.
+                self.computation_artifact = None;
+                self.launch_ilp_problem(sender);
+            }
+            Next::BuildRepr => {
+                // Invalidate any stale verification before recomputing it.
+                if let Some(ComputationArtifact::Built { ilp_repr, .. }) =
+                    &mut self.computation_artifact
+                {
+                    *ilp_repr = None;
+                }
+                self.launch_ilp_repr(sender);
+            }
+            Next::Nothing => {}
+        }
     }
 
-    fn update_ilp_repr(&mut self, new_state: ComputationState, sender: &ComponentSender<Self>) {
-        self.computation_state = Some(new_state);
-        match &self.computation_state {
-            Some(ComputationState::Debouncing(_) | ComputationState::ComputingConstraints) => {
-                sender
-                    .output(ColloscopeOutput::UpdateIlpProblem(None))
-                    .unwrap();
+    /// Push the current computation phase to the child components (blame dialog
+    /// and export panel).
+    fn notify_children(&self, sender: &ComponentSender<Self>) {
+        let blame_state = if self.inflight_cmd.debouncing || self.last_update.is_none() {
+            blame_dialog::ComputationState::Debouncing
+        } else {
+            match self.inflight_cmd.computation {
+                InflightComputation::IlpProblem => {
+                    blame_dialog::ComputationState::ComputingConstraints
+                }
+                InflightComputation::IlpRepr => blame_dialog::ComputationState::RecomputingWarnings,
+                InflightComputation::None => match &self.computation_artifact {
+                    Some(ComputationArtifact::BuildFailed { message, .. }) => {
+                        blame_dialog::ComputationState::ResultAvailable(Err(message.clone()))
+                    }
+                    Some(ComputationArtifact::Built {
+                        ilp_repr: Some(ilp_repr),
+                        ..
+                    }) => blame_dialog::ComputationState::ResultAvailable(Ok(ilp_repr
+                        .warnings
+                        .clone())),
+                    // Transient state between deciding and launching a computation.
+                    _ => blame_dialog::ComputationState::ComputingConstraints,
+                },
             }
-            _ => {}
-        }
-        self.update_blame_dialog();
+        };
+        self.blame_dialog
+            .sender()
+            .send(blame_dialog::DialogInput::Update(blame_state))
+            .unwrap();
+
+        // Just re-send the current inner problem on every notify rather than
+        // caching whether it changed. Cloning is not free, but availability only
+        // flips a handful of times per computation cycle (and `None` during
+        // debounce is cheap), so it is not worth a cache whose correctness would
+        // hinge on the fragile invariant that the problem only ever changes while
+        // unavailable.
+        let inner = self.get_ilp_problem().map(|p| p.problem.problem().clone());
+        sender
+            .output(ColloscopeOutput::UpdateIlpProblem(inner))
+            .unwrap();
     }
 
     fn update_group_list_entries(&mut self) {
@@ -745,19 +1087,14 @@ impl Colloscope {
             .iter()
             .filter(|(_id, group_list)| !group_list.is_prefilled())
             .map(|(id, group_list)| group_lists_display::EntryData {
-                id: *id,
+                id,
                 group_list: group_list.clone(),
-                collo_group_list: self
-                    .colloscope
-                    .group_lists
-                    .get(id)
-                    .expect("Non-prefilled group list should have colloscope entry")
-                    .clone(),
+                groups_for_students: self.colloscope.group_list(id).cloned().unwrap_or_default(),
                 total_student_count: self.params.students.student_map.len(),
             })
             .collect();
 
-        group_lists_vec.sort_by_key(|data| (data.group_list.params.name.clone(), data.id));
+        group_lists_vec.sort_by_key(|data| (data.group_list.params().name.clone(), data.id));
 
         crate::tools::factories::update_vec_deque(
             &mut self.group_list_entries,
@@ -771,11 +1108,13 @@ impl Colloscope {
             .sender()
             .send(colloscope_display::DisplayInput::Update(
                 self.params.periods.clone(),
+                self.params.weeks.clone(),
                 self.params.subjects.clone(),
                 self.params.slots.clone(),
                 self.params.teachers.clone(),
                 self.params.students.clone(),
                 self.params.group_lists.clone(),
+                self.params.week_patterns.clone(),
                 self.colloscope.clone(),
             ))
             .unwrap();

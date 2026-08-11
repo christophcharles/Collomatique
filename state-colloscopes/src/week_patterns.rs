@@ -2,91 +2,191 @@
 //!
 //! This module defines the relevant types to describes the week patterns
 
-use std::collections::BTreeMap;
+use std::collections::BTreeSet;
 
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
-use crate::ids::WeekPatternId;
+use collomatique_state::{ContentOrd, References};
+
+use crate::Table;
+use crate::ids::{WeekId, WeekPatternId};
+use crate::ops::AnnotatedWeekPatternOp;
 
 /// Description of the week patterns
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct WeekPatterns {
     /// Week patterns
     ///
-    /// Each item associate to a single ID a sequence of weeks
-    pub week_pattern_map: BTreeMap<WeekPatternId, WeekPattern>,
-}
-
-impl WeekPatterns {
-    pub(crate) fn get_pattern(&self, week_pattern_id: WeekPatternId) -> Vec<bool> {
-        self.week_pattern_map
-            .get(&week_pattern_id)
-            .expect("Week pattern id must be valid for get_pattern")
-            .weeks
-            .clone()
-    }
+    /// Each item associates a single ID with the set of weeks it disables.
+    pub week_pattern_map: Table<WeekPatternId, WeekPattern>,
 }
 
 /// Description of a week pattern
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+///
+/// A pattern is stored as the *exception set* of the weeks it disables; every
+/// week not listed is active. This is the sparse dual of the historical
+/// positional bitmask.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, References, ContentOrd)]
 pub struct WeekPattern {
     /// Name of the week pattern for identification
     pub name: String,
-    /// Weeks the interrogation happens on
+    /// Weeks the pattern *disables*. Absent = active (the trivial value).
     ///
-    /// If the Vec is shorter than the total amount of weeks
-    /// it is assumed the interrogation happens on all the
-    /// remaining weeks.
-    ///
-    /// If the Vec is longer, the extra weeks are ignored
-    /// They are kept in case some one expands again the number of weeks.
-    pub weeks: Vec<bool>,
+    /// May reference non-interrogation weeks: the bit is preserved regardless
+    /// of the week's `interrogations` flag (byte-stability, decision 12). The
+    /// merged activity of a week is `week.interrogations ∧ ¬excluded`.
+    #[fk]
+    pub excluded_weeks: BTreeSet<WeekId>,
 }
 
-impl WeekPattern {
-    pub fn add_weeks(&mut self, first_week: usize, week_count: usize) {
-        assert!(self.weeks.len() >= first_week);
-
-        self.weeks
-            .splice(first_week..first_week, vec![true; week_count]);
+impl WeekPatterns {
+    /// The single definition of "a slot can carry an interrogation on `week`":
+    /// the week runs interrogations and is not excluded by the given pattern (or
+    /// there is no pattern). Homed here so consumers holding only a `Weeks` +
+    /// `WeekPatterns` pair — e.g. the gtk4 colloscope grid — can call it;
+    /// [`super::colloscope_params::Parameters::is_week_active`] delegates to it.
+    ///
+    /// Returns `false` for a dangling week id; a dangling pattern id is treated
+    /// as "no exclusion". Both are bugs on validated data.
+    pub fn is_week_active(
+        &self,
+        weeks: &super::weeks::Weeks,
+        week: WeekId,
+        pattern: Option<WeekPatternId>,
+    ) -> bool {
+        let Some(week_desc) = weeks.find_week(week) else {
+            return false;
+        };
+        week_desc.interrogations
+            && pattern.is_none_or(|p| {
+                self.week_pattern_map
+                    .get(&p)
+                    .is_none_or(|wp| !wp.excluded_weeks.contains(&week))
+            })
     }
+}
 
-    pub fn clean_weeks(&mut self, first_week: usize, week_count: usize) {
-        assert!(self.weeks.len() > first_week);
-
-        let last_week = first_week + week_count;
-        assert!(self.weeks.len() >= last_week);
-
-        for week in &mut self.weeks[first_week..last_week] {
-            *week = true;
-        }
-    }
-
-    pub fn remove_weeks(&mut self, first_week: usize, week_count: usize) {
-        assert!(self.weeks.len() > first_week);
-
-        let last_week = first_week + week_count;
-        assert!(self.weeks.len() >= last_week);
-
-        for week in &self.weeks[first_week..last_week] {
-            assert!(*week);
-        }
-
-        self.weeks.splice(first_week..last_week, vec![]);
-    }
-
-    pub fn can_remove_weeks(&self, first_week: usize, week_count: usize) -> bool {
-        assert!(self.weeks.len() > first_week);
-
-        let last_week = first_week + week_count;
-        assert!(self.weeks.len() >= last_week);
-
-        for week in &self.weeks[first_week..last_week] {
-            if !*week {
-                return false;
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl WeekPatterns {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (week_pattern_id, week_pattern) in self.week_pattern_map.iter() {
+            ids.insert(week_pattern_id.inner());
+            for week_id in &week_pattern.excluded_weeks {
+                ids.insert(week_id.inner());
             }
         }
+    }
 
-        true
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        WeekPatterns {
+            week_pattern_map: self
+                .week_pattern_map
+                .into_iter()
+                .map(|(week_pattern_id, week_pattern)| {
+                    let WeekPattern {
+                        name,
+                        excluded_weeks,
+                    } = week_pattern;
+                    (
+                        remap(map, week_pattern_id),
+                        WeekPattern {
+                            name,
+                            excluded_weeks: excluded_weeks
+                                .into_iter()
+                                .map(|week_id| remap(map, week_id))
+                                .collect(),
+                        },
+                    )
+                })
+                .collect(),
+        }
+    }
+}
+
+/// Precondition errors of the forced week-pattern ops — the carve-out subset
+/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
+/// `validate_week_pattern` and the reference scans are stripped.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum WeekPatternPrecheckError {
+    /// A week pattern id is invalid
+    #[error("invalid week pattern id ({0:?})")]
+    InvalidWeekPatternId(WeekPatternId),
+
+    /// The week pattern id already exists
+    #[error("week pattern id ({0:?}) already exists")]
+    WeekPatternIdAlreadyExists(WeekPatternId),
+}
+
+impl crate::Data {
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Force-applies a week-pattern op: carve-out guards kept (returned
+    /// as [WeekPatternPrecheckError]), invariant guards stripped (step-3 survey
+    /// Table 1). May leave the state invalid; the caller owns checking and
+    /// rollback.
+    pub(crate) fn force_apply_week_pattern(
+        &mut self,
+        week_pattern_op: &AnnotatedWeekPatternOp,
+    ) -> std::result::Result<AnnotatedWeekPatternOp, WeekPatternPrecheckError> {
+        match week_pattern_op {
+            AnnotatedWeekPatternOp::Add(new_id, week_pattern) => {
+                if self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .contains(new_id)
+                {
+                    return Err(WeekPatternPrecheckError::WeekPatternIdAlreadyExists(
+                        *new_id,
+                    ));
+                }
+
+                // stripped: validate_week_pattern
+
+                self.inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .insert(*new_id, week_pattern.clone());
+
+                Ok(AnnotatedWeekPatternOp::Remove(*new_id))
+            }
+            AnnotatedWeekPatternOp::Remove(id) => {
+                // stripped: slot-reference / incompat-reference scans
+                let Some(old_week_pattern) = self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .remove(id)
+                else {
+                    return Err(WeekPatternPrecheckError::InvalidWeekPatternId(*id));
+                };
+
+                Ok(AnnotatedWeekPatternOp::Add(*id, old_week_pattern))
+            }
+            AnnotatedWeekPatternOp::Update(id, new_week_pattern) => {
+                // stripped: validate_week_pattern + the colloscope silencing guard
+                let Some(current_week_pattern) = self
+                    .inner_data
+                    .params
+                    .week_patterns
+                    .week_pattern_map
+                    .get_mut(id)
+                else {
+                    return Err(WeekPatternPrecheckError::InvalidWeekPatternId(*id));
+                };
+
+                let old_week_pattern =
+                    std::mem::replace(current_week_pattern, new_week_pattern.clone());
+
+                Ok(AnnotatedWeekPatternOp::Update(*id, old_week_pattern))
+            }
+        }
     }
 }

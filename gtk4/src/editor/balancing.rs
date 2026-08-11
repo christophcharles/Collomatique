@@ -68,7 +68,7 @@ impl Component for Balancing {
                         set_margin_all: 5,
                         set_spacing: 5,
                         gtk::Button {
-                            set_icon_name: "edit-symbolic",
+                            set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Modifier les paramètres globaux d'équilibrage"),
                             connect_clicked => BalancingInput::EditGlobalOptions,
@@ -81,8 +81,10 @@ impl Component for Balancing {
                             set_xalign: 0.,
                             set_margin_start: 5,
                             set_margin_end: 5,
+                            set_ellipsize: gtk::pango::EllipsizeMode::End,
+                            set_width_chars: 20,
+                            set_max_width_chars: 20,
                             set_label: "Paramètres globaux",
-                            set_size_request: (200, -1),
                         },
                         gtk::Separator {
                             set_orientation: gtk::Orientation::Vertical,
@@ -230,7 +232,7 @@ impl Balancing {
             .ordered_subject_list
             .iter()
             .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
-            .map(|(id, subject)| (*id, subject.parameters.name.clone()))
+            .map(|(id, subject)| (id, subject.parameters.name.clone()))
             .collect();
 
         subjects.sort_by_key(|(id, name)| (name.clone(), *id));
@@ -249,44 +251,47 @@ impl Balancing {
     }
 }
 
+// The parenthetical qualifies the constraint itself, so it stays feminine
+// whatever the goal it is appended to.
 fn soft_constraint_symbol(soft: bool) -> &'static str {
     if soft { "(souple)" } else { "(stricte)" }
 }
 
 fn options_to_string(options: &BalancingOptions) -> String {
+    // Only the goals that are actually pursued get an entry, soft ones
+    // included. A goal that is off is not a constraint, so it says nothing.
     let mut parts = vec![];
-    if let Some(tr) = &options.teacher_rotation {
+
+    if let Some(param) = &options.teacher_rotation {
         parts.push(format!(
             "rotation des colleurs {}",
-            soft_constraint_symbol(tr.soft)
+            soft_constraint_symbol(param.soft)
         ));
     }
-    if let Some(sr) = &options.slot_rotation {
+    if let Some(param) = &options.slot_rotation {
         parts.push(format!(
             "rotation des créneaux {}",
-            soft_constraint_symbol(sr.soft)
+            soft_constraint_symbol(param.soft)
         ));
     }
-    if let Some(at) = &options.avoid_twice_in_a_row {
+    if let Some(param) = &options.avoid_twice_in_a_row {
         parts.push(format!(
             "éviter 2× de suite le même colleur {}",
-            soft_constraint_symbol(at.soft)
+            soft_constraint_symbol(param.soft)
         ));
     }
-    if let Some(ytr) = &options.year_teacher_rotation {
-        parts.push(format!(
-            "rotation annuelle des colleurs {}",
-            soft_constraint_symbol(ytr.soft)
-        ));
+
+    // The year and period rotations are plain strictness booleans with no soft
+    // mode, so they carry no symbol.
+    if options.year_teacher_rotation {
+        parts.push(String::from("rotation annuelle des colleurs"));
     }
-    if let Some(ptr) = &options.period_teacher_rotation {
-        parts.push(format!(
-            "rotation des colleurs par période {}",
-            soft_constraint_symbol(ptr.soft)
-        ));
+    if options.period_teacher_rotation {
+        parts.push(String::from("rotation des colleurs par période"));
     }
+
     if parts.is_empty() {
-        "aucune contrainte".into()
+        String::from("aucune contrainte")
     } else {
         parts.join("    ―    ")
     }
@@ -320,7 +325,7 @@ pub enum SubjectEntryOutput {
 impl SubjectEntry {
     fn generate_edit_tooltip_text(&self) -> String {
         format!(
-            "Modifier les paramètres d'équilibrage de {}",
+            "Modifier les paramètres d'équilibrage strict de {}",
             self.data.subject_name,
         )
     }
@@ -356,7 +361,7 @@ impl FactoryComponent for SubjectEntry {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => SubjectEntryInput::EditClicked,
                 #[watch]
@@ -370,9 +375,13 @@ impl FactoryComponent for SubjectEntry {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.subject_name,
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.subject_name),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,

@@ -6,17 +6,18 @@ use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidget
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
-    pub global_first_week: Option<collomatique_time::WeekStart>,
-    pub first_week_num: usize,
-    pub desc: Vec<collomatique_state_colloscopes::periods::WeekDesc>,
+    /// The period as [collomatique_ui_text::rendering::render_period] names it,
+    /// rendered by the panel that holds the document.
+    pub title: String,
+    /// One `(week title, week state)` pair per week of the period, in order.
+    pub weeks: Vec<(String, collomatique_state_colloscopes::weeks::WeekDesc)>,
     pub period_id: collomatique_state_colloscopes::PeriodId,
 }
 
 #[derive(Debug)]
 pub struct Entry {
     index: DynamicIndex,
-    global_first_week: Option<collomatique_time::WeekStart>,
-    first_week_num: usize,
+    title: String,
     period_id: collomatique_state_colloscopes::PeriodId,
     weeks: FactoryVecDeque<Week>,
 }
@@ -46,32 +47,20 @@ pub enum EntryOutput {
 
 impl Entry {
     fn generate_title_text(&self) -> String {
-        let week_count = self.weeks.len();
-        let index = self.index.current_index();
-
-        format!(
-            "<b><big>{}</big></b>",
-            super::super::generate_period_title(
-                &self.global_first_week,
-                index,
-                self.first_week_num,
-                week_count
-            )
-        )
+        format!("<b><big>Période {}</big></b>", self.title)
     }
 
-    fn update_week(
-        global_first_week: Option<collomatique_time::WeekStart>,
-        first_week_in_period: usize,
-        week_num_in_period: usize,
-        state: collomatique_state_colloscopes::periods::WeekDesc,
-    ) -> WeekData {
-        WeekData {
-            global_first_week,
-            first_week_in_period,
-            week_num_in_period,
-            state,
-        }
+    fn week_data(
+        weeks: Vec<(String, collomatique_state_colloscopes::weeks::WeekDesc)>,
+    ) -> impl ExactSizeIterator<Item = WeekData> {
+        weeks
+            .into_iter()
+            .enumerate()
+            .map(|(week_num_in_period, (title, state))| WeekData {
+                title,
+                week_num_in_period,
+                state,
+            })
     }
 }
 
@@ -99,7 +88,7 @@ impl FactoryComponent for Entry {
                     set_use_markup: true,
                 },
                 gtk::Button {
-                    set_icon_name: "edit-symbolic",
+                    set_icon_name: "document-edit-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Modifier la période"),
                     connect_clicked => EntryInput::EditClicked,
@@ -114,7 +103,7 @@ impl FactoryComponent for Entry {
                     set_hexpand: true,
                 },
                 gtk::Button {
-                    set_icon_name: "go-up",
+                    set_icon_name: "go-up-symbolic",
                     add_css_class: "flat",
                     #[watch]
                     set_visible: self.index.current_index() != 0,
@@ -153,22 +142,14 @@ impl FactoryComponent for Entry {
 
         let mut model = Self {
             index: index.clone(),
-            global_first_week: data.global_first_week,
-            first_week_num: data.first_week_num,
+            title: data.title,
             period_id: data.period_id,
             weeks,
         };
 
         crate::tools::factories::update_vec_deque(
             &mut model.weeks,
-            data.desc.into_iter().enumerate().map(|(num, state)| {
-                Self::update_week(
-                    model.global_first_week.clone(),
-                    model.first_week_num,
-                    num,
-                    state,
-                )
-            }),
+            Self::week_data(data.weeks),
             WeekInput::UpdateData,
         );
 
@@ -191,19 +172,11 @@ impl FactoryComponent for Entry {
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             EntryInput::UpdateData(new_data) => {
-                self.global_first_week = new_data.global_first_week;
-                self.first_week_num = new_data.first_week_num;
+                self.title = new_data.title;
                 self.period_id = new_data.period_id;
                 crate::tools::factories::update_vec_deque(
                     &mut self.weeks,
-                    new_data.desc.into_iter().enumerate().map(|(num, state)| {
-                        Self::update_week(
-                            self.global_first_week.clone(),
-                            self.first_week_num,
-                            num,
-                            state,
-                        )
-                    }),
+                    Self::week_data(new_data.weeks),
                     WeekInput::UpdateData,
                 );
             }
@@ -243,10 +216,10 @@ impl FactoryComponent for Entry {
 
 #[derive(Debug, Clone)]
 pub struct WeekData {
-    pub global_first_week: Option<collomatique_time::WeekStart>,
-    pub first_week_in_period: usize,
+    /// The week as [collomatique_ui_text::rendering::render_week] names it.
+    pub title: String,
     pub week_num_in_period: usize,
-    pub state: collomatique_state_colloscopes::periods::WeekDesc,
+    pub state: collomatique_state_colloscopes::weeks::WeekDesc,
 }
 
 #[derive(Debug)]
@@ -270,8 +243,7 @@ pub enum WeekOutput {
 
 impl Week {
     fn generate_title_text(&self) -> String {
-        let week_number = self.data.first_week_in_period + self.data.week_num_in_period;
-        super::super::generate_week_title(&self.data.global_first_week, week_number)
+        format!("Semaine {}", self.data.title)
     }
 
     fn generate_annotation(&self) -> String {
@@ -323,7 +295,7 @@ impl FactoryComponent for Week {
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
             },
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 set_tooltip_text: Some("Modifier l'annotation"),
                 connect_clicked => WeekInput::EditAnnotationClicked,

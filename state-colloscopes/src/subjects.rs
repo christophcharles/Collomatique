@@ -4,21 +4,30 @@
 
 use serde::{Deserialize, Serialize};
 use std::{collections::BTreeSet, num::NonZeroU32};
+use thiserror::Error;
 
-use crate::ids::{PeriodId, SubjectId};
+use collomatique_state::{ContentOrd, Join, References};
+
+use crate::OrderedTable;
+use crate::ids::{NewId, PeriodId, SubjectId};
+use crate::non_empty_range::NonEmptyRangeInclusive;
+use crate::ops::AnnotatedSubjectOp;
 
 /// Description of the subjects
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, ContentOrd)]
 pub struct Subjects {
     /// Ordered list of subjects
     ///
     /// Each item represent a subject. It is described
     /// by a unique id and a description of type [Subject]
-    pub ordered_subject_list: Vec<(SubjectId, Subject)>,
+    pub ordered_subject_list: OrderedTable<SubjectId, Subject>,
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(
+    Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, References, Join, ContentOrd,
+)]
+#[join(error = NewId)]
 pub struct Subject {
     /// Parameters for the subject
     ///
@@ -28,11 +37,12 @@ pub struct Subject {
     /// Periods that should not be covered by the subject
     ///
     /// By default a subject is present for every period.
+    #[fk]
     pub excluded_periods: BTreeSet<PeriodId>,
 }
 
 /// Description of one subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct SubjectParameters {
     /// Name of the subject
     ///
@@ -46,7 +56,7 @@ pub struct SubjectParameters {
 }
 
 /// Description of the interrogations parameters for a subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct SubjectInterrogationParameters {
     /// Students per group
     ///
@@ -56,7 +66,7 @@ pub struct SubjectInterrogationParameters {
     /// This is not entirely fixed by the group list as
     /// the same group list can be used for different
     /// subjects and not all students must attend all subjects.
-    pub students_per_group: std::ops::RangeInclusive<NonZeroU32>,
+    pub students_per_group: NonEmptyRangeInclusive<NonZeroU32>,
     /// number of groups to have during a single interrogation
     ///
     /// an interrogation can always have no groups. But we can
@@ -74,8 +84,11 @@ pub struct SubjectInterrogationParameters {
     ///   be registered individually. But it might be possible to have several
     ///   students at the same time. Having group size of 1 student and several
     ///   groups at the same time can represent this situation.
-    pub groups_per_interrogation: std::ops::RangeInclusive<NonZeroU32>,
+    pub groups_per_interrogation: NonEmptyRangeInclusive<NonZeroU32>,
     /// Duration of an interrogation in minutes
+    // A scalar leaf whose type is foreign: same duration or incomparable.
+    // Shortening an interrogation is a change of value, not a removal.
+    #[ord(atom)]
     pub duration: collomatique_time::NonZeroMinutes,
     /// This is useful when we try to limit or regulate
     /// the number of interrogations a student has in a week.
@@ -93,7 +106,7 @@ pub struct SubjectInterrogationParameters {
 }
 
 /// Periodicity information for a subject
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub enum SubjectPeriodicity {
     /// The interrogation must happen once for every block of time
     ///
@@ -139,7 +152,7 @@ pub enum SubjectPeriodicity {
         ///
         /// The total amount can be in a range and it is technically possible
         /// to have a minimum of zero interrogations
-        interrogation_count_in_year: std::ops::RangeInclusive<u32>,
+        interrogation_count_in_year: NonEmptyRangeInclusive<u32>,
         /// Minimum of weeks between two interrogations for the same student
         ///
         /// Note that `0` is a valid possibility: it might be possible to have
@@ -169,6 +182,13 @@ pub enum SubjectPeriodicity {
         /// It is also possible to have blocks after the end of the schedule or without
         /// any actual interrogations planned in them. But of course, no consistent
         /// colloscope will be found for this.
+        // The block list is *relational*, not a collection of independent
+        // items: each block's `delay_in_weeks` is measured from the previous
+        // block, so dropping or truncating blocks re-dates every block after
+        // it. The chain is therefore one composite value — an atom (plan
+        // step 6.5, decision 10). Even a strict truncation is incomparable,
+        // not below.
+        #[ord(atom)]
         blocks: Vec<WeekBlock>,
         /// Minimum of weeks between two interrogations for the same student
         ///
@@ -204,7 +224,7 @@ pub struct WeekBlock {
     /// This is described by a range and it is technically possible
     /// The total amount can be in a range
     /// to have a minimum of zero interrogations
-    pub interrogation_count_in_block: std::ops::RangeInclusive<u32>,
+    pub interrogation_count_in_block: NonEmptyRangeInclusive<u32>,
 }
 
 impl Default for SubjectParameters {
@@ -219,8 +239,14 @@ impl Default for SubjectParameters {
 impl Default for SubjectInterrogationParameters {
     fn default() -> Self {
         SubjectInterrogationParameters {
-            students_per_group: NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
-            groups_per_interrogation: NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+            students_per_group: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(2).unwrap()..=NonZeroU32::new(3).unwrap(),
+            )
+            .expect("statically non-empty"),
+            groups_per_interrogation: NonEmptyRangeInclusive::new(
+                NonZeroU32::new(1).unwrap()..=NonZeroU32::new(1).unwrap(),
+            )
+            .expect("statically non-empty"),
             duration: collomatique_time::NonZeroMinutes::new(60).unwrap(),
             take_duration_into_account: true,
             periodicity: SubjectPeriodicity::ExactlyPeriodic {
@@ -233,15 +259,200 @@ impl Default for SubjectInterrogationParameters {
 impl Subjects {
     /// Finds the position of a subject by id
     pub fn find_subject_position(&self, id: SubjectId) -> Option<usize> {
-        self.ordered_subject_list
-            .iter()
-            .position(|(current_id, _desc)| *current_id == id)
+        self.ordered_subject_list.position_of(&id)
     }
 
     /// Finds a subject by id
     pub fn find_subject(&self, id: SubjectId) -> Option<&Subject> {
-        let pos = self.find_subject_position(id)?;
+        self.ordered_subject_list.get(&id)
+    }
+}
 
-        Some(&self.ordered_subject_list[pos].1)
+// The container's half of the dense renumbering walk (see [crate::compact]).
+// The two methods must visit exactly the same id occurrences.
+impl Subjects {
+    pub(crate) fn collect_ids(&self, ids: &mut BTreeSet<u64>) {
+        use crate::ids::Id as _;
+        for (subject_id, subject) in self.ordered_subject_list.iter() {
+            ids.insert(subject_id.inner());
+            for period_id in &subject.excluded_periods {
+                ids.insert(period_id.inner());
+            }
+        }
+    }
+
+    pub(crate) fn remap_ids(self, map: &crate::compact::IdMap) -> Self {
+        use crate::compact::remap;
+        let rows: Vec<(SubjectId, Subject)> = self
+            .ordered_subject_list
+            .into_iter()
+            .map(|(subject_id, subject)| {
+                let Subject {
+                    parameters,
+                    excluded_periods,
+                } = subject;
+                (
+                    remap(map, subject_id),
+                    Subject {
+                        parameters,
+                        excluded_periods: excluded_periods
+                            .into_iter()
+                            .map(|period_id| remap(map, period_id))
+                            .collect(),
+                    },
+                )
+            })
+            .collect();
+        Subjects {
+            ordered_subject_list: rows
+                .try_into()
+                .expect("An injective remap cannot create duplicate keys"),
+        }
+    }
+}
+
+/// Precondition errors of the forced subject ops — the carve-out subset
+/// (step-3 survey Table 2). Kept: no-clobber, op-target existence + `AddAfter`
+/// anchor ([Self::InvalidSubjectId]), and position bounds. `validate_subject`,
+/// the Remove reference scans, the interrogations-off guards and the
+/// newly-excluded-period guards are stripped.
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
+pub enum SubjectPrecheckError {
+    /// A subject id is invalid
+    #[error("invalid subject id ({0:?})")]
+    InvalidSubjectId(SubjectId),
+
+    /// The subject id already exists
+    #[error("subject id ({0:?}) already exists")]
+    SubjectIdAlreadyExists(SubjectId),
+
+    /// A position is outside the subject list
+    #[error("position {position} is outside the list (size = {size})")]
+    PositionOutOfBounds { position: usize, size: usize },
+}
+
+impl crate::Data {
+    /// Used internally by [crate::Data::force_apply]
+    ///
+    /// Force-applies a subject op: carve-out guards kept (returned as
+    /// [SubjectPrecheckError] — no-clobber, target existence, `AddAfter` anchor,
+    /// position bounds), invariant guards stripped (step-3 survey Table 1). May
+    /// leave the state invalid; the caller owns checking and rollback.
+    pub(crate) fn force_apply_subject(
+        &mut self,
+        subject_op: &AnnotatedSubjectOp,
+    ) -> std::result::Result<AnnotatedSubjectOp, SubjectPrecheckError> {
+        match subject_op {
+            AnnotatedSubjectOp::AddAfter(new_id, after_id, params) => {
+                if self
+                    .inner_data
+                    .params
+                    .subjects
+                    .find_subject_position(*new_id)
+                    .is_some()
+                {
+                    return Err(SubjectPrecheckError::SubjectIdAlreadyExists(*new_id));
+                }
+                // stripped: validate_subject
+
+                let position = match after_id {
+                    Some(id) => {
+                        self.inner_data
+                            .params
+                            .subjects
+                            .find_subject_position(*id)
+                            .ok_or(SubjectPrecheckError::InvalidSubjectId(*id))?
+                            + 1
+                    }
+                    None => 0,
+                };
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .insert_at(position, *new_id, params.clone())
+                    .expect("subject id absence checked above");
+
+                Ok(AnnotatedSubjectOp::Remove(*new_id))
+            }
+            AnnotatedSubjectOp::ChangePosition(id, new_pos) => {
+                // Target existence before bounds (the slots/weeks order): a
+                // doubly-bad op reports its dangling target, not the position.
+                let Some(old_pos) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectPrecheckError::InvalidSubjectId(*id));
+                };
+                let size = self.inner_data.params.subjects.ordered_subject_list.len();
+                if *new_pos >= size {
+                    return Err(SubjectPrecheckError::PositionOutOfBounds {
+                        position: *new_pos,
+                        size,
+                    });
+                }
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .move_entry(old_pos, *new_pos);
+                Ok(AnnotatedSubjectOp::ChangePosition(*id, old_pos))
+            }
+            AnnotatedSubjectOp::Remove(id) => {
+                let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectPrecheckError::InvalidSubjectId(*id));
+                };
+
+                // stripped: balancing / pairing / association / slot / teacher /
+                // incompat / assignment reference scans
+
+                let previous_id = (position > 0).then(|| {
+                    self.inner_data
+                        .params
+                        .subjects
+                        .ordered_subject_list
+                        .get_at(position - 1)
+                        .expect("position > 0 checked")
+                        .0
+                });
+
+                let (_, params) = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .remove_at(position);
+
+                Ok(AnnotatedSubjectOp::AddAfter(*id, previous_id, params))
+            }
+            AnnotatedSubjectOp::Update(id, new_params) => {
+                // stripped: validate_subject
+                let Some(position) = self.inner_data.params.subjects.find_subject_position(*id)
+                else {
+                    return Err(SubjectPrecheckError::InvalidSubjectId(*id));
+                };
+
+                let old_params = self
+                    .inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .get_at(position)
+                    .expect("position comes from find_subject_position")
+                    .1
+                    .clone();
+
+                // stripped: interrogations-off guards + newly-excluded-period guards
+
+                self.inner_data
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .replace_value_at(position, new_params.clone());
+
+                Ok(AnnotatedSubjectOp::Update(*id, old_params))
+            }
+        }
     }
 }

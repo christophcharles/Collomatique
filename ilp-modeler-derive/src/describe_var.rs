@@ -1,9 +1,6 @@
 use proc_macro::TokenStream;
 use quote::quote;
-use syn::{
-    Attribute, Data, DeriveInput, Expr, Fields, GenericArgument, Meta, PathArguments, Type,
-    Variant, parse_macro_input,
-};
+use syn::{Attribute, Data, DeriveInput, Expr, Fields, Meta, Type, Variant, parse_macro_input};
 
 pub fn derive(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
@@ -53,35 +50,6 @@ struct FieldInfo {
     name: Option<syn::Ident>,
     ty: Type,
     range: Option<syn::Expr>,
-}
-
-// ---------------------------------------------------------------------------
-// Type helpers
-// ---------------------------------------------------------------------------
-
-fn unwrap_option_type(ty: &Type) -> Option<&Type> {
-    if let Type::Path(type_path) = ty {
-        let segment = type_path.path.segments.last()?;
-        if segment.ident == "Option"
-            && let PathArguments::AngleBracketed(args) = &segment.arguments
-            && let Some(GenericArgument::Type(inner_ty)) = args.args.first()
-        {
-            return Some(inner_ty);
-        }
-    }
-    None
-}
-
-fn is_nested_option(ty: &Type) -> bool {
-    if let Some(inner) = unwrap_option_type(ty) {
-        unwrap_option_type(inner).is_some()
-    } else {
-        false
-    }
-}
-
-fn get_core_type(ty: &Type) -> &Type {
-    unwrap_option_type(ty).unwrap_or(ty)
 }
 
 // ---------------------------------------------------------------------------
@@ -176,14 +144,6 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
             .map(|f| {
                 let name = f.ident.clone();
                 let ty = f.ty.clone();
-
-                if is_nested_option(&ty) {
-                    panic!(
-                        "Nested Option<Option<T>> is not supported in variant {} field {:?}",
-                        variant_name, name
-                    );
-                }
-
                 let range = extract_range_attribute(&f.attrs);
                 FieldInfo { name, ty, range }
             })
@@ -191,17 +151,8 @@ fn process_variant(variant: &Variant, fix_with_expr: &proc_macro2::TokenStream) 
         Fields::Unnamed(fields) => fields
             .unnamed
             .iter()
-            .enumerate()
-            .map(|(idx, f)| {
+            .map(|f| {
                 let ty = f.ty.clone();
-
-                if is_nested_option(&ty) {
-                    panic!(
-                        "Nested Option<Option<T>> is not supported in variant {} field {}",
-                        variant_name, idx
-                    );
-                }
-
                 let range = extract_range_attribute(&f.attrs);
                 FieldInfo {
                     name: None,
@@ -380,55 +331,18 @@ fn generate_field_loop(
     var_name: &syn::Ident,
     range: &Option<syn::Expr>,
 ) -> proc_macro2::TokenStream {
-    let iterator_expr = generate_field_iterator(ty, range);
-
-    if unwrap_option_type(ty).is_some() {
+    let iterator_expr = if let Some(range_expr) = range {
         quote! {
-            for #var_name in ::std::iter::once(None).chain(
-                (#iterator_expr).map(Some)
-            )
+            <#ty as ::collomatique_ilp_modeler::EnumerateFrom<_>>::enumerate_from(#range_expr)
         }
     } else {
         quote! {
-            for #var_name in #iterator_expr
+            <#ty as ::collomatique_ilp_modeler::EnumerateAll>::enumerate_all()
         }
-    }
-}
+    };
 
-fn generate_field_iterator(ty: &Type, range: &Option<syn::Expr>) -> proc_macro2::TokenStream {
-    let core_ty = get_core_type(ty);
-
-    match core_ty {
-        Type::Path(type_path) => {
-            let segment = type_path.path.segments.last().unwrap();
-            let type_name = segment.ident.to_string();
-
-            match type_name.as_str() {
-                "i32" => {
-                    if let Some(range_expr) = range {
-                        quote! { #range_expr }
-                    } else {
-                        panic!("i32 fields must have a #[range(...)] attribute");
-                    }
-                }
-                "bool" => {
-                    if range.is_some() {
-                        panic!("#[range(...)] attribute is not supported for bool type");
-                    }
-                    quote! { [false, true] }
-                }
-                "Option" => {
-                    panic!("Should not reach here - Option should be handled by caller")
-                }
-                _ => {
-                    panic!(
-                        "Unsupported field type '{}' in DescribeVar derive. Supported types: i32, bool, Option<T>",
-                        type_name
-                    )
-                }
-            }
-        }
-        _ => panic!("Unsupported field type"),
+    quote! {
+        for #var_name in #iterator_expr
     }
 }
 
@@ -486,38 +400,23 @@ fn generate_fix_pattern_and_checks_and_output(
             let mut checks = Vec::new();
 
             for (idx, field) in info.fields.iter().enumerate() {
-                let var_name = match &field.name {
-                    Some(field_name) => field_name.clone(),
-                    None => syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site()),
-                };
+                if let Some(range_expr) = &field.range {
+                    let var_name = match &field.name {
+                        Some(field_name) => field_name.clone(),
+                        None => {
+                            syn::Ident::new(&format!("v{}", idx), proc_macro2::Span::call_site())
+                        }
+                    };
 
-                let core_ty = get_core_type(&field.ty);
-                let is_option = unwrap_option_type(&field.ty).is_some();
-
-                if let Type::Path(type_path) = core_ty {
-                    let segment = type_path.path.segments.last().unwrap();
-                    let type_name = segment.ident.to_string();
-
-                    if type_name == "i32"
-                        && let Some(range_expr) = &field.range
-                    {
-                        let check = if is_option {
-                            quote! {
-                                if let Some(val) = #var_name {
-                                    if !(#range_expr).contains(val) {
-                                        return Some(#fix_with);
-                                    }
-                                }
-                            }
-                        } else {
-                            quote! {
-                                if !(#range_expr).contains(#var_name) {
-                                    return Some(#fix_with);
-                                }
-                            }
-                        };
-                        checks.push(check);
-                    }
+                    let ty = &field.ty;
+                    let check = quote! {
+                        if !<#ty as ::collomatique_ilp_modeler::EnumerateFrom<_>>::enumerate_from(#range_expr)
+                            .contains(#var_name)
+                        {
+                            return Some(#fix_with);
+                        }
+                    };
+                    checks.push(check);
                 }
             }
 

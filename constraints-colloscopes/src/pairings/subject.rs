@@ -1,9 +1,9 @@
-use crate::helpers::merge_objectified;
-use crate::ids::GlobalWeek;
-use crate::native_extras::{
+use crate::extras::{
     MyBundle, V, active_slots_for_subject_week, extra_var, is_at_most_once_per_week,
     student_has_interrogation_in_expr,
 };
+use crate::helpers::merge_objectified_weighted;
+use crate::ids::GlobalWeek;
 use crate::types::{ExtraVarName, PreferenceConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
@@ -12,9 +12,9 @@ use collomatique_state_colloscopes::ids::{PairingRuleId, StudentId, SubjectId};
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut output = MyBundle::new();
 
-    for (&rule_id, rule) in &env.pairings.pairing_rule_map {
-        let ant_subject = rule.antecedent.subject_id;
-        let con_subject = rule.consequent.subject_id;
+    for (rule_id, rule) in env.pairings.pairing_rule_map.iter() {
+        let ant_subject = rule.antecedent().subject_id;
+        let con_subject = rule.consequent().subject_id;
 
         let Some(ant_subj) = env.subjects.find_subject(ant_subject) else {
             continue;
@@ -24,71 +24,102 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         };
 
         let mut hard_bundle = MyBundle::new();
-        let mut soft_bundle = MyBundle::new();
+        let mut soft_output = MyBundle::new();
 
         let mut global_week_offset = 0usize;
-        for (period_id, period_desc) in &env.periods.ordered_period_list {
-            if rule.excluded_periods.contains(period_id)
+        for period_id in env.periods.period_ids() {
+            let period_len = env.weeks.week_count_for_period(period_id).unwrap_or(0);
+            let period_id = &period_id;
+            if rule.excluded_periods().contains(period_id)
                 || ant_subj.excluded_periods.contains(period_id)
                 || con_subj.excluded_periods.contains(period_id)
             {
-                global_week_offset += period_desc.len();
+                global_week_offset += period_len;
                 continue;
             }
 
-            let ant_enrolled = env
-                .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(&ant_subject));
-            let con_enrolled = env
-                .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(&con_subject));
+            let ant_enrolled = env.assignments.students(*period_id, ant_subject);
+            let con_enrolled = env.assignments.students(*period_id, con_subject);
             let (Some(ant_set), Some(con_set)) = (ant_enrolled, con_enrolled) else {
-                global_week_offset += period_desc.len();
+                global_week_offset += period_len;
                 continue;
             };
 
             let both_students: Vec<StudentId> = ant_set.intersection(con_set).copied().collect();
 
-            for (local_idx, week_desc) in period_desc.iter().enumerate() {
+            for (local_idx, (_week_id, week_desc)) in env
+                .weeks
+                .weeks_for_period(*period_id)
+                .into_iter()
+                .flatten()
+                .enumerate()
+            {
                 if !week_desc.interrogations {
                     continue;
                 }
                 let week = GlobalWeek(global_week_offset + local_idx);
 
+                // A subject pairing only governs weeks where BOTH subjects have a schedulable
+                // interrogation slot for the student. Otherwise the "student has interrogation in
+                // <subject>" term is structurally zero: the rule would reference the undeclared
+                // StudentHasInterrogationIn extra (declared only for weeks with active slots, see
+                // extras.rs), emit a spurious 0 >= 1, or force an unrelated interrogation on/off.
+                // Mirrors the association guard in pairings/slot.rs.
+                if active_slots_for_subject_week(env, ant_subject, week).is_empty()
+                    || active_slots_for_subject_week(env, con_subject, week).is_empty()
+                {
+                    continue;
+                }
+
                 for &student in &both_students {
-                    let target = if rule.soft {
-                        &mut soft_bundle
+                    if rule.soft() {
+                        let mut single = MyBundle::new();
+                        emit_pairing_constraint(
+                            env,
+                            &mut single,
+                            rule_id,
+                            student,
+                            ant_subject,
+                            con_subject,
+                            rule.antecedent().should_have,
+                            rule.consequent().should_have,
+                            week,
+                        );
+                        soft_output = merge_objectified_weighted(
+                            soft_output,
+                            single,
+                            ExtraVarName::PairingsPenalty {
+                                rule: rule_id,
+                                student,
+                                week,
+                            },
+                            |_| crate::weights::BASE,
+                        );
                     } else {
-                        &mut hard_bundle
-                    };
-                    emit_pairing_constraint(
-                        env,
-                        target,
-                        rule_id,
-                        student,
-                        ant_subject,
-                        con_subject,
-                        rule.antecedent.should_have,
-                        rule.consequent.should_have,
-                        week,
-                    );
+                        emit_pairing_constraint(
+                            env,
+                            &mut hard_bundle,
+                            rule_id,
+                            student,
+                            ant_subject,
+                            con_subject,
+                            rule.antecedent().should_have,
+                            rule.consequent().should_have,
+                            week,
+                        );
+                    }
                 }
             }
 
-            global_week_offset += period_desc.len();
+            global_week_offset += period_len;
         }
 
         output = output
-            .merge(merge_objectified(
-                hard_bundle,
-                soft_bundle,
-                ExtraVarName::PairingsPenalty { rule: rule_id },
-            ))
+            .merge(hard_bundle)
             .expect("no duplicate extras from pairings (distinct rules)");
+        output = output
+            .merge(soft_output)
+            .expect("no duplicate extras from pairings soft penalties");
     }
 
     output

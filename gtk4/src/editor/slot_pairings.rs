@@ -7,8 +7,103 @@ use relm4::{ComponentController, gtk};
 
 use collomatique_ops::SlotPairingsUpdateOp;
 
+use crate::tools::messages::MessageSeverity;
+
 pub mod slot_pairing_params;
 pub mod slot_pairings_display;
+
+/// One remark about a slot pairing rule.
+///
+/// Both the edition dialog — which shows them as full text rows — and the list
+/// of recorded rules read the same variants, so a rule reads the same way
+/// wherever it is displayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleMessage {
+    /// Both parts name the same slot: the rule cannot be recorded.
+    SameSlot,
+    /// « créneau utilisé ⇒ créneau non utilisé » — the shape that may need a
+    /// reified extra.
+    HeavyShape,
+    /// Nudge towards the symmetric « créneau non utilisé ⇒ créneau utilisé »
+    /// shape.
+    FavoredShape,
+}
+
+impl RuleMessage {
+    pub fn severity(self) -> MessageSeverity {
+        match self {
+            RuleMessage::SameSlot => MessageSeverity::Error,
+            RuleMessage::HeavyShape => MessageSeverity::Warning,
+            RuleMessage::FavoredShape => MessageSeverity::Info,
+        }
+    }
+
+    pub fn text(self) -> &'static str {
+        match self {
+            RuleMessage::SameSlot => {
+                "L'antécédent et le conséquent doivent porter sur deux créneaux différents."
+            }
+            // « utilisé ⇒ non utilisé » is the one shape whose constraint needs
+            // the antecedent *negated*, which only works directly when an
+            // interrogation holds at most one group; otherwise
+            // `constraints-colloscopes` has to reify an intermediate binary
+            // variable and linearize it (see
+            // `pairings::slot::emit_pairing_constraint`).
+            //
+            // The warning is shown whenever this shape is used, not only when
+            // the precondition currently holds: the subject's group count can be
+            // changed long after the rule is validated, and the user would then
+            // never see the message. Naming the precondition in the text lets
+            // them either pick another shape now, or keep this one and know what
+            // to avoid later.
+            RuleMessage::HeavyShape => {
+                "La forme « créneau utilisé ⇒ créneau non utilisé » est coûteuse pour le solveur \
+                 si une interrogation peut accueillir plusieurs groupes : elle nécessite alors des \
+                 variables intermédiaires supplémentaires."
+            }
+            // « non utilisé ⇒ utilisé » compiles to `antécédent + conséquent ≥ 1`,
+            // which is symmetric: the same single constraint also enforces the
+            // converse. The wording stays conditional because this is *not* a
+            // logical rewriting of the other shapes — it only helps when it
+            // happens to express the user's need.
+            RuleMessage::FavoredShape => {
+                "Si votre besoin peut s'exprimer sous la forme « créneau non utilisé ⇒ créneau \
+                 utilisé », préférez-la : c'est la plus efficace pour le solveur et elle impose \
+                 aussi automatiquement la règle réciproque."
+            }
+        }
+    }
+}
+
+/// The `should_have` flags of a recorded rule, in the order (antécédent,
+/// conséquent) — the same pair the dialog reads off its two condition combos.
+pub fn rule_shape(
+    rule: &collomatique_state_colloscopes::slot_pairings::SlotPairingRule,
+) -> (bool, bool) {
+    (rule.antecedent().should_have, rule.consequent().should_have)
+}
+
+/// The remarks a rule deserves, most severe first.
+///
+/// `shape` is the pair of `should_have` flags, in the order (antécédent,
+/// conséquent). `slots_are_same` is only ever true in the edition dialog: a rule
+/// that made it into the document always names two distinct slots.
+pub fn rule_messages(shape: (bool, bool), slots_are_same: bool) -> Vec<RuleMessage> {
+    let mut messages = Vec::new();
+    if slots_are_same {
+        messages.push(RuleMessage::SameSlot);
+    }
+    match shape {
+        // The warning already names this shape, and it is symmetric anyway
+        // (« A utilisé ⇒ B non utilisé » is « B utilisé ⇒ A non utilisé »), so
+        // the nudge would add nothing.
+        (true, false) => messages.push(RuleMessage::HeavyShape),
+        // Already the cheapest shape: nothing to nudge towards.
+        (false, true) => {}
+        _ => messages.push(RuleMessage::FavoredShape),
+    }
+    messages
+}
 
 #[derive(Debug)]
 pub enum SlotPairingsInput {
@@ -45,17 +140,15 @@ pub struct SlotPairings {
 }
 
 impl SlotPairings {
-    fn build_slot_description(
-        slot: &collomatique_state_colloscopes::slots::Slot,
-        teachers: &collomatique_state_colloscopes::teachers::Teachers,
-    ) -> String {
-        let teacher_name = teachers
-            .teacher_map
-            .get(&slot.teacher_id)
-            .map(|t| format!("{} {}", t.desc.firstname, t.desc.surname))
-            .unwrap_or_else(|| "???".into());
-        let time_text = slot.start_time.capitalize();
-        format!("{} - {}", teacher_name, time_text)
+    /// This whole tab is grouped by subject, so a slot is named without its
+    /// own — exactly [collomatique_ui_text::rendering::render_slot_in_subject].
+    fn build_slot_description(&self, slot_id: collomatique_state_colloscopes::SlotId) -> String {
+        collomatique_ui_text::rendering::render_slot_in_subject(
+            &self.teachers,
+            &self.slots,
+            slot_id,
+        )
+        .expect("the slot comes from the document being displayed")
     }
 
     fn ordered_slots_for_subject(
@@ -63,15 +156,10 @@ impl SlotPairings {
         subject_id: collomatique_state_colloscopes::SubjectId,
     ) -> Vec<(collomatique_state_colloscopes::SlotId, String)> {
         self.slots
-            .subject_map
-            .get(&subject_id)
+            .slots_for_subject(subject_id)
             .map(|subject_slots| {
                 subject_slots
-                    .ordered_slots
-                    .iter()
-                    .map(|(slot_id, slot)| {
-                        (*slot_id, Self::build_slot_description(slot, &self.teachers))
-                    })
+                    .map(|(slot_id, _slot)| (*slot_id, self.build_slot_description(*slot_id)))
                     .collect()
             })
             .unwrap_or_default()
@@ -81,14 +169,9 @@ impl SlotPairings {
         &self,
         slot_id: collomatique_state_colloscopes::SlotId,
     ) -> Option<collomatique_state_colloscopes::SubjectId> {
-        for (subject_id, subject_slots) in &self.slots.subject_map {
-            for (sid, _) in &subject_slots.ordered_slots {
-                if *sid == slot_id {
-                    return Some(*subject_id);
-                }
-            }
-        }
-        None
+        self.slots
+            .find_slot_subject_and_position(slot_id)
+            .map(|(subject_id, _)| subject_id)
     }
 }
 
@@ -180,14 +263,14 @@ impl Component for SlotPairings {
                     .ordered_subject_list
                     .iter()
                     .filter_map(|(id, desc)| {
+                        let id = &id;
                         desc.parameters.interrogation_parameters.as_ref()?;
 
-                        let subject_slots = self
-                            .slots
-                            .subject_map
-                            .get(id)
-                            .expect("Subject should appear in slots if it can have interrogations")
-                            .clone();
+                        // Sparse slots ordering: a subject with interrogations
+                        // but no slots yet has no row; render it with an empty
+                        // slot list (matching the pre-sparse dense behavior).
+                        let subject_slots =
+                            self.slots.slots_vec_for_subject(*id).unwrap_or_default();
 
                         // Collect slot pairing rules for this subject
                         let rules: Vec<_> = self
@@ -197,19 +280,17 @@ impl Component for SlotPairings {
                             .filter(|(_rule_id, rule)| {
                                 // Check if antecedent slot belongs to this subject
                                 subject_slots
-                                    .ordered_slots
                                     .iter()
-                                    .any(|(slot_id, _)| *slot_id == rule.antecedent.slot_id)
+                                    .any(|(slot_id, _)| *slot_id == rule.antecedent().slot_id)
                             })
-                            .map(|(rule_id, rule)| (*rule_id, rule.clone()))
+                            .map(|(rule_id, rule)| (rule_id, rule.clone()))
                             .collect();
 
                         // Build slot descriptions for this subject
                         let slot_descriptions: Vec<_> = subject_slots
-                            .ordered_slots
                             .iter()
-                            .map(|(slot_id, slot)| {
-                                (*slot_id, Self::build_slot_description(slot, &self.teachers))
+                            .map(|(slot_id, _slot)| {
+                                (*slot_id, self.build_slot_description(*slot_id))
                             })
                             .collect();
 
@@ -245,7 +326,7 @@ impl Component for SlotPairings {
                     .expect("Rule ID should be valid")
                     .clone();
                 let subject_id = self
-                    .find_slot_subject(current_rule.antecedent.slot_id)
+                    .find_slot_subject(current_rule.antecedent().slot_id)
                     .expect("Antecedent slot should belong to a subject");
                 let subject_name = self
                     .subjects
@@ -297,18 +378,20 @@ impl Component for SlotPairings {
                     .get(1)
                     .map(|(id, _)| *id)
                     .unwrap_or(first_slot_id);
-                let default_rule = collomatique_state_colloscopes::slot_pairings::SlotPairingRule {
-                    antecedent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
-                        slot_id: first_slot_id,
-                        should_have: true,
-                    },
-                    consequent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
-                        slot_id: second_slot_id,
-                        should_have: true,
-                    },
-                    excluded_periods: BTreeSet::new(),
-                    soft: false,
-                };
+                let default_rule =
+                    collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+                        collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+                            slot_id: first_slot_id,
+                            should_have: true,
+                        },
+                        collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+                            slot_id: second_slot_id,
+                            should_have: true,
+                        },
+                        BTreeSet::new(),
+                        false,
+                    )
+                    .expect("the Ajouter button is gated on len() >= 2");
                 self.slot_pairing_params_dialog
                     .sender()
                     .send(slot_pairing_params::DialogInput::Show(

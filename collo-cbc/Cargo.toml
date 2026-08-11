@@ -1,0 +1,10 @@
+[package]
+name = "collo-cbc"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+links = "collo_cbc_shim"
+
+[build-dependencies]
+cc = "1"
+pkg-config = "0.3"

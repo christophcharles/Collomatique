@@ -1,7 +1,9 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 
 use rust_xlsxwriter::{Url, Worksheet};
-use sqlx::{Row, SqlitePool};
+
+use collomatique_state_colloscopes::InnerData;
+use collomatique_state_colloscopes::ids::{GroupListId, PeriodId};
 
 use crate::Error;
 use crate::format_slot_time;
@@ -64,19 +66,20 @@ impl FixedColumns {
 }
 
 struct PeriodLayout {
-    period_id: i64,
+    period_id: PeriodId,
     col_start: u16,
     num_weeks: usize,
     period_index: usize,
     first_week_num: usize,
 }
 
-pub async fn build(
+pub fn build(
     worksheet: &mut Worksheet,
-    pool: &SqlitePool,
+    data: &InnerData,
     global: &crate::GlobalConfig,
     colloscope: &crate::ColloscopeConfig,
 ) -> Result<(), Error> {
+    let params = &data.params;
     let cols = FixedColumns::from_config(colloscope);
 
     let bg = global.background_color.to_xlsx();
@@ -86,24 +89,17 @@ pub async fn build(
         .map(|c| c.to_xlsx())
         .unwrap_or(bg);
 
-    // 1. Period layout — periods ordered by position, with week count
-    let period_rows = sqlx::query(
-        "SELECT p.id, p.position, COUNT(pw.week_index) as num_weeks \
-         FROM periods p \
-         JOIN period_weeks pw ON pw.period_id = p.id \
-         GROUP BY p.id \
-         ORDER BY p.position",
-    )
-    .fetch_all(pool)
-    .await?;
-
+    // 1. Period layout — periods in order, with week count (periods without weeks are skipped)
     let mut period_layout = Vec::new();
     let mut col_offset: u16 = cols.count;
     let mut accumulated_weeks: usize = 0;
-    for (period_index, row) in period_rows.iter().enumerate() {
-        let period_id: i64 = row.get(0);
-        let num_weeks: i64 = row.get(2);
-        let nw = num_weeks as usize;
+    for (period_index, period_id) in params
+        .periods
+        .period_ids()
+        .filter(|&id| params.weeks.week_count_for_period(id).unwrap_or(0) != 0)
+        .enumerate()
+    {
+        let nw = params.weeks.week_count_for_period(period_id).unwrap_or(0);
         period_layout.push(PeriodLayout {
             period_id,
             col_start: col_offset,
@@ -117,46 +113,35 @@ pub async fn build(
 
     let total_week_cols = col_offset - cols.count;
 
-    // 2. Fetch first_week from metadata for period title date ranges
-    let first_week_str: Option<String> =
-        sqlx::query_scalar("SELECT first_week FROM metadata WHERE id = 1")
-            .fetch_optional(pool)
-            .await?
-            .flatten();
+    // 2. First monday of the colloscope for period title date ranges
+    let first_week: Option<chrono::NaiveDate> =
+        params.periods.first_week.as_ref().map(|w| *w.monday());
 
-    let show_week_dates = colloscope.display_week_dates && first_week_str.is_some();
+    let show_week_dates = colloscope.display_week_dates && first_week.is_some();
     let header_row_offset: u32 = if show_week_dates { 1 } else { 0 };
 
     // Weeks with no interrogations — for distinct background color
-    let no_interrog_rows =
-        sqlx::query("SELECT period_id, week_index FROM period_weeks WHERE has_interrogations = 0")
-            .fetch_all(pool)
-            .await?;
-
-    let no_interrog_weeks: HashSet<(i64, i64)> = no_interrog_rows
-        .iter()
-        .map(|r| (r.get(0), r.get(1)))
-        .collect();
-
-    let no_interrog_bg = colloscope.no_interrogation_color.to_xlsx();
-
-    // Annotations — fetched early so we can use them for week background colors
-    let annotation_rows = sqlx::query(
-        "SELECT period_id, week_index, annotation \
-         FROM period_weeks \
-         WHERE annotation != ''",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut annotations: HashMap<(i64, i64), String> = HashMap::new();
-    for arow in &annotation_rows {
-        let period_id: i64 = arow.get(0);
-        let week_index: i64 = arow.get(1);
-        let annotation: String = arow.get(2);
-        annotations.insert((period_id, week_index), annotation);
+    let mut no_interrog_weeks: HashSet<(PeriodId, usize)> = HashSet::new();
+    // Annotations — collected early so we can use them for week background colors
+    let mut annotations: HashMap<(PeriodId, usize), String> = HashMap::new();
+    for period_id in params.periods.period_ids() {
+        for (week_index, (_week_id, week)) in params
+            .weeks
+            .weeks_for_period(period_id)
+            .into_iter()
+            .flatten()
+            .enumerate()
+        {
+            if !week.interrogations {
+                no_interrog_weeks.insert((period_id, week_index));
+            }
+            if let Some(annotation) = &week.annotation {
+                annotations.insert((period_id, week_index), annotation.to_string());
+            }
+        }
     }
 
+    let no_interrog_bg = colloscope.no_interrogation_color.to_xlsx();
     let annotation_bg = colloscope.annotation_color.as_ref().map(|c| c.to_xlsx());
 
     let extra_colors_xlsx: BTreeMap<&str, rust_xlsxwriter::Color> = colloscope
@@ -165,23 +150,23 @@ pub async fn build(
         .map(|(k, v)| (k.as_str(), v.to_xlsx()))
         .collect();
 
-    let week_bg = |period_id: i64,
+    let week_bg = |period_id: PeriodId,
                    week_index: usize,
                    default_bg: rust_xlsxwriter::Color|
      -> rust_xlsxwriter::Color {
         // 1. extra_colors match has highest priority
-        if let Some(annotation_text) = annotations.get(&(period_id, week_index as i64)) {
+        if let Some(annotation_text) = annotations.get(&(period_id, week_index)) {
             if let Some(&color) = extra_colors_xlsx.get(annotation_text.as_str()) {
                 return color;
             }
         }
         // 2. no-interrogation week
-        if no_interrog_weeks.contains(&(period_id, week_index as i64)) {
+        if no_interrog_weeks.contains(&(period_id, week_index)) {
             return no_interrog_bg;
         }
         // 3. generic annotation color
         if let Some(abg) = annotation_bg {
-            if annotations.contains_key(&(period_id, week_index as i64)) {
+            if annotations.contains_key(&(period_id, week_index)) {
                 return abg;
             }
         }
@@ -192,7 +177,7 @@ pub async fn build(
     // -- Row 0: Period labels --
     for pl in &period_layout {
         let label = crate::generate_period_title(
-            &first_week_str,
+            &first_week,
             pl.period_index,
             pl.first_week_num,
             pl.num_weeks,
@@ -214,7 +199,7 @@ pub async fn build(
     }
 
     // -- Row 1 (optional): Week date ranges --
-    if let Some(first_week) = &first_week_str {
+    if let Some(first_week) = &first_week {
         if show_week_dates {
             for pl in &period_layout {
                 for w in 0..pl.num_weeks {
@@ -262,99 +247,28 @@ pub async fn build(
         }
     }
 
-    // 3. Load group list associations: (period_id, subject_id) -> group_list_id
-    let assoc_rows = sqlx::query(
-        "SELECT period_id, subject_id, group_list_id \
-         FROM group_list_subject_associations",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut group_list_assocs: HashMap<(i64, i64), i64> = HashMap::new();
-    for row in assoc_rows {
-        let period_id: i64 = row.get(0);
-        let subject_id: i64 = row.get(1);
-        let group_list_id: i64 = row.get(2);
-        group_list_assocs.insert((period_id, subject_id), group_list_id);
-    }
-
-    // 4. Load group names: group_list_id -> Vec<String>
-    let group_name_rows = sqlx::query(
-        "SELECT group_list_id, group_index, name \
-         FROM group_list_group_names \
-         ORDER BY group_list_id, group_index",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut group_names_map: HashMap<i64, Vec<String>> = HashMap::new();
-    for row in group_name_rows {
-        let gl_id: i64 = row.get(0);
-        let group_index: i64 = row.get(1);
-        let name: String = row.get(2);
-        let names = group_names_map.entry(gl_id).or_default();
-        let idx = group_index as usize;
-        if names.len() <= idx {
-            names.resize(idx + 1, String::new());
-        }
-        names[idx] = name;
-    }
-
-    // 5. Load interrogation groups: (period_id, slot_id, week_index) -> Vec<group_number>
-    let interrog_rows = sqlx::query(
-        "SELECT period_id, slot_id, week_index, group_number \
-         FROM colloscope_interrogation_groups \
-         ORDER BY period_id, slot_id, week_index, group_number",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    let mut interrog_map: HashMap<(i64, i64, i64), Vec<i64>> = HashMap::new();
-    for row in interrog_rows {
-        let period_id: i64 = row.get(0);
-        let slot_id: i64 = row.get(1);
-        let week_index: i64 = row.get(2);
-        let group_number: i64 = row.get(3);
-        interrog_map
-            .entry((period_id, slot_id, week_index))
-            .or_default()
-            .push(group_number);
-    }
-
-    // 6. Subjects that have slots, ordered by position
-    let subjects = sqlx::query(
-        "SELECT sub.id, sub.name \
-         FROM subjects sub \
-         WHERE EXISTS (SELECT 1 FROM slots sl WHERE sl.subject_id = sub.id) \
-         ORDER BY sub.position",
-    )
-    .fetch_all(pool)
-    .await?;
+    // 3. Group names: group_list_id -> Vec<String>
+    let group_names_map: HashMap<GroupListId, Vec<String>> = params
+        .group_lists
+        .group_list_map
+        .iter()
+        .map(|(gl_id, gl)| (gl_id, crate::group_names_vec(gl)))
+        .collect();
 
     // -- Data rows --
     let mut row: u32 = 2 + header_row_offset;
     let mut first_subject = true;
     let mut stripe_index: usize = 0;
 
-    for subject_row in &subjects {
-        let subject_id: i64 = subject_row.get(0);
-        let subject_name: String = subject_row.get(1);
+    for (subject_id, subject) in params.subjects.ordered_subject_list.iter() {
+        let subject_id = &subject_id;
+        let subject_name = &subject.parameters.name;
 
-        // 8. Slots for this subject with teacher info
-        let slots = sqlx::query(
-            "SELECT sl.id, \
-                    COALESCE(t.surname, '') as surname, \
-                    COALESCE(t.email, '') as email, \
-                    COALESCE(t.tel, '') as tel, \
-                    sl.day, sl.start_time, sl.extra_info \
-             FROM slots sl \
-             LEFT JOIN teachers t ON t.id = sl.teacher_id \
-             WHERE sl.subject_id = ? \
-             ORDER BY sl.position",
-        )
-        .bind(subject_id)
-        .fetch_all(pool)
-        .await?;
+        // Slots for this subject, in order
+        let slots = match params.slots.slots_vec_for_subject(*subject_id) {
+            Some(subject_slots) => subject_slots,
+            None => continue,
+        };
 
         if slots.is_empty() {
             continue;
@@ -379,14 +293,20 @@ pub async fn build(
         let subject_start_row = row;
         let slot_count = slots.len();
 
-        for (slot_idx, slot_row) in slots.iter().enumerate() {
-            let slot_id: i64 = slot_row.get(0);
-            let surname: String = slot_row.get(1);
-            let email: String = slot_row.get(2);
-            let tel: String = slot_row.get(3);
-            let day: i64 = slot_row.get(4);
-            let start_time: i64 = slot_row.get(5);
-            let extra_info: String = slot_row.get(6);
+        for (slot_idx, (slot_id, slot)) in slots.iter().enumerate() {
+            let teacher = params.teachers.teacher_map.get(&slot.teacher_id);
+            let surname = teacher.map(|t| t.desc.surname.clone()).unwrap_or_default();
+            let email = teacher
+                .and_then(|t| t.desc.email.as_ref())
+                .map(|e| e.to_string())
+                .unwrap_or_default();
+            let tel = teacher
+                .and_then(|t| t.desc.tel.as_ref())
+                .map(|t| t.to_string())
+                .unwrap_or_default();
+            let day = slot.start_time.weekday.num_days_from_monday() as i64;
+            let start_time = slot.start_time.start_time.minutes_from_midnight() as i64;
+            let extra_info = &slot.extra_info;
 
             let (top_b, bot_b) = vertical_borders(slot_idx, slot_count);
             let row_bg = if stripe_index % 2 == 0 { stripe } else { bg };
@@ -408,13 +328,15 @@ pub async fn build(
             }
             worksheet.write_with_format(row, cols.slot_col, &slot_time, &data_fmt)?;
             if let Some(extra_info_col) = cols.extra_info_col {
-                worksheet.write_with_format(row, extra_info_col, &extra_info, &data_fmt)?;
+                worksheet.write_with_format(row, extra_info_col, extra_info, &data_fmt)?;
             }
 
             // Week columns
             for pl in &period_layout {
-                let group_names = group_list_assocs
-                    .get(&(pl.period_id, subject_id))
+                let group_names = params
+                    .group_lists
+                    .subjects_associations
+                    .get(&(pl.period_id, *subject_id))
                     .and_then(|gl_id| group_names_map.get(gl_id));
 
                 for w in 0..pl.num_weeks {
@@ -428,12 +350,17 @@ pub async fn build(
                         week_bg(pl.period_id, w, row_bg),
                     );
 
-                    let cell_text = interrog_map
-                        .get(&(pl.period_id, slot_id, w as i64))
-                        .map(|groups| {
-                            groups
+                    // Sparse colloscope surface: translate the positional week
+                    // to its id and read the (slot, week) row (absent = empty).
+                    let cell_text = params
+                        .weeks
+                        .week_id_at(pl.period_id, w)
+                        .and_then(|week_id| data.colloscope.interrogation(*slot_id, week_id))
+                        .map(|assigned_groups| {
+                            assigned_groups
                                 .iter()
                                 .map(|&g| {
+                                    let g = g as i64;
                                     if let Some(names) = group_names {
                                         get_group_name(names, g)
                                     } else {
@@ -460,7 +387,7 @@ pub async fn build(
             worksheet.write_with_format(
                 subject_start_row,
                 cols.subject_col,
-                &subject_name,
+                subject_name,
                 &subject_fmt,
             )?;
         } else {
@@ -469,7 +396,7 @@ pub async fn build(
                 cols.subject_col,
                 subject_end_row,
                 cols.subject_col,
-                &subject_name,
+                subject_name,
                 &subject_fmt,
             )?;
         }
@@ -479,7 +406,7 @@ pub async fn build(
     if colloscope.display_annotations && !annotations.is_empty() {
         for pl in &period_layout {
             for w in 0..pl.num_weeks {
-                if let Some(text) = annotations.get(&(pl.period_id, w as i64)) {
+                if let Some(text) = annotations.get(&(pl.period_id, w)) {
                     let col = pl.col_start + w as u16;
                     let fmt = formats::annotation(bg);
                     worksheet.write_with_format(row, col, format!("{text} "), &fmt)?;

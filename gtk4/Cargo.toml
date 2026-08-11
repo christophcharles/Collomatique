@@ -10,21 +10,25 @@ collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 collomatique-ilp = { path = "../ilp" }
+collomatique-ilp-modeler = { path = "../ilp-modeler" }
 collomatique-ops = { path = "../ops" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
+collomatique-settings = { path = "../settings" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
-collomatique-sqlite-state = { path = "../sqlite-state" }
+collomatique-constraints-groups = { path = "../constraints-groups" }
 collomatique-xlsx = { path = "../xlsx" }
 collomatique-mps = { path = "../mps" }
+collomatique-strategies = { path = "../strategies" }
+collomatique-subprocesses = { path = "../subprocesses" }
+collomatique-ui-text = { path = "../ui-text" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 gtk4 = { version = "0.9", features = [ "v4_10" ] }
 relm4 = { version = "0.9", features = [ "libadwaita" ] }
 rustix = { version = "1.0", features = [ "pty" ] }
-rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
+rfd.workspace = true
 clap = { workspace = true, features = ["derive"] }
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "process"] }
-sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 chrono.workspace = true
 anyhow.workspace = true
 non-empty-string.workspace = true

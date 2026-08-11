@@ -12,11 +12,12 @@
     libadwaita,
     adwaita-icon-theme,
     python3,
+    python3Packages,
     clippy,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
-    version = "0.1.0";
+    version = "0.1.0-alpha.1";
 
     src = lib.cleanSourceWith {
         src = ./.;
@@ -29,7 +30,10 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-CtMUZS8NXt/kCxTnXG8C1tnIuAG9FxnV3YA+YkA7+6c=";
+    cargoHash = "sha256-MkiUN6h12v56q1Z7vC89zUMvh9oyDDnwv7hHcKtAShA=";
+
+    # The test suite is run from the dev shell, not from the package build.
+    doCheck = false;
 
     nativeBuildInputs = [
         rustPlatform.bindgenHook
@@ -50,6 +54,7 @@ rustPlatform.buildRustPackage rec {
         wayland
         adwaita-icon-theme
         python3
+        python3Packages.xlsxwriter # For the xlsx export scripts
     ];
 
     preFixup = ''

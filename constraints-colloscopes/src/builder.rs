@@ -1,71 +1,62 @@
-use crate::native_extras::build_native_extras;
-use crate::problem::Problem;
+use std::time::Instant;
+
+use crate::ColloscopeModel;
+use crate::extras::build_extras;
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{Var, VarEnv};
-use collomatique_ilp::Variable;
 use collomatique_ilp_modeler::Modeler;
 use collomatique_ilp_modeler::bundle::ReifyError;
-use std::collections::HashMap;
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ProblemBuilder;
-
-pub fn default_problem_builder() -> ProblemBuilder {
-    ProblemBuilder
-}
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 pub(crate) type MyModeler<'m> =
     Modeler<'m, Var, ExtraVarName, ConstraintDesc, VarEnv, ReifyError<Var, ExtraVarName>>;
 
-pub async fn build_problem(db: &sqlx::SqlitePool) -> Problem {
-    let env = VarEnv::load(db).await;
+pub fn build_model(params: &Parameters) -> ColloscopeModel {
+    build_model_with_log(params, &mut |_: &str| {})
+}
+
+pub fn build_model_with_log(
+    params: &Parameters,
+    log: &mut (dyn FnMut(&str) + Send),
+) -> ColloscopeModel {
+    let t_total = Instant::now();
+
+    let env = VarEnv::new(params.clone());
 
     let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
 
-    let original_var_list: HashMap<Var, Variable> = modeler
-        .base_vars()
-        .iter()
-        .map(|(k, v)| (k.clone(), v.clone()))
-        .collect();
+    macro_rules! apply {
+        ($name:expr, $bundle:expr) => {{
+            let t = Instant::now();
+            log(&format!("[build_model] Applying bundle: {}...", $name));
+            modeler
+                .apply_bundle($bundle.into_general())
+                .unwrap_or_else(|_| panic!("no duplicate extras from {}", $name));
+            log(&format!(
+                "[build_model] Bundle applied ({:.2?})",
+                t.elapsed()
+            ));
+        }};
+    }
 
-    let native_bundle = build_native_extras(&env);
-    modeler
-        .apply_bundle(native_bundle.into_general())
-        .expect("no duplicate extras from native");
+    apply!("extras", build_extras(&env));
+    apply!("groups", crate::groups::build(&env));
+    apply!("schedule_structure", crate::schedule_structure::build(&env));
+    apply!("pairings", crate::pairings::build(&env));
+    apply!("misc", crate::misc::build(&env));
+    apply!("periodicity", crate::periodicity::build(&env));
+    apply!("balancing", crate::balancing::build(&env));
 
-    let groups_bundle = crate::groups::build(&env);
-    modeler
-        .apply_bundle(groups_bundle.into_general())
-        .expect("no duplicate extras from groups");
-
-    let schedule_structure_bundle = crate::schedule_structure::build(&env);
-    modeler
-        .apply_bundle(schedule_structure_bundle.into_general())
-        .expect("no duplicate extras from schedule_structure");
-
-    let pairings_bundle = crate::pairings::build(&env);
-    modeler
-        .apply_bundle(pairings_bundle.into_general())
-        .expect("no duplicate extras from pairings");
-
-    let misc_bundle = crate::misc::build(&env);
-    modeler
-        .apply_bundle(misc_bundle.into_general())
-        .expect("no duplicate extras from misc");
-
-    let periodicity_bundle = crate::periodicity::build(&env);
-    modeler
-        .apply_bundle(periodicity_bundle.into_general())
-        .expect("no duplicate extras from periodicity");
-
-    let balancing_bundle = crate::balancing::build(&env);
-    modeler
-        .apply_bundle(balancing_bundle.into_general())
-        .expect("no duplicate extras from balancing");
-
+    log("[build_model] Running Modeler::build()...");
+    let t = Instant::now();
     let model = modeler
-        .build(&env)
+        .build_with_log(&env, log)
         .unwrap_or_else(|e| panic!("model build should succeed: {:?}", e));
+    log(&format!(
+        "[build_model] Modeler::build() complete ({:.2?})",
+        t.elapsed()
+    ));
 
-    Problem::from_model(model, original_var_list)
+    log(&format!("[build_model] Total ({:.2?})", t_total.elapsed()));
+    model
 }

@@ -22,27 +22,46 @@ Collomatique est en développement actif et au stade alpha. L'interface et le fo
 
 ## Copies d'écran
 
-![Écran d'accueil](screenshots/welcome_screen.png?raw=true "Écran d'accueil de Collomatique")
-![Édition des périodes](screenshots/periods.png?raw=true "Écran d'édition des périodes")
-![Édition des modèles de périodicité](screenshots/week_patterns.png?raw=true "Écran d'édition des modèles de périodicité")
+Le colloscope : une ligne par créneau, une colonne par semaine. Il peut être modifié à la main ou construit automatiquement.
+
+![Colloscope](screenshots/colloscope.png?raw=true "Le colloscope")
+
+Le planning général : découpage de l'année en périodes et en semaines.
+
+![Planning général](screenshots/general_planning.png?raw=true "Planning général")
+
+Les matières, avec la taille des groupes et la périodicité de chacune.
+
+![Matières](screenshots/subjects.png?raw=true "Édition des matières")
+
+La résolution en cours.
+
+![Résolution en cours](screenshots/solver_running.png?raw=true "Résolution du colloscope en cours")
+
+**[Voir toutes les copies d'écran](screenshots/README.md)** — tous les panneaux de l'application.
 
 ## Installation
 
-Avec [Nix](https://nixos.org/download/) (peut être installé sur n'importe quelle distribution Linux), on peut compiler avec :
+Avec [Nix](https://nixos.org/download/) (peut être installé sur n'importe quelle distribution Linux) :
 ```bash
 nix-build
+./result/bin/collomatique-gtk4
+
+# Ou avec flakes
+nix run
 ```
-Et `nix-run` pour exécuter.
 
 Sous Ubuntu (testé sur 25.11), il faut d'abord installer Rust (dernière version recommandée) via [rustup](https://rustup.rs), puis :
-```
+```bash
 sudo apt install build-essential libglib2.0-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libgraphene-1.0-dev libgtk-4-dev libadwaita-1-dev coinor-libcbc-dev coinor-cbc libpython3-dev
-cargo build
-cargo run
+cargo build --release
+cargo rr --release
 ```
+`cargo rr` est un alias défini dans `.cargo/config.toml` qui lance l'interface graphique GTK4 (`collomatique-gtk4`). Le mode `--release` est fortement recommandé : le solveur ILP est très lent en mode debug.
+
 Le paquet `coinor-cbc` n'est nécessaire que pour l'exécution des tests.
 
-Malheureusement, adwaita 1.7 est nécessaire et donc Collomatique ne compile pas sur Ubuntu 24.04 (LTS au moment d'écrire).
+Adwaita 1.7 est nécessaire. Collomatique ne compile pas sur Ubuntu 24.04 mais a été testé avec succès sur Ubuntu 25.10 et Ubuntu 26.04 (LTS au moment d'écrire).
 
 ## Résolution par programmation linéaire
 
@@ -91,9 +110,14 @@ Le projet est un workspace Rust composé des crates suivantes :
 | `sqlite-state/` | Persistance SQLite (SQLx) |
 | `storage/` | Sérialisation des fichiers (JSON) |
 | `gtk4/` | Interface graphique GTK4/Adwaita (Relm4) |
-| `python/` | Bindings Python (PyO3), utilisés notamment pour l'import Pronote |
+| `python-old/` | Bindings Python (PyO3), utilisés notamment pour l'import Pronote |
 | `rpc/` et `rpc-engine/` | Protocole RPC pour la communication entre processus |
 | `time/` | Types pour représenter les jours, heures, etc dans Collomatique |
 | `ops/` | Opérations de haut-niveau (GUI et Python) sur l'état de l'application |
 | `xlsx/` | Export du colloscope au format xlsx |
 | `mps/` | Export de problèmes ILP au format MPS |
+| `collo-cbc/` | Interface C++ pour le solveur CBC avec CbcEventHandler |
+| `subprocesses/` | Gestion de sous-processus (UI-agnostique) |
+| `rooms/` | Outil CLI pour la planification des salles |
+| `rooms-model/` | Modèle de données pour la planification des salles |
+| `constraints-rooms/` | Modélisation des contraintes de salles |

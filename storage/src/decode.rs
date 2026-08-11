@@ -1,9 +1,38 @@
 //! Decode submodule
 //!
-//! This module contains the logic that builds
-//! a [Data] from a [json::JsonData].
+//! This module contains the logic that builds an
+//! [InnerData] from a file
+//! document via [spec2::decode], the spec-2 pipeline. (Spec 1, the
+//! pre-alpha dump format, is permanently retired and rejected before
+//! decoding — see the versioning notes in `docs/file_format/file_format.md`.)
 //!
-//! The main function for this is [self::decode]
+//! **Every constraint of the file format is diagnosed here**, while
+//! decoding, with a [DecodeError] that names the offending block, row and
+//! field in the vocabulary of the file: the id-space rules of spec §3, and
+//! every `Constraints:` line of spec §4 — referential ("this id must
+//! exist", [DecodeError::DanglingReference]) as well as semantic ("and
+//! that subject must have interrogations", one variant per constraint).
+//! That is what a user can act on; the in-memory invariant checker, which
+//! speaks of the model as a whole rather than of a row, is not a reporter
+//! a user could use.
+//!
+//! Because of that, whatever this module decodes should also pass
+//! `collomatique_state_colloscopes::Data::from_inner_data`, the in-memory
+//! invariant gate. That is a **contract, not a defence**: no file can
+//! reach the gate in a broken state, so a rejection there means this
+//! crate built an `InnerData` it had no business building. Decoding no
+//! longer runs the gate itself — the callers that need a `Data` do, and
+//! the storage test suite runs it on everything it decodes so the two
+//! stay in step. Keeping that true is a maintenance obligation, recorded
+//! in the module docs of `collomatique_state_colloscopes::invariants`: a
+//! new invariant needs a decode-time counterpart here and a rejection
+//! test in `storage/tests/spec2_format.rs`.
+//!
+//! Diagnostics ([DecodeError]) distinguish an *unrecognised* block
+//! (handled by the forward-compatibility rules — a [Caveat] or
+//! [DecodeError::UnknownNeededEntry]) from a *recognised block with a
+//! bad payload* ([DecodeError::IllformedBlock], which carries the serde
+//! diagnostics); the latter is never silently swallowed.
 
 use super::*;
 use crate::json::*;
@@ -13,35 +42,202 @@ use crate::json::*;
 /// This error type describes error that happen when interpreting the file content.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum DecodeError {
-    #[error("Unknown file type - this might be from a more recent version of Collomatique")]
+    #[error(
+        "Unknown file type - this might be from a more recent version of Collomatique (file written by version {0})"
+    )]
     UnknownFileType(Version),
+    #[error(
+        "Unknown file content - this might be from a more recent version of Collomatique (file written by version {0})"
+    )]
+    UnknownFileContent(Version),
     #[error("An unknown entry requires a newer version of Collomatique")]
     UnknownNeededEntry(Version),
-    #[error("An entry has the wrong spec requirements")]
-    MismatchedSpecRequirementInEntry,
+    #[error("Entry for block {0:?} has the wrong spec requirements")]
+    MismatchedSpecRequirementInEntry(&'static str),
     #[error("An entry is probably ill-formed (and thus not recognized)")]
     ProbablyIllformedEntry,
-    #[error("generating new IDs is not secure, half the usable IDs have been used already")]
-    EndOfTheUniverse,
-    #[error("Duplicated ID")]
-    DuplicatedID,
-    #[error("InnerDataDump entry should only be used on non-modified inner-data")]
-    InnerDataDumpUsedOnModifiedInnerData,
-    #[error(transparent)]
-    InnerDataError(#[from] collomatique_state_colloscopes::InnerDataError),
+    #[error("An entry's content should be an object with exactly one key (the block name)")]
+    MalformedEntryContent,
+    #[error("Block {0:?} appears more than once")]
+    DuplicatedBlock(&'static str),
+    #[error("Block {block:?} is ill-formed: {detail}")]
+    IllformedBlock {
+        block: &'static str,
+        /// The rendered serde diagnostics (field name, expected type,
+        /// position relative to the block's entry content)
+        detail: String,
+    },
+    #[error("A slot of incompatibility id {incompat_id} crosses midnight")]
+    IncompatibilitySlotCrossesMidnight { incompat_id: u64 },
+    #[error("The colloscope references an unknown slot id ({0})")]
+    UnknownSlotInColloscope(u64),
+    #[error("The colloscope references an unknown week id ({week_id})")]
+    UnknownWeekInColloscope { week_id: u64 },
+    #[error(
+        "The colloscope interrogation cell (slot id {slot_id}, week id {week_id}) does not exist"
+    )]
+    InvalidInterrogationCell { slot_id: u64, week_id: u64 },
+    #[error(
+        "The colloscope cell (slot id {slot_id}, week id {week_id}) assigns group number {group}, but the associated group list has {group_count} groups"
+    )]
+    InterrogationGroupOutOfBounds {
+        slot_id: u64,
+        week_id: u64,
+        group: u32,
+        group_count: u32,
+    },
+    #[error("The colloscope fills group list id {0} which is not an automatic group list")]
+    InvalidColloscopeGroupList(u64),
+    #[error(
+        "The colloscope places student id {student_id} in group list id {group_list_id}, but the list excludes that student"
+    )]
+    ColloscopeStudentExcluded { group_list_id: u64, student_id: u64 },
+    #[error(
+        "The colloscope places student id {student_id} of group list id {group_list_id} in group number {group}, but the list has {group_count} groups"
+    )]
+    ColloscopeStudentGroupOutOfBounds {
+        group_list_id: u64,
+        student_id: u64,
+        group: u32,
+        group_count: u32,
+    },
+    #[error(
+        "Group list id {0} has an internally inconsistent filling (prefill group count or duplicated student)"
+    )]
+    InconsistentGroupList(u64),
+    #[error("Pairing rule id {0} has its antecedent and consequent on the same subject")]
+    InconsistentPairingRule(u64),
+    #[error("Slot pairing rule id {0} has its antecedent and consequent on the same slot")]
+    InconsistentSlotPairingRule(u64),
+    #[error("Duplicated ID {id} in block {block:?}")]
+    DuplicatedIdInBlock { block: &'static str, id: u64 },
+    #[error("Block {block:?} defines id {id}, which is above the id ceiling (2^63 - 1)")]
+    IdAboveCeiling { block: &'static str, id: u64 },
+    #[error("Id {id} is defined in both block {first:?} and block {second:?}")]
+    DuplicatedIdAcrossBlocks {
+        first: &'static str,
+        second: &'static str,
+        id: u64,
+    },
+    #[error(
+        "Teacher id {teacher_id} references subject id {subject_id}, which has no interrogations"
+    )]
+    TeacherSubjectWithoutInterrogations { teacher_id: u64, subject_id: u64 },
+    #[error("The assignments reference an unknown period (period id {0})")]
+    UnknownPeriodInAssignments(u64),
+    #[error("The assignments reference an unknown subject (subject id {0})")]
+    UnknownSubjectInAssignments(u64),
+    #[error(
+        "The assignments have a row for subject id {subject_id} on period id {period_id}, but the subject is excluded from that period"
+    )]
+    AssignmentOnExcludedPeriod { period_id: u64, subject_id: u64 },
+    #[error(
+        "Student id {student_id}, assigned in row (period {period_id}, subject {subject_id}), is excluded from that period"
+    )]
+    AssignedStudentExcludedFromPeriod {
+        period_id: u64,
+        subject_id: u64,
+        student_id: u64,
+    },
+    #[error("The slots reference an unknown subject (subject id {0})")]
+    UnknownSubjectInSlots(u64),
+    #[error("The slots have a row for subject id {0} which has no interrogations")]
+    SlotsForSubjectWithoutInterrogations(u64),
+    #[error(
+        "Slot id {slot_id} names teacher id {teacher_id}, who does not teach subject id {subject_id}"
+    )]
+    SlotTeacherDoesNotTeachSubject {
+        slot_id: u64,
+        teacher_id: u64,
+        subject_id: u64,
+    },
+    #[error("Slot id {slot_id} plus its subject's interrogation duration crosses midnight")]
+    SlotOverflowsDay { slot_id: u64 },
+    /// The row named by `row` in block `block` references an id that no
+    /// entity of kind `referenced` defines anywhere in the document.
+    ///
+    /// This is the shared variant for every spec §4 constraint of the
+    /// form "every id in X is an existing Y" — the referential half.
+    /// Constraints about the *state* of the referenced entity (e.g. "and
+    /// that subject has interrogations") have their own per-constraint
+    /// variants.
+    #[error("Block {block:?}, {row}: references an unknown {referenced} (id {id})")]
+    DanglingReference {
+        block: &'static str,
+        row: RowKey,
+        referenced: IdKind,
+        id: u64,
+    },
+    #[error(
+        "The group-list association (period {period_id}, subject {subject_id}) names a subject with no interrogations"
+    )]
+    AssociationForSubjectWithoutInterrogations { period_id: u64, subject_id: u64 },
+    #[error(
+        "The group-list association (period {period_id}, subject {subject_id}) names a subject excluded from that period"
+    )]
+    AssociationOnExcludedPeriod { period_id: u64, subject_id: u64 },
+    #[error("Pairing rule id {rule_id} names subject id {subject_id}, which has no interrogations")]
+    PairingRuleForSubjectWithoutInterrogations { rule_id: u64, subject_id: u64 },
+    #[error(
+        "Slot pairing rule id {rule_id} pairs slot id {antecedent_slot_id} and slot id {consequent_slot_id}, which belong to different subjects"
+    )]
+    SlotPairingAcrossSubjects {
+        rule_id: u64,
+        antecedent_slot_id: u64,
+        consequent_slot_id: u64,
+    },
+    #[error("The balancing options name subject id {subject_id}, which has no interrogations")]
+    BalancingForSubjectWithoutInterrogations { subject_id: u64 },
 }
 
-impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
-    fn from(value: collomatique_state_colloscopes::FromInnerDataError) -> Self {
-        use collomatique_state::tools::IdError;
-        use collomatique_state_colloscopes::FromInnerDataError;
-        match value {
-            FromInnerDataError::IdError(id_error) => match id_error {
-                IdError::DuplicatedId => DecodeError::DuplicatedID,
-                IdError::EndOfTheUniverse => DecodeError::EndOfTheUniverse,
-            },
-            FromInnerDataError::InnerDataError(inner_data_error) => inner_data_error.into(),
+/// File-vocabulary coordinates of a row inside a block
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RowKey {
+    /// A row keyed by its own id (teachers, students, subjects, slots,
+    /// incompatibilities, group lists, pairing rules, settings/balancing
+    /// override rows, colloscope group-list rows…)
+    Id(u64),
+    /// An association row keyed by (period, subject)
+    PeriodSubject { period_id: u64, subject_id: u64 },
+}
+
+impl std::fmt::Display for RowKey {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            RowKey::Id(id) => write!(f, "row id {id}"),
+            RowKey::PeriodSubject {
+                period_id,
+                subject_id,
+            } => write!(f, "row (period {period_id}, subject {subject_id})"),
         }
+    }
+}
+
+/// The kind of entity a dangling id was supposed to name
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdKind {
+    Period,
+    Week,
+    Subject,
+    Teacher,
+    Student,
+    WeekPattern,
+    Slot,
+    GroupList,
+}
+
+impl std::fmt::Display for IdKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            IdKind::Period => "period",
+            IdKind::Week => "week",
+            IdKind::Subject => "subject",
+            IdKind::Teacher => "teacher",
+            IdKind::Student => "student",
+            IdKind::WeekPattern => "week pattern",
+            IdKind::Slot => "slot",
+            IdKind::GroupList => "group list",
+        })
     }
 }
 
@@ -57,95 +253,44 @@ impl From<collomatique_state_colloscopes::FromInnerDataError> for DecodeError {
 pub enum Caveat {
     /// The file was opened but it was created with a newer version
     /// of Collomatique
-    CreatedWithNewerVersion(Version),
-    /// Unknown entries
+    CreatedWithNewerVersion { version: Version },
+    /// An unknown entry was skipped
     ///
-    /// Some entries are unknown. They are maarked as unneeded,
-    /// so the file can be decoded without them. But some information
-    /// might be missing and it is preferable to use a newer version
-    /// of Collomatique.
-    UnknownEntries,
+    /// The block claims a spec version this build does not support and is
+    /// marked as unneeded, so the file could be decoded without it. Its
+    /// content is lost if the file is written back.
+    ///
+    /// There is one caveat per skipped block, so the block name is the
+    /// answer to "what exactly was dropped".
+    UnknownEntry {
+        block_name: String,
+        minimum_spec_version: u32,
+    },
 }
 
-fn check_header(header: &Header, caveats: &mut BTreeSet<Caveat>) -> Result<(), DecodeError> {
-    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+pub(crate) fn check_header(
+    header: &Header,
+    caveats: &mut BTreeSet<Caveat>,
+) -> Result<(), DecodeError> {
+    // The two header discriminants are tolerated at parse (untagged
+    // unknown-value arms) so that an unrecognized one is reported here as
+    // itself, rather than as a generic serde failure on the envelope.
+    if let FileType::UnknownFileType(_value) = &header.file_type {
         return Err(DecodeError::UnknownFileType(
             header.produced_with_version.clone(),
         ));
     }
-    if header.produced_with_version > Version::current() {
-        caveats.insert(Caveat::CreatedWithNewerVersion(
+    if let FileContent::UnknownFileContent(_value) = &header.file_content {
+        return Err(DecodeError::UnknownFileContent(
             header.produced_with_version.clone(),
         ));
     }
-    Ok(())
-}
-
-fn check_entries_consistency(
-    entries: &[Entry],
-    caveats: &mut BTreeSet<Caveat>,
-    version: &Version,
-) -> Result<(), DecodeError> {
-    for entry in entries {
-        match &entry.content {
-            EntryContent::UnknownEntry => {
-                if entry.minimum_spec_version <= CURRENT_SPEC_VERSION {
-                    return Err(DecodeError::ProbablyIllformedEntry);
-                }
-                if entry.needed_entry {
-                    return Err(DecodeError::UnknownNeededEntry(version.clone()));
-                }
-                caveats.insert(Caveat::UnknownEntries);
-            }
-            EntryContent::ValidEntry(valid_entry) => {
-                if entry.minimum_spec_version != valid_entry.minimum_spec_version() {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-                if entry.needed_entry != valid_entry.needed_entry() {
-                    return Err(DecodeError::MismatchedSpecRequirementInEntry);
-                }
-            }
-        }
+    if header.produced_with_version > collomatique_settings::current_version() {
+        caveats.insert(Caveat::CreatedWithNewerVersion {
+            version: header.produced_with_version.clone(),
+        });
     }
     Ok(())
 }
 
-pub fn decode(json_data: JsonData) -> Result<(Data, BTreeSet<Caveat>), DecodeError> {
-    let mut caveats = BTreeSet::new();
-
-    check_header(&json_data.header, &mut caveats)?;
-    check_entries_consistency(
-        &json_data.entries,
-        &mut caveats,
-        &json_data.header.produced_with_version,
-    )?;
-
-    let data = decode_entries(json_data.entries)?;
-    Ok((data, caveats))
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Default)]
-struct PreData {
-    inner_data: collomatique_state_colloscopes::InnerData,
-}
-
-mod inner_data_dump;
-
-fn decode_entries(entries: Vec<Entry>) -> Result<Data, DecodeError> {
-    let mut pre_data = PreData::default();
-
-    for entry in entries {
-        let EntryContent::ValidEntry(valid_entry) = entry.content else {
-            continue;
-        };
-
-        match *valid_entry {
-            ValidEntry::InnerDataDump(inner_data) => {
-                inner_data_dump::decode_entry(inner_data, &mut pre_data)?;
-            }
-        }
-    }
-
-    let data = Data::from_inner_data(pre_data.inner_data)?;
-    Ok(data)
-}
+pub(crate) mod spec2;

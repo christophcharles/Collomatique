@@ -1,7 +1,7 @@
+use crate::extras::{MyBundle, V, base_var, extra_var, students_for_group_list};
 use crate::ids::GroupNum;
-use crate::native_extras::{MyBundle, V, extra_var, students_for_group_list};
 use crate::types::{ExtraVarName, ProgressiveConstraint, QualityConstraint};
-use crate::vars::VarEnv;
+use crate::vars::{Var, VarEnv};
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::ids::GroupListId;
@@ -20,7 +20,7 @@ fn build_for_group(
     let count: IntLinExpr<V> = students
         .iter()
         .map(|&student| {
-            IntLinExpr::var(extra_var(ExtraVarName::StudentInGroup {
+            IntLinExpr::var(base_var(Var::StudentInGroup {
                 student,
                 group_list,
                 group,
@@ -57,11 +57,10 @@ fn build_for_group(
 
 pub(super) fn build(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
-    for (&group_list, gl) in &env.group_lists.group_list_map {
-        let min_students = gl.params.students_per_group.start().get();
-        let max_students = gl.params.students_per_group.end().get();
-        for group_index in 0..gl.params.group_names.len() {
-            let group = GroupNum(group_index);
+    for (group_list, gl) in env.group_lists.group_list_map.iter() {
+        let min_students = gl.params().students_per_group.start().get();
+        let max_students = gl.params().students_per_group.end().get();
+        for group in GroupNum::enumerate(env, group_list) {
             bundle = build_for_group(
                 env,
                 bundle,

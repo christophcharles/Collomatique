@@ -4,5 +4,10 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[features]
+default = ["derive"]
+derive = ["dep:collomatique-state-derive"]
+
 [dependencies]
+collomatique-state-derive = { path = "../state-derive", optional = true }
 thiserror.workspace = true

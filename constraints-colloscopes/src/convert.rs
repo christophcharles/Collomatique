@@ -1,64 +1,59 @@
+use crate::ids::{GlobalWeek, GroupNum};
 use crate::tools;
 use crate::vars::Var;
 use collomatique_ilp::ConfigData;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
-
-use collomatique_state_colloscopes::ids::Id;
+use collomatique_state_colloscopes::ids::{GroupListId, SlotId, StudentId, WeekId};
+use std::collections::{BTreeMap, BTreeSet};
 
 pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = ConfigData::new();
 
-    for (group_list_id, group_list) in &colloscope.group_lists {
-        let data_group_list = env
-            .group_lists
-            .group_list_map
-            .get(group_list_id)
-            .expect("Group list ID should be valid");
-        if data_group_list.is_prefilled() {
-            continue;
-        }
-        for (student_id, group) in &group_list.groups_for_students {
+    // The colloscope only ever holds non-prefilled group lists (validated), so
+    // the historical prefilled skip is dead here.
+    for (group_list_id, placements) in colloscope.group_lists_iter() {
+        for (student_id, group) in placements {
+            let group = GroupNum::new(env, group_list_id, *group as usize)
+                .expect("group number from a live colloscope row is valid");
             config_data = config_data.set(
-                Var::StudentGroup {
-                    student: student_id.inner() as i32,
-                    group_list: group_list_id.inner() as i32,
+                Var::StudentInGroup {
+                    student: *student_id,
+                    group_list: group_list_id,
+                    group,
                 },
-                *group as f64,
+                1.0,
             );
         }
     }
 
-    let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
-        let period = colloscope
-            .period_map
-            .get(period_id)
-            .expect("Period ID should be valid");
+    for ((slot_id, week_id), assigned_groups) in colloscope.iter() {
+        let (period_id, _pos) = env
+            .weeks
+            .week_position(week_id)
+            .expect("week id from a live colloscope row is valid");
+        let week = env
+            .weeks
+            .global_week_position(&env.periods, week_id)
+            .expect("week id from a live colloscope row is valid");
 
-        for (slot_id, slot) in &period.slot_map {
-            for (week_num, interrogation_opt) in slot.interrogations.iter().enumerate() {
-                let Some(interrogation) = interrogation_opt else {
-                    continue;
-                };
-
-                let week = first_week_in_period + week_num;
-
-                for group_num in &interrogation.assigned_groups {
-                    let group = *group_num as i32;
-                    config_data = config_data.set(
-                        Var::GroupInInterrogationInternal {
-                            slot: slot_id.inner() as i32,
-                            week: week as i32,
-                            group,
-                        },
-                        1.0,
-                    );
-                }
-            }
+        for group_num in assigned_groups {
+            let group = GroupNum::new(
+                env,
+                tools::group_list_for_slot(env, period_id, slot_id)
+                    .expect("slot should have a group list"),
+                *group_num as usize,
+            )
+            .expect("group number should be valid");
+            config_data = config_data.set(
+                Var::GroupInInterrogation {
+                    slot: slot_id,
+                    week: GlobalWeek(week),
+                    group,
+                },
+                1.0,
+            );
         }
-
-        first_week_in_period += period_desc.len();
     }
 
     config_data
@@ -67,48 +62,55 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
 pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
     let mut config_data = build_config(env, colloscope);
 
-    for (group_list_id, group_list) in &env.group_lists.group_list_map {
-        let data_group_list = env
-            .group_lists
-            .group_list_map
-            .get(group_list_id)
-            .expect("Group list ID should be valid");
-        if data_group_list.is_prefilled() {
+    for (group_list_id, group_list) in env.group_lists.group_list_map.iter() {
+        if group_list.is_prefilled() {
             continue;
         }
         for student_id in env.students.student_map.keys() {
-            if group_list.filling.excluded_students().contains(student_id) {
+            if group_list
+                .filling()
+                .excluded_students()
+                .contains(&student_id)
+            {
                 continue;
             }
-            let var = Var::StudentGroup {
-                student: student_id.inner() as i32,
-                group_list: group_list_id.inner() as i32,
-            };
-            if config_data.get(var.clone()).is_some() {
-                continue;
+            for group in GroupNum::enumerate(env, group_list_id) {
+                let var = Var::StudentInGroup {
+                    student: student_id,
+                    group_list: group_list_id,
+                    group,
+                };
+                if config_data.get(var.clone()).is_some() {
+                    continue;
+                }
+                config_data = config_data.set(var, 0.0);
             }
-            config_data = config_data.set(var, -1.);
         }
     }
 
-    let mut first_week_in_period = 0usize;
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
-        let period = colloscope
-            .period_map
-            .get(period_id)
-            .expect("Period ID should be valid");
-
-        let subject_associations = env
-            .group_lists
-            .subjects_associations
-            .get(period_id)
-            .expect("Period Id should be valid");
-        for (slot_id, slot) in &period.slot_map {
+    // Zero-fill the unassigned group slots on every *possible* interrogation
+    // cell. The set of possible cells is re-derived from the parameters —
+    // `is_interrogation_possible` mirrors the dense skeleton's Some-cell rule —
+    // rather than walked off the colloscope; on validated data the two coincide.
+    // `ConfigData` is a map, so the enumeration order is invisible.
+    for period_id in env.periods.period_ids() {
+        let week_ids: Vec<WeekId> = env
+            .weeks
+            .weeks_for_period(period_id)
+            .into_iter()
+            .flatten()
+            .map(|(id, _)| *id)
+            .collect();
+        for (slot_id, _slot) in env.slots.all_slots() {
             let (subject_id, _pos) = env
                 .slots
                 .find_slot_subject_and_position(*slot_id)
                 .expect("Slot ID should be valid");
-            let Some(group_list_id) = subject_associations.get(&subject_id) else {
+            let Some(group_list_id) = env
+                .group_lists
+                .subjects_associations
+                .get(&(period_id, subject_id))
+            else {
                 continue;
             };
             let group_list = env
@@ -117,75 +119,96 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
                 .get(group_list_id)
                 .expect("Group list ID should be valid");
 
-            for (week_num, interrogation_opt) in slot.interrogations.iter().enumerate() {
-                let Some(interrogation) = interrogation_opt else {
+            for &week_id in &week_ids {
+                if !env.is_interrogation_possible(*slot_id, week_id) {
                     continue;
-                };
+                }
+                let week = env
+                    .weeks
+                    .global_week_position(&env.periods, week_id)
+                    .expect("week id is valid");
+                let assigned = colloscope.interrogation(*slot_id, week_id);
 
-                let week = first_week_in_period + week_num;
-
-                for group_num in 0..group_list.params.group_names.len() as u32 {
-                    if interrogation.assigned_groups.contains(&group_num) {
+                for group_num in 0..group_list.params().group_names.len() {
+                    if assigned.is_some_and(|groups| groups.contains(&(group_num as u32))) {
                         continue;
                     }
-                    let group = group_num as i32;
                     config_data = config_data.set(
-                        Var::GroupInInterrogationInternal {
-                            slot: slot_id.inner() as i32,
-                            week: week as i32,
-                            group,
+                        Var::GroupInInterrogation {
+                            slot: *slot_id,
+                            week: GlobalWeek(week),
+                            group: GroupNum::new(env, *group_list_id, group_num)
+                                .expect("group number should be valid"),
                         },
                         0.0,
                     );
                 }
             }
         }
-
-        first_week_in_period += period_desc.len();
     }
 
     config_data
 }
 
 pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Option<Colloscope> {
-    let mut colloscope = Colloscope::new_empty_from_params(env);
+    let mut colloscope = Colloscope::default();
+
+    // Global week index → week id (canonical walk order).
+    let week_ids: Vec<WeekId> = env.walk_weeks().map(|(_p, week_id, _w)| week_id).collect();
+
+    // Accumulate rows locally — this is 1d's sparse storage shape — then commit
+    // them through the surface writers once each coordinate has been validated
+    // against the parameters (the writers panic on an impossible coordinate).
+    let mut interrogations: BTreeMap<(SlotId, WeekId), BTreeSet<u32>> = BTreeMap::new();
+    let mut group_lists: BTreeMap<GroupListId, BTreeMap<StudentId, u32>> = BTreeMap::new();
 
     for (var, value) in config_data.get_values() {
         match var {
-            Var::StudentGroup {
+            Var::StudentInGroup {
                 student,
                 group_list,
+                group,
             } => {
-                if value >= -0.1 {
-                    let group_list_id = unsafe {
-                        collomatique_state_colloscopes::ids::GroupListId::new(group_list as u64)
-                    };
-                    let student_id = unsafe {
-                        collomatique_state_colloscopes::ids::StudentId::new(student as u64)
-                    };
-                    let collo_group_list = colloscope.group_lists.get_mut(&group_list_id)?;
-                    collo_group_list
-                        .groups_for_students
-                        .insert(student_id, value as u32);
+                if value > 0.5 {
+                    // A colloscope row exists only for a valid, non-prefilled
+                    // group list; anything else is a malformed config.
+                    let data_group_list = env.group_lists.group_list_map.get(&group_list)?;
+                    if data_group_list.is_prefilled() {
+                        return None;
+                    }
+                    let prev = group_lists
+                        .entry(group_list)
+                        .or_default()
+                        .insert(student, group.index() as u32);
+                    if prev.is_some() {
+                        // >= 2 groups at once: the config is not a placement
+                        // (a blamed solution can violate the <= 1 row).
+                        return None;
+                    }
                 }
             }
-            Var::GroupInInterrogationInternal { slot, week, group } => {
+            Var::GroupInInterrogation { slot, week, group } => {
                 if value < 0.5 {
                     continue;
                 }
-                let slot_id =
-                    unsafe { collomatique_state_colloscopes::ids::SlotId::new(slot as u64) };
-                let (period_id, num_in_period) = tools::week_to_period_id(env, week as usize)?;
-                let collo_period = colloscope.period_map.get_mut(&period_id)?;
-                let collo_slot = collo_period.slot_map.get_mut(&slot_id)?;
-                let collo_interrogation_opt = collo_slot.interrogations.get_mut(num_in_period)?;
-
-                let Some(collo_interrogation) = collo_interrogation_opt else {
+                let &week_id = week_ids.get(week.0)?;
+                // Reject a group assigned on an impossible interrogation cell.
+                if !env.is_interrogation_possible(slot, week_id) {
                     return None;
-                };
-                collo_interrogation.assigned_groups.insert(group as u32);
+                }
+                interrogations
+                    .entry((slot, week_id))
+                    .or_default()
+                    .insert(group.index() as u32);
             }
         }
+    }
+
+    for ((slot_id, week_id), groups) in interrogations {
+        colloscope.set_interrogation(slot_id, week_id, groups);
+    }
+    for (group_list_id, placements) in group_lists {
+        colloscope.set_group_list(group_list_id, placements);
     }
 
     Some(colloscope)

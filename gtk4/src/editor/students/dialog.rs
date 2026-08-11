@@ -11,6 +11,7 @@ pub struct Dialog {
     should_redraw: bool,
     student_data: collomatique_state_colloscopes::students::Student,
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     period_entries: FactoryVecDeque<PeriodEntry>,
 }
 
@@ -18,6 +19,7 @@ pub struct Dialog {
 pub enum DialogInput {
     Show(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::students::Student,
     ),
     Cancel,
@@ -151,7 +153,7 @@ impl SimpleComponent for Dialog {
                             set_margin_all: 5,
                             set_hexpand: true,
                             #[watch]
-                            set_visible: !model.periods.ordered_period_list.is_empty(),
+                            set_visible: !model.periods.is_empty(),
                         },
                     },
                 },
@@ -166,6 +168,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let student_data = collomatique_state_colloscopes::students::Student::default();
         let periods = collomatique_state_colloscopes::periods::Periods::default();
+        let weeks = collomatique_state_colloscopes::weeks::Weeks::default();
 
         let period_entries = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
@@ -180,6 +183,7 @@ impl SimpleComponent for Dialog {
             should_redraw: false,
             student_data,
             periods,
+            weeks,
             period_entries,
         };
 
@@ -192,25 +196,24 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
         match msg {
-            DialogInput::Show(periods, student_data) => {
+            DialogInput::Show(periods, weeks, student_data) => {
                 self.hidden = false;
                 self.should_redraw = true;
                 self.periods = periods;
+                self.weeks = weeks;
                 self.student_data = student_data;
 
                 let transformed_data: Vec<_> = self
                     .periods
-                    .ordered_period_list
-                    .iter()
-                    .scan(0usize, |current_week, (id, period_data)| {
-                        let new_period = PeriodData {
-                            global_first_week: self.periods.first_week.clone(),
-                            first_week_num: *current_week,
-                            week_count: period_data.len(),
-                            enable: !self.student_data.excluded_periods.contains(id),
-                        };
-                        *current_week += period_data.len();
-                        Some(new_period)
+                    .period_ids()
+                    .map(|id| PeriodData {
+                        title: collomatique_ui_text::rendering::render_period(
+                            &self.periods,
+                            &self.weeks,
+                            id,
+                        )
+                        .expect("the period comes from the document being displayed"),
+                        enable: !self.student_data.excluded_periods.contains(&id),
                     })
                     .collect();
 
@@ -256,8 +259,10 @@ impl SimpleComponent for Dialog {
                 self.student_data.desc.email = email_opt;
             }
             DialogInput::UpdatePeriodStatus(period_num, new_status) => {
-                assert!(period_num < self.periods.ordered_period_list.len());
-                let period_id = self.periods.ordered_period_list[period_num].0;
+                let period_id = self
+                    .periods
+                    .period_id_at(period_num)
+                    .expect("period_num within bounds");
 
                 if new_status {
                     self.student_data.excluded_periods.remove(&period_id);
@@ -279,9 +284,8 @@ impl SimpleComponent for Dialog {
 
 #[derive(Debug, Clone)]
 struct PeriodData {
-    global_first_week: Option<collomatique_time::WeekStart>,
-    first_week_num: usize,
-    week_count: usize,
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
+    title: String,
     enable: bool,
 }
 
@@ -318,12 +322,7 @@ impl FactoryComponent for PeriodEntry {
             set_hexpand: true,
             set_use_markup: false,
             #[watch]
-            set_title: &super::super::generate_period_title(
-                &self.data.global_first_week,
-                self.index.current_index(),
-                self.data.first_week_num,
-                self.data.week_count
-            ),
+            set_title: &format!("Période {}", self.data.title),
             #[track(self.should_redraw)]
             set_active: self.data.enable,
             connect_active_notify[sender] => move |widget| {

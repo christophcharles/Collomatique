@@ -7,6 +7,8 @@ use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
 use relm4::{adw, gtk};
 
+use crate::tools::messages::MessageIcon;
+
 #[derive(Debug, Clone)]
 pub struct EntryData {
     pub subject_id: collomatique_state_colloscopes::SubjectId,
@@ -190,6 +192,7 @@ pub struct RuleData {
 #[derive(Debug)]
 pub struct Rule {
     data: RuleData,
+    messages: FactoryVecDeque<MessageIcon>,
 }
 
 #[derive(Debug, Clone)]
@@ -205,19 +208,23 @@ pub enum RuleOutput {
 
 impl Rule {
     fn generate_summary(&self) -> String {
-        let ant_desc = self.slot_desc(&self.data.rule.antecedent.slot_id);
-        let con_desc = self.slot_desc(&self.data.rule.consequent.slot_id);
-        let ant_cond = if self.data.rule.antecedent.should_have {
+        let ant_desc = self.slot_desc(&self.data.rule.antecedent().slot_id);
+        let con_desc = self.slot_desc(&self.data.rule.consequent().slot_id);
+        let ant_cond = if self.data.rule.antecedent().should_have {
             "utilisé"
         } else {
             "non utilisé"
         };
-        let con_cond = if self.data.rule.consequent.should_have {
+        let con_cond = if self.data.rule.consequent().should_have {
             "utilisé"
         } else {
             "non utilisé"
         };
-        let soft_text = if self.data.rule.soft { " (souple)" } else { "" };
+        let soft_text = if self.data.rule.soft() {
+            " (souple)"
+        } else {
+            ""
+        };
         format!(
             "[{}] {} \u{27F9} [{}] {}{}",
             ant_cond, ant_desc, con_cond, con_desc, soft_text
@@ -229,14 +236,14 @@ impl Rule {
             .slot_desc_map
             .get(slot_id)
             .cloned()
-            .unwrap_or_else(|| "???".into())
+            .expect("the rule's slots are slots of the subject this row was built from")
     }
 
     fn generate_excluded_periods_info(&self) -> String {
         let mut excluded_period_list: Vec<_> = self
             .data
             .rule
-            .excluded_periods
+            .excluded_periods()
             .iter()
             .map(|period_id| {
                 self.data
@@ -258,11 +265,25 @@ impl Rule {
             0 => String::new(),
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
-                "Désactivée sur les périodes {} et {}",
-                excluded_period_list[..excluded_period_list.len() - 1].join(", "),
-                excluded_period_list.last().unwrap()
+                "Désactivée sur les périodes {}",
+                collomatique_ui_text::rendering::join_french(&excluded_period_list)
             ),
         }
+    }
+
+    /// Refills the icon strip, so it always describes the rule currently shown.
+    ///
+    /// The remarks are the ones the edition dialog spells out in full; here they
+    /// are only icons, with the text as tooltip. A recorded rule always names
+    /// two distinct slots, hence `slots_are_same = false` — the error variant
+    /// cannot fire on a row.
+    fn update_messages(&mut self) {
+        let messages: Vec<_> = super::rule_messages(super::rule_shape(&self.data.rule), false)
+            .into_iter()
+            .map(|message| (message.severity(), message.text().to_string()))
+            .collect();
+
+        crate::tools::factories::refill_vec_deque(&mut self.messages, messages);
     }
 }
 
@@ -282,7 +303,7 @@ impl FactoryComponent for Rule {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked[sender, rule_id = self.data.rule_id] => move |_| {
                     sender
@@ -312,7 +333,13 @@ impl FactoryComponent for Rule {
                 set_label: &self.generate_excluded_periods_info(),
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
                 #[watch]
-                set_visible: !self.data.rule.excluded_periods.is_empty(),
+                set_visible: !self.data.rule.excluded_periods().is_empty(),
+            },
+            #[local_ref]
+            messages_box -> gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
+                set_margin_end: 5,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -331,7 +358,15 @@ impl FactoryComponent for Rule {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self { data }
+        let mut model = Self {
+            data,
+            messages: FactoryVecDeque::builder()
+                .launch(gtk::Box::default())
+                .detach(),
+        };
+        model.update_messages();
+
+        model
     }
 
     fn init_widgets(
@@ -341,6 +376,7 @@ impl FactoryComponent for Rule {
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
+        let messages_box = self.messages.widget();
         let widgets = view_output!();
 
         widgets
@@ -350,6 +386,7 @@ impl FactoryComponent for Rule {
         match msg {
             RuleInput::UpdateData(new_data) => {
                 self.data = new_data;
+                self.update_messages();
             }
         }
     }

@@ -66,7 +66,7 @@ impl Component for Settings {
                         set_margin_all: 5,
                         set_spacing: 5,
                         gtk::Button {
-                            set_icon_name: "edit-symbolic",
+                            set_icon_name: "document-edit-symbolic",
                             add_css_class: "flat",
                             set_tooltip_text: Some("Modifier les paramètres globaux"),
                             connect_clicked => SettingsInput::EditGlobalLimits,
@@ -79,8 +79,10 @@ impl Component for Settings {
                             set_xalign: 0.,
                             set_margin_start: 5,
                             set_margin_end: 5,
+                            set_ellipsize: gtk::pango::EllipsizeMode::End,
+                            set_width_chars: 24,
+                            set_max_width_chars: 24,
                             set_label: "Paramètres globaux",
-                            set_size_request: (200, -1),
                         },
                         gtk::Separator {
                             set_orientation: gtk::Orientation::Vertical,
@@ -224,7 +226,7 @@ impl Settings {
             .iter()
             .map(|(id, student)| {
                 (
-                    *id,
+                    id,
                     student.desc.firstname.clone(),
                     student.desc.surname.clone(),
                 )
@@ -359,7 +361,7 @@ impl FactoryComponent for StudentEntry {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => StudentEntryInput::EditClicked,
                 #[watch]
@@ -373,9 +375,13 @@ impl FactoryComponent for StudentEntry {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 24,
+                set_max_width_chars: 24,
                 #[watch]
                 set_label: &self.data.student_name,
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.student_name),
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,

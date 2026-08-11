@@ -11,9 +11,9 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Debug, Clone)]
 pub struct PeriodEntryData {
     pub period_id: collomatique_state_colloscopes::PeriodId,
-    pub global_first_week: Option<collomatique_time::WeekStart>,
+    /// The period as [collomatique_ui_text::rendering::render_period] names it.
+    pub title: String,
     pub first_week_num: usize,
-    pub week_count: usize,
     pub filtered_subjects: Vec<(
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::subjects::Subject,
@@ -22,13 +22,15 @@ pub struct PeriodEntryData {
         collomatique_state_colloscopes::StudentId,
         collomatique_state_colloscopes::students::Student,
     )>,
-    pub period_assignments: collomatique_state_colloscopes::assignments::PeriodAssignments,
+    pub period_assignments: std::collections::BTreeMap<
+        collomatique_state_colloscopes::SubjectId,
+        std::collections::BTreeSet<collomatique_state_colloscopes::StudentId>,
+    >,
 }
 
 use crate::tools::dynamic_column_view::{DynamicColumnView, LabelColumn, RelmColumn};
 
 pub struct PeriodEntry {
-    index: DynamicIndex,
     data: PeriodEntryData,
     subjects_dropdown: Controller<crate::widgets::droplist::Widget>,
     current_subject: Option<collomatique_state_colloscopes::SubjectId>,
@@ -70,15 +72,7 @@ pub enum PeriodEntryOutput {
 
 impl PeriodEntry {
     fn generate_title_text(&self) -> String {
-        format!(
-            "<b><big>{}</big></b>",
-            super::super::generate_period_title(
-                &self.data.global_first_week,
-                self.index.current_index(),
-                self.data.first_week_num,
-                self.data.week_count
-            )
-        )
+        format!("<b><big>Période {}</big></b>", self.data.title)
     }
 }
 
@@ -103,9 +97,9 @@ impl FactoryComponent for PeriodEntry {
                 gtk::Button {
                     #[watch]
                     set_icon_name: if self.shown {
-                        "go-up"
+                        "go-up-symbolic"
                     } else {
-                        "go-down"
+                        "go-down-symbolic"
                     },
                     add_css_class: "flat",
                     #[watch]
@@ -205,7 +199,6 @@ impl FactoryComponent for PeriodEntry {
         let column_view = DynamicColumnView::new();
 
         let mut model = Self {
-            index: index.clone(),
             data,
             column_view,
             current_items: vec![],
@@ -247,13 +240,13 @@ impl FactoryComponent for PeriodEntry {
                 self.update_view_wrapper(sender);
             }
             PeriodEntryInput::UpdateStatus(student_id, subject_id, new_status) => {
+                // A subject with nobody assigned has no row in the (sparse)
+                // per-period map; an absent row simply means "not assigned".
                 let current_status = self
                     .data
                     .period_assignments
-                    .subject_map
                     .get(&subject_id)
-                    .expect("Subject id should be valid at this point")
-                    .contains(&student_id);
+                    .is_some_and(|students| students.contains(&student_id));
 
                 if current_status == new_status {
                     return;
@@ -371,7 +364,6 @@ impl PeriodEntry {
                 assigned_subjects: self
                     .data
                     .period_assignments
-                    .subject_map
                     .iter()
                     .filter_map(|(subject_id, assigned_students)| {
                         if assigned_students.contains(student_id) {

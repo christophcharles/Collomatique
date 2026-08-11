@@ -3,19 +3,24 @@ use relm4::FactorySender;
 use relm4::RelmWidgetExt;
 use relm4::factory::FactoryView;
 use relm4::gtk;
-use relm4::prelude::{DynamicIndex, FactoryComponent};
+use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
+
+use crate::tools::messages::MessageIcon;
 
 #[derive(Debug, Clone)]
 pub struct EntryData {
     pub rule_id: collomatique_state_colloscopes::PairingRuleId,
     pub rule: collomatique_state_colloscopes::pairings::PairingRule,
-    pub subjects: collomatique_state_colloscopes::subjects::Subjects,
+    /// The rule as [collomatique_ui_text::rendering::render_pairing_rule] names it.
+    /// Softness is not part of it — this row appends « (souple) » itself.
+    pub summary: String,
     pub periods: collomatique_state_colloscopes::periods::Periods,
 }
 
 #[derive(Debug)]
 pub struct Entry {
     data: EntryData,
+    messages: FactoryVecDeque<MessageIcon>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,38 +36,19 @@ pub enum EntryOutput {
 
 impl Entry {
     fn generate_summary(&self) -> String {
-        let ant_name = self.subject_name(self.data.rule.antecedent.subject_id);
-        let con_name = self.subject_name(self.data.rule.consequent.subject_id);
-        let ant_cond = if self.data.rule.antecedent.should_have {
-            "Avoir"
+        let soft_text = if self.data.rule.soft() {
+            " (souple)"
         } else {
-            "Ne pas avoir"
+            ""
         };
-        let con_cond = if self.data.rule.consequent.should_have {
-            "Avoir"
-        } else {
-            "Ne pas avoir"
-        };
-        let soft_text = if self.data.rule.soft { " (souple)" } else { "" };
-        format!(
-            "{} {} \u{27F9} {} {}{}",
-            ant_cond, ant_name, con_cond, con_name, soft_text
-        )
-    }
-
-    fn subject_name(&self, subject_id: collomatique_state_colloscopes::SubjectId) -> String {
-        self.data
-            .subjects
-            .find_subject(subject_id)
-            .map(|s| s.parameters.name.clone())
-            .unwrap_or_else(|| "???".into())
+        format!("{}{}", self.data.summary, soft_text)
     }
 
     fn generate_excluded_periods_info(&self) -> String {
         let mut excluded_period_list: Vec<_> = self
             .data
             .rule
-            .excluded_periods
+            .excluded_periods()
             .iter()
             .map(|period_id| {
                 self.data
@@ -84,11 +70,25 @@ impl Entry {
             0 => String::new(),
             1 => format!("Désactivée sur la période {}", excluded_period_list[0]),
             _ => format!(
-                "Désactivée sur les périodes {} et {}",
-                excluded_period_list[..excluded_period_list.len() - 1].join(", "),
-                excluded_period_list.last().unwrap()
+                "Désactivée sur les périodes {}",
+                collomatique_ui_text::rendering::join_french(&excluded_period_list)
             ),
         }
+    }
+
+    /// Refills the icon strip, so it always describes the rule currently shown.
+    ///
+    /// The remarks are the ones the edition dialog spells out in full; here they
+    /// are only icons, with the text as tooltip. A recorded rule always names
+    /// two distinct subjects, hence `subjects_are_same = false` — the error
+    /// variant cannot fire on a row.
+    fn update_messages(&mut self) {
+        let messages: Vec<_> = super::rule_messages(super::rule_shape(&self.data.rule), false)
+            .into_iter()
+            .map(|message| (message.severity(), message.text().to_string()))
+            .collect();
+
+        crate::tools::factories::refill_vec_deque(&mut self.messages, messages);
     }
 }
 
@@ -108,7 +108,7 @@ impl FactoryComponent for Entry {
             set_orientation: gtk::Orientation::Horizontal,
             set_spacing: 5,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked[sender, rule_id = self.data.rule_id] => move |_| {
                     sender
@@ -138,7 +138,13 @@ impl FactoryComponent for Entry {
                 set_label: &self.generate_excluded_periods_info(),
                 set_attributes: Some(&gtk::pango::AttrList::from_string("style italic, scale 0.8").unwrap()),
                 #[watch]
-                set_visible: !self.data.rule.excluded_periods.is_empty(),
+                set_visible: !self.data.rule.excluded_periods().is_empty(),
+            },
+            #[local_ref]
+            messages_box -> gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
+                set_margin_end: 5,
             },
             gtk::Separator {
                 set_orientation: gtk::Orientation::Vertical,
@@ -157,7 +163,15 @@ impl FactoryComponent for Entry {
     }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self { data }
+        let mut model = Self {
+            data,
+            messages: FactoryVecDeque::builder()
+                .launch(gtk::Box::default())
+                .detach(),
+        };
+        model.update_messages();
+
+        model
     }
 
     fn init_widgets(
@@ -167,6 +181,7 @@ impl FactoryComponent for Entry {
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
+        let messages_box = self.messages.widget();
         let widgets = view_output!();
 
         widgets
@@ -176,6 +191,7 @@ impl FactoryComponent for Entry {
         match msg {
             EntryInput::UpdateData(new_data) => {
                 self.data = new_data;
+                self.update_messages();
             }
         }
     }

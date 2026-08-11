@@ -31,6 +31,7 @@ struct AppControllers {
     file_error: Controller<dialogs::file_error::Dialog>,
     file_caveats: Controller<dialogs::file_caveats::Dialog>,
     warn_dirty: Controller<dialogs::warning_changed::Dialog>,
+    development_warning: Controller<dialogs::development_warning::Dialog>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +79,7 @@ impl AppModel {
 #[derive(Debug)]
 pub enum AppInput {
     Ignore,
+    AcknowledgeDevelopmentVersion(collomatique_settings::Version),
     WarnDirty,
     OkDirty,
     RequestNewColloscope,
@@ -137,6 +139,7 @@ impl Component for AppModel {
             set_default_width: 1280,
             set_default_height: 720,
             set_title: Some("Collomatique"),
+            add_css_class: if in_dev_shown() { "devel" } else { "" },
             gtk::Stack {
                 set_hexpand: true,
                 set_vexpand: true,
@@ -228,6 +231,17 @@ impl Component for AppModel {
                 dialogs::warning_changed::DialogOutput::Accept => AppInput::OkDirty,
             });
 
+        let development_warning = dialogs::development_warning::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::development_warning::DialogOutput::Quit => AppInput::Quit,
+                dialogs::development_warning::DialogOutput::Acknowledged(None) => AppInput::Ignore,
+                dialogs::development_warning::DialogOutput::Acknowledged(Some(version)) => {
+                    AppInput::AcknowledgeDevelopmentVersion(version)
+                }
+            });
+
         let controllers = AppControllers {
             welcome,
             loading,
@@ -235,7 +249,21 @@ impl Component for AppModel {
             file_error,
             file_caveats,
             warn_dirty,
+            development_warning,
         };
+
+        // A prerelease version warns about itself at startup, and stops doing so
+        // on its own the day the version becomes a plain release. Whether the
+        // warning is due is not a question for the GTK layer: collomatique-settings
+        // answers it, so another frontend would get the same answer.
+        let version = collomatique_settings::current_version();
+        if collomatique_settings::development_warning::is_due(&version) {
+            controllers
+                .development_warning
+                .sender()
+                .send(dialogs::development_warning::DialogInput::Show(version))
+                .unwrap();
+        }
 
         let state = GlobalState::WelcomeScreen;
 
@@ -344,6 +372,9 @@ impl Component for AppModel {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
             }
+            AppInput::AcknowledgeDevelopmentVersion(version) => {
+                collomatique_settings::development_warning::acknowledge(&version);
+            }
             AppInput::RequestNewColloscope => {
                 self.send_but_check_dirty(sender, AppInput::NewColloscope(None));
             }
@@ -358,9 +389,11 @@ impl Component for AppModel {
                     .editor
                     .sender()
                     .send(editor::EditorInput::NewFile {
-                        file_name: path,
+                        file_name: match path {
+                            Some(p) => editor::FileName::OkFile(p),
+                            None => editor::FileName::NewFile,
+                        },
                         data: collomatique_state_colloscopes::Data::new(),
-                        dirty: true,
                     })
                     .unwrap();
             }
@@ -374,9 +407,8 @@ impl Component for AppModel {
                     .editor
                     .sender()
                     .send(editor::EditorInput::NewFile {
-                        file_name: None,
+                        file_name: editor::FileName::NewFile,
                         data: collomatique_state_colloscopes::Data::new(),
-                        dirty: false,
                     })
                     .unwrap();
                 self.state = GlobalState::LoadingScreen;
@@ -403,6 +435,13 @@ impl Component for AppModel {
                     return;
                 }
                 self.state = GlobalState::EditorScreen;
+                // A file loaded with caveats is suspect: keep its path but mark
+                // it so "Enregistrer" won't overwrite it silently.
+                let file_name = if caveats.is_empty() {
+                    editor::FileName::OkFile(path.clone())
+                } else {
+                    editor::FileName::CaveatFile(path.clone())
+                };
                 if !caveats.is_empty() {
                     self.controllers
                         .file_caveats
@@ -416,11 +455,7 @@ impl Component for AppModel {
                 self.controllers
                     .editor
                     .sender()
-                    .send(editor::EditorInput::NewFile {
-                        file_name: Some(path),
-                        data,
-                        dirty: false,
-                    })
+                    .send(editor::EditorInput::NewFile { file_name, data })
                     .unwrap();
             }
             AppInput::ColloscopeLoadingFailed(path, error) => {
@@ -488,9 +523,8 @@ impl Component for AppModel {
                     .editor
                     .sender()
                     .send(editor::EditorInput::NewFile {
-                        file_name: None,
+                        file_name: editor::FileName::NewFile,
                         data: collomatique_state_colloscopes::Data::new(),
-                        dirty: false,
                     })
                     .unwrap();
                 self.controllers
@@ -545,7 +579,7 @@ impl Component for AppModel {
             AppInput::UpdateActions => {
                 self.actions
                     .save_action
-                    .set_enabled(self.controllers.editor.model().is_dirty());
+                    .set_enabled(self.controllers.editor.model().can_save());
                 self.actions
                     .undo_action
                     .set_enabled(self.controllers.editor.model().can_undo());
@@ -598,4 +632,18 @@ impl AppModel {
             widgets.about_dialog.present(Some(&widgets.root_window));
         }
     }
+}
+
+fn in_dev_tooltip() -> String {
+    let version = collomatique_settings::current_version();
+    if collomatique_settings::development_warning::is_development(&version) {
+        format!("Version de développement {}", version)
+    } else {
+        format!("Version stable {}", version)
+    }
+}
+
+fn in_dev_shown() -> bool {
+    let version = collomatique_settings::current_version();
+    collomatique_settings::development_warning::is_development(&version)
 }

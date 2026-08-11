@@ -18,20 +18,16 @@ pub enum DialogInput {
 
 impl Dialog {
     fn generate_secondary_text(&self) -> String {
-        let mut list = vec![
-            "Il est préférable d'utiliser une version plus récente de Collomatique.\n".to_string(),
-        ];
+        let mut list = vec!["Certains points nécessitent votre attention.\n".to_string()];
 
-        use collomatique_storage::Caveat;
-        list.extend(self.caveats.iter().map(|caveat| match caveat {
-            Caveat::UnknownEntries => {
-                "- Certaines entrées (non-indispensables) n'ont pas pu être décodées".to_string()
-            }
-            Caveat::CreatedWithNewerVersion(version) => format!(
-                "- Fichier généré avec la version {} de Collomatique",
-                version
-            ),
-        }));
+        // The sentences come from `collomatique-ui-text`, the same ones the
+        // python module's `str()` on a caveat writes; the bullet is this
+        // dialog's own layout.
+        list.extend(
+            self.caveats
+                .iter()
+                .map(|caveat| format!("- {}", collomatique_ui_text::caveats::caveat_text(caveat))),
+        );
 
         list.join("\n")
     }

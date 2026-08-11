@@ -1,0 +1,147 @@
+{
+  "header": {
+    "file_type": "Collomatique",
+    "produced_with_version": "0.1.0-alpha.0.99",
+    "file_content": "Colloscope"
+  },
+  "entries": [
+    {
+      "minimum_spec_version": 1,
+      "needed_entry": true,
+      "content": {
+        "InnerDataDump": {
+          "params": {
+            "periods": {
+              "first_week": null,
+              "ordered_period_list": []
+            },
+            "subjects": {
+              "ordered_subject_list": []
+            },
+            "teachers": {
+              "teacher_map": {}
+            },
+            "students": {
+              "student_map": {}
+            },
+            "assignments": {
+              "period_map": {}
+            },
+            "week_patterns": {
+              "week_pattern_map": {}
+            },
+            "slots": {
+              "subject_map": {}
+            },
+            "incompats": {
+              "incompat_map": {}
+            },
+            "group_lists": {
+              "group_list_map": {},
+              "subjects_associations": {}
+            },
+            "settings": {
+              "global": {
+                "interrogations_per_week_min": null,
+                "interrogations_per_week_max": null,
+                "max_interrogations_per_day": null
+              },
+              "students": {}
+            },
+            "pairings": {
+              "pairing_rule_map": {}
+            },
+            "slot_pairings": {
+              "slot_pairing_rule_map": {}
+            },
+            "balancing": {
+              "global": {
+                "teacher_rotation": {
+                  "soft": true,
+                  "value": null
+                },
+                "slot_rotation": null,
+                "avoid_twice_in_a_row": true,
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+              },
+              "subjects": {}
+            }
+          },
+          "colloscope": {
+            "period_map": {},
+            "group_lists": {}
+          },
+          "export_config": {
+            "global": {
+              "background_color": {
+                "red": 255,
+                "green": 255,
+                "blue": 255
+              },
+              "stripes_color_enabled": true,
+              "stripes_color": {
+                "red": 220,
+                "green": 220,
+                "blue": 230
+              }
+            },
+            "colloscope_enabled": true,
+            "all_groups_enabled": true,
+            "automatic_groups_enabled": false,
+            "prefilled_groups_enabled": false,
+            "per_group_list_enabled": true,
+            "colloscope_config": {
+              "sheet_name": "Colloscope",
+              "extra_info_column_enabled": true,
+              "extra_info_column_name": "Info",
+              "teacher_email_enabled": true,
+              "teacher_email": "Contact",
+              "teacher_tel_enabled": false,
+              "teacher_tel": "",
+              "orientation": "Landscape",
+              "display_week_dates": true,
+              "display_annotations": true,
+              "no_interrogation_color": {
+                "red": 140,
+                "green": 140,
+                "blue": 140
+              },
+              "annotation_color_enabled": true,
+              "annotation_color": {
+                "red": 255,
+                "green": 255,
+                "blue": 0
+              },
+              "extra_colors": {}
+            },
+            "all_groups_config": {
+              "sheet_name": "Tous les groupes",
+              "orientation": null,
+              "show_emails": true,
+              "show_tel": false
+            },
+            "automatic_groups_config": {
+              "sheet_name": "Groupes automatiques",
+              "orientation": null,
+              "show_emails": true,
+              "show_tel": false
+            },
+            "prefilled_groups_config": {
+              "sheet_name": "Groupes préremplis",
+              "orientation": null,
+              "show_emails": true,
+              "show_tel": false
+            },
+            "per_group_list_config": {
+              "orientation": "Portrait",
+              "show_emails": true,
+              "show_tel": false,
+              "center_vertically": false
+            }
+          }
+        }
+      }
+    }
+  ]
+}

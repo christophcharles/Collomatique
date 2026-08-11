@@ -10,6 +10,8 @@ use relm4::{adw, gtk};
 
 use adw::prelude::ActionRowExt;
 
+use crate::tools::messages::MessageRow;
+
 pub struct Dialog {
     hidden: bool,
     should_redraw: bool,
@@ -26,6 +28,7 @@ pub struct Dialog {
 
     period_data: Vec<PeriodData>,
     period_entries: FactoryVecDeque<PeriodEntry>,
+    messages: FactoryVecDeque<MessageRow>,
 }
 
 #[derive(Debug)]
@@ -84,22 +87,22 @@ impl Dialog {
         &mut self,
         rule: &collomatique_state_colloscopes::slot_pairings::SlotPairingRule,
     ) {
-        self.antecedent_condition_selected = if rule.antecedent.should_have { 0 } else { 1 };
-        self.antecedent_slot_selected = self.slot_id_to_selected(rule.antecedent.slot_id);
-        self.consequent_condition_selected = if rule.consequent.should_have { 0 } else { 1 };
-        self.consequent_slot_selected = self.slot_id_to_selected(rule.consequent.slot_id);
-        self.soft = rule.soft;
+        self.antecedent_condition_selected = if rule.antecedent().should_have { 0 } else { 1 };
+        self.antecedent_slot_selected = self.slot_id_to_selected(rule.antecedent().slot_id);
+        self.consequent_condition_selected = if rule.consequent().should_have { 0 } else { 1 };
+        self.consequent_slot_selected = self.slot_id_to_selected(rule.consequent().slot_id);
+        self.soft = rule.soft();
 
         self.period_data = self
             .periods
-            .ordered_period_list
-            .iter()
+            .period_ids()
             .enumerate()
-            .map(|(i, (period_id, _desc))| {
+            .map(|(i, period_id)| {
+                let period_id = &period_id;
                 let subject_excluded = self.subject_excluded_periods.contains(period_id);
                 PeriodData {
                     period_index: i,
-                    enabled: !rule.excluded_periods.contains(period_id),
+                    enabled: !rule.excluded_periods().contains(period_id),
                     subject_excluded,
                 }
             })
@@ -123,25 +126,26 @@ impl Dialog {
             .enumerate()
             .filter_map(|(i, pd)| {
                 if !pd.enabled {
-                    Some(self.periods.ordered_period_list[i].0)
+                    self.periods.period_id_at(i)
                 } else {
                     None
                 }
             })
             .collect();
 
-        collomatique_state_colloscopes::slot_pairings::SlotPairingRule {
-            antecedent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+        collomatique_state_colloscopes::slot_pairings::SlotPairingRule::new(
+            collomatique_state_colloscopes::slot_pairings::SlotRulePart {
                 slot_id: self.slot_selected_to_id(self.antecedent_slot_selected),
                 should_have: self.antecedent_condition_selected == 0,
             },
-            consequent: collomatique_state_colloscopes::slot_pairings::SlotRulePart {
+            collomatique_state_colloscopes::slot_pairings::SlotRulePart {
                 slot_id: self.slot_selected_to_id(self.consequent_slot_selected),
                 should_have: self.consequent_condition_selected == 0,
             },
             excluded_periods,
-            soft: self.soft,
-        }
+            self.soft,
+        )
+        .expect("the Valider button is insensitive while both parts share a slot")
     }
 
     fn slots_are_same(&self) -> bool {
@@ -149,6 +153,36 @@ impl Dialog {
             return true;
         }
         self.antecedent_slot_selected == self.consequent_slot_selected
+    }
+
+    /// Why « Valider » is greyed out, if it is. Doubles as the button's
+    /// tooltip: [None] both hides the error row and clears the tooltip.
+    fn error_message(&self) -> Option<&'static str> {
+        self.slots_are_same()
+            .then(|| super::RuleMessage::SameSlot.text())
+    }
+
+    /// The two `should_have` flags of the rule being edited, in the order
+    /// (antécédent, conséquent) — index 0 of the conditions model is
+    /// « Créneau utilisé ».
+    fn selected_shape(&self) -> (bool, bool) {
+        (
+            self.antecedent_condition_selected == 0,
+            self.consequent_condition_selected == 0,
+        )
+    }
+
+    /// Refills the message area at the bottom of the dialog. Called after
+    /// every input, so the rows always describe the current selection.
+    fn update_messages(&mut self) {
+        // Materialized before touching `self.messages`: the factory guard holds
+        // `&mut self.messages`, so no `&self` method may run while it is alive.
+        let messages: Vec<_> = super::rule_messages(self.selected_shape(), self.slots_are_same())
+            .into_iter()
+            .map(|message| (message.severity(), message.text().to_string()))
+            .collect();
+
+        crate::tools::factories::refill_vec_deque(&mut self.messages, messages);
     }
 }
 
@@ -182,101 +216,129 @@ impl SimpleComponent for Dialog {
                         add_css_class: "suggested-action",
                         #[watch]
                         set_sensitive: !model.slots_are_same(),
+                        #[watch]
+                        set_tooltip_text: model.error_message(),
                         connect_clicked => DialogInput::Accept,
                     },
                 },
-                #[name(scrolled_window)]
                 #[wrap(Some)]
-                set_content = &gtk::ScrolledWindow {
+                set_content = &gtk::Box {
                     set_hexpand: true,
-                    set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
-                    gtk::Box {
+                    set_vexpand: true,
+                    set_orientation: gtk::Orientation::Vertical,
+                    #[name(scrolled_window)]
+                    gtk::ScrolledWindow {
                         set_hexpand: true,
-                        set_margin_all: 5,
-                        set_spacing: 10,
+                        set_vexpand: true,
+                        set_policy: (gtk::PolicyType::Never, gtk::PolicyType::Automatic),
+                        gtk::Box {
+                            set_hexpand: true,
+                            set_margin_all: 5,
+                            set_spacing: 10,
+                            set_orientation: gtk::Orientation::Vertical,
+                            adw::PreferencesGroup {
+                                set_title: "Antécédent",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::ComboRow {
+                                    set_title: "Condition",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&Dialog::generate_conditions_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.antecedent_condition_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateAntecedentCondition(selected));
+                                    },
+                                },
+                                adw::ComboRow {
+                                    set_title: "Créneau",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&model.generate_slots_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.antecedent_slot_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateAntecedentSlot(selected));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_title: "Conséquent",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::ComboRow {
+                                    set_title: "Condition",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&Dialog::generate_conditions_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.consequent_condition_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateConsequentCondition(selected));
+                                    },
+                                },
+                                adw::ComboRow {
+                                    set_title: "Créneau",
+                                    #[track(model.should_redraw)]
+                                    set_model: Some(&model.generate_slots_model()),
+                                    #[track(model.should_redraw)]
+                                    set_selected: model.consequent_slot_selected,
+                                    connect_selected_notify[sender] => move |widget| {
+                                        let selected = widget.selected();
+                                        sender.input(DialogInput::UpdateConsequentSlot(selected));
+                                    },
+                                },
+                            },
+                            adw::PreferencesGroup {
+                                set_title: "Options",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_title: "Contrainte souple",
+                                    set_subtitle: "Si activé, la contrainte sera satisfaite au mieux mais pourra être violée",
+                                    #[track(model.should_redraw)]
+                                    set_active: model.soft,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let active = widget.is_active();
+                                        sender.input(DialogInput::UpdateSoft(active));
+                                    },
+                                },
+                            },
+                            #[local_ref]
+                            period_list -> adw::PreferencesGroup {
+                                set_title: "Périodes concernées",
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                #[watch]
+                                set_visible: !model.period_data.is_empty(),
+                            },
+                            gtk::Label {
+                                set_margin_all: 5,
+                                #[watch]
+                                set_label: &format!("Matière concernée : {}", model.subject_name),
+                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                            },
+                        },
+                    },
+                    gtk::Box {
                         set_orientation: gtk::Orientation::Vertical,
-                        adw::PreferencesGroup {
-                            set_title: "Antécédent",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::ComboRow {
-                                set_title: "Condition",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&Dialog::generate_conditions_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.antecedent_condition_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateAntecedentCondition(selected));
-                                },
+                        set_hexpand: true,
+                        set_spacing: 5,
+                        set_margin_all: 5,
+                        #[watch]
+                        set_visible: !model.messages.is_empty(),
+                        gtk::ScrolledWindow {
+                            set_propagate_natural_height: true,
+                            set_vexpand: false,
+                            set_hscrollbar_policy: gtk::PolicyType::Never,
+                            set_vscrollbar_policy: gtk::PolicyType::Automatic,
+                            #[local_ref]
+                            messages_listbox -> gtk::ListBox {
+                                set_hexpand: true,
+                                add_css_class: "boxed-list",
+                                set_selection_mode: gtk::SelectionMode::None,
                             },
-                            adw::ComboRow {
-                                set_title: "Créneau",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&model.generate_slots_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.antecedent_slot_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateAntecedentSlot(selected));
-                                },
-                            },
-                        },
-                        adw::PreferencesGroup {
-                            set_title: "Conséquent",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::ComboRow {
-                                set_title: "Condition",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&Dialog::generate_conditions_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.consequent_condition_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateConsequentCondition(selected));
-                                },
-                            },
-                            adw::ComboRow {
-                                set_title: "Créneau",
-                                #[track(model.should_redraw)]
-                                set_model: Some(&model.generate_slots_model()),
-                                #[track(model.should_redraw)]
-                                set_selected: model.consequent_slot_selected,
-                                connect_selected_notify[sender] => move |widget| {
-                                    let selected = widget.selected();
-                                    sender.input(DialogInput::UpdateConsequentSlot(selected));
-                                },
-                            },
-                        },
-                        adw::PreferencesGroup {
-                            set_title: "Options",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            adw::SwitchRow {
-                                set_title: "Contrainte souple",
-                                set_subtitle: "Si activé, la contrainte sera satisfaite au mieux mais pourra être violée",
-                                #[track(model.should_redraw)]
-                                set_active: model.soft,
-                                connect_active_notify[sender] => move |widget| {
-                                    let active = widget.is_active();
-                                    sender.input(DialogInput::UpdateSoft(active));
-                                },
-                            },
-                        },
-                        #[local_ref]
-                        period_list -> adw::PreferencesGroup {
-                            set_title: "Périodes concernées",
-                            set_margin_all: 5,
-                            set_hexpand: true,
-                            #[watch]
-                            set_visible: !model.period_data.is_empty(),
-                        },
-                        gtk::Label {
-                            set_margin_all: 5,
-                            #[watch]
-                            set_label: &format!("Matière concernée : {}", model.subject_name),
-                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                         },
                     },
                 },
@@ -311,9 +373,13 @@ impl SimpleComponent for Dialog {
             soft: false,
             period_data: Vec::new(),
             period_entries,
+            messages: FactoryVecDeque::builder()
+                .launch(gtk::ListBox::default())
+                .detach(),
         };
 
         let period_list = model.period_entries.widget();
+        let messages_listbox = model.messages.widget();
         let widgets = view_output!();
 
         ComponentParts { model, widgets }
@@ -368,6 +434,7 @@ impl SimpleComponent for Dialog {
                 }
             }
         }
+        self.update_messages();
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {

@@ -7,8 +7,99 @@ use relm4::{ComponentController, adw, gtk};
 
 use collomatique_ops::PairingsUpdateOp;
 
+use crate::tools::messages::MessageSeverity;
+
 mod pairing_params;
 mod pairings_display;
+
+/// One remark about a pairing rule.
+///
+/// Both the edition dialog — which shows them as full text rows — and the list
+/// of recorded rules read the same variants, so a rule reads the same way
+/// wherever it is displayed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RuleMessage {
+    /// Both parts name the same subject: the rule cannot be recorded.
+    SameSubject,
+    /// « avoir ⇒ ne pas avoir » — the shape that may need a reified extra.
+    HeavyShape,
+    /// Nudge towards the symmetric « ne pas avoir ⇒ avoir » shape.
+    FavoredShape,
+}
+
+impl RuleMessage {
+    pub fn severity(self) -> MessageSeverity {
+        match self {
+            RuleMessage::SameSubject => MessageSeverity::Error,
+            RuleMessage::HeavyShape => MessageSeverity::Warning,
+            RuleMessage::FavoredShape => MessageSeverity::Info,
+        }
+    }
+
+    pub fn text(self) -> &'static str {
+        match self {
+            RuleMessage::SameSubject => {
+                "L'antécédent et le conséquent doivent porter sur deux matières différentes."
+            }
+            // « avoir ⇒ ne pas avoir » is the one shape whose constraint needs
+            // the antecedent *negated*, which only works directly when a student
+            // can have at most one interrogation of that subject per week;
+            // otherwise `constraints-colloscopes` has to reify an intermediate
+            // binary variable and linearize it (see
+            // `pairings::subject::emit_pairing_constraint`).
+            //
+            // The warning is shown whenever this shape is used, not only when
+            // the precondition currently holds: the antecedent subject's
+            // periodicity can be changed long after the rule is validated, and
+            // the user would then never see the message. Naming the precondition
+            // in the text lets them either pick another shape now, or keep this
+            // one and know what to avoid later.
+            RuleMessage::HeavyShape => {
+                "La forme « avoir ⇒ ne pas avoir » est coûteuse pour le solveur si la matière de \
+                 l'antécédent peut avoir plusieurs interrogations la même semaine (séparation \
+                 minimale de zéro semaine) : elle nécessite alors des variables intermédiaires \
+                 supplémentaires."
+            }
+            // « ne pas avoir ⇒ avoir » compiles to `antécédent + conséquent ≥ 1`,
+            // which is symmetric: the same single constraint also enforces the
+            // converse. The wording stays conditional because this is *not* a
+            // logical rewriting of the other shapes — it only helps when it
+            // happens to express the user's need.
+            RuleMessage::FavoredShape => {
+                "Si votre besoin peut s'exprimer sous la forme « ne pas avoir ⇒ avoir », \
+                 préférez-la : c'est la plus efficace pour le solveur et elle impose aussi \
+                 automatiquement la règle réciproque."
+            }
+        }
+    }
+}
+
+/// The `should_have` flags of a recorded rule, in the order (antécédent,
+/// conséquent) — the same pair the dialog reads off its two condition combos.
+pub fn rule_shape(rule: &collomatique_state_colloscopes::pairings::PairingRule) -> (bool, bool) {
+    (rule.antecedent().should_have, rule.consequent().should_have)
+}
+
+/// The remarks a rule deserves, most severe first.
+///
+/// `shape` is the pair of `should_have` flags, in the order (antécédent,
+/// conséquent). `subjects_are_same` is only ever true in the edition dialog: a
+/// rule that made it into the document always names two distinct subjects.
+pub fn rule_messages(shape: (bool, bool), subjects_are_same: bool) -> Vec<RuleMessage> {
+    let mut messages = Vec::new();
+    if subjects_are_same {
+        messages.push(RuleMessage::SameSubject);
+    }
+    match shape {
+        // The warning already names this shape, and it is symmetric anyway
+        // (« A ⇒ ne pas B » is « B ⇒ ne pas A »), so the nudge would add nothing.
+        (true, false) => messages.push(RuleMessage::HeavyShape),
+        // Already the cheapest shape: nothing to nudge towards.
+        (false, true) => {}
+        _ => messages.push(RuleMessage::FavoredShape),
+    }
+    messages
+}
 
 #[derive(Debug)]
 pub enum PairingsInput {
@@ -77,7 +168,7 @@ impl Component for Pairings {
                     set_hexpand: true,
                     set_margin_top: 10,
                     #[watch]
-                    set_visible: model.subjects.ordered_subject_list.len() >= 2,
+                    set_visible: model.pairable_subjects().count() >= 2,
                     adw::ButtonContent {
                         set_icon_name: "list-add-symbolic",
                         set_label: "Ajouter une règle d'appariement",
@@ -140,9 +231,14 @@ impl Component for Pairings {
                     .pairing_rule_map
                     .iter()
                     .map(|(rule_id, rule)| pairings_display::EntryData {
-                        rule_id: *rule_id,
+                        rule_id,
                         rule: rule.clone(),
-                        subjects: self.subjects.clone(),
+                        summary: collomatique_ui_text::rendering::render_pairing_rule(
+                            &self.subjects,
+                            &self.pairings,
+                            rule_id,
+                        )
+                        .expect("the rule comes from the document being displayed"),
                         periods: self.periods.clone(),
                     })
                     .collect();
@@ -178,28 +274,24 @@ impl Component for Pairings {
             }
             PairingsInput::AddPairing => {
                 self.pairing_params_selection_reason = PairingParamsSelectionReason::New;
-                let first_subject = self
-                    .subjects
-                    .ordered_subject_list
-                    .first()
-                    .map(|(id, _)| *id);
-                let second_subject = self.subjects.ordered_subject_list.get(1).map(|(id, _)| *id);
-                let (ant_id, con_id) = match (first_subject, second_subject) {
+                let mut candidates = self.pairable_subjects();
+                let (ant_id, con_id) = match (candidates.next(), candidates.next()) {
                     (Some(a), Some(b)) => (a, b),
-                    _ => return, // Need at least 2 subjects
+                    _ => return, // Need at least 2 subjects with interrogations
                 };
-                let default_rule = collomatique_state_colloscopes::pairings::PairingRule {
-                    antecedent: collomatique_state_colloscopes::pairings::RulePart {
+                let default_rule = collomatique_state_colloscopes::pairings::PairingRule::new(
+                    collomatique_state_colloscopes::pairings::RulePart {
                         subject_id: ant_id,
                         should_have: true,
                     },
-                    consequent: collomatique_state_colloscopes::pairings::RulePart {
+                    collomatique_state_colloscopes::pairings::RulePart {
                         subject_id: con_id,
                         should_have: true,
                     },
-                    excluded_periods: BTreeSet::new(),
-                    soft: false,
-                };
+                    BTreeSet::new(),
+                    false,
+                )
+                .expect("ant_id and con_id are the first two distinct pairable subjects");
                 self.pairing_params_dialog
                     .sender()
                     .send(pairing_params::DialogInput::Show(
@@ -224,5 +316,24 @@ impl Component for Pairings {
                 }
             }
         }
+    }
+}
+
+impl Pairings {
+    /// The subjects a pairing rule may name, in document order.
+    ///
+    /// A rule is an implication between two subjects' interrogations, so a
+    /// subject running none can only make it vacuous or impossible; the state
+    /// layer refuses such a rule outright. Both the « Ajouter » button's
+    /// visibility and the default rule that button opens read this, so the
+    /// button is only offered when it can produce a rule the backend accepts.
+    fn pairable_subjects(
+        &self,
+    ) -> impl Iterator<Item = collomatique_state_colloscopes::SubjectId> + '_ {
+        self.subjects
+            .ordered_subject_list
+            .iter()
+            .filter(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
+            .map(|(id, _)| id)
     }
 }

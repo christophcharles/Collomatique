@@ -7,10 +7,13 @@ authors.workspace = true
 [features]
 default = ["derive"]
 derive = ["dep:collomatique-ilp-modeler-derive"]
+serde = ["dep:serde", "dep:serde_json", "collomatique-ilp/serde"]
 
 [dependencies]
 collomatique-ilp = { path = "../ilp", default-features = false }
 collomatique-ilp-modeler-derive = { path = "../ilp-modeler-derive", optional = true }
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
 thiserror.workspace = true
 
 [dev-dependencies]

@@ -1,5 +1,7 @@
+use crate::ids::{GlobalWeek, GroupNum};
 use crate::tools::*;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
+use collomatique_state_colloscopes::ids::{GroupListId, SlotId, StudentId};
 
 #[derive(Debug, Clone)]
 pub struct VarEnv(pub Parameters);
@@ -12,11 +14,8 @@ impl std::ops::Deref for VarEnv {
 }
 
 impl VarEnv {
-    pub async fn load(pool: &sqlx::SqlitePool) -> VarEnv {
-        let inner_data = collomatique_sqlite_state::sqlite_to_inner_data(pool)
-            .await
-            .expect("Failed to load data from database");
-        VarEnv(inner_data.params)
+    pub fn new(params: Parameters) -> VarEnv {
+        VarEnv(params)
     }
 }
 
@@ -26,208 +25,167 @@ impl VarEnv {
 #[env(VarEnv)]
 pub enum Var {
     #[defer_fix(Self::fix_group_in_interrogation(env, slot, week, group))]
-    GroupInInterrogationInternal {
+    GroupInInterrogation {
         #[range(Self::compute_slot_range(env))]
-        slot: i32,
+        slot: SlotId,
         #[range(Self::compute_week_range(env, slot))]
-        week: i32,
+        week: GlobalWeek,
         #[range(Self::compute_group_range(env, slot, week))]
-        group: i32,
+        group: GroupNum,
     },
-    #[defer_fix(Self::fix_student_group(env, student, group_list))]
-    #[var(Variable::integer().min(-1.).max(Self::compute_max_group_num(env, group_list)))]
-    StudentGroup {
+    /// 1 ⟺ `student` sits in group `group` of `group_list`. Binary (the
+    /// derive default): the assignment matrix *is* the base variable, so no
+    /// channeling extra is needed to reach it from the constraints.
+    ///
+    /// The retired integer `StudentGroup` said "at most one group" through
+    /// its domain and "no group" through the -1 sentinel; both are now rows
+    /// of `groups/students_have_groups.rs` (`Σ_g x <= 1` structural, and the
+    /// blamable `Σ_g x >= 1`), with the all-zeros row playing the -1 role.
+    #[defer_fix(Self::fix_student_in_group(env, student, group_list, group))]
+    StudentInGroup {
         #[range(Self::compute_group_list_range(env))]
-        group_list: i32,
+        group_list: GroupListId,
         #[range(Self::compute_student_range(env, group_list))]
-        student: i32,
+        student: StudentId,
+        #[range(Self::compute_group_range_for_list(env, group_list))]
+        group: GroupNum,
     },
 }
 
 impl Var {
-    fn compute_max_group_num(env: &VarEnv, group_list: &i32) -> f64 {
-        use collomatique_state_colloscopes::ids::Id;
-        let group_list_id =
-            unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
-        let group_list_data = match env.group_lists.group_list_map.get(&group_list_id) {
-            Some(data) => data,
-            None => return 0.,
-        };
-        (group_list_data.params.group_names.len() as i32 - 1) as f64
+    pub fn compute_slot_range(env: &VarEnv) -> Vec<SlotId> {
+        env.slots.all_slots().map(|(id, _)| *id).collect()
     }
 
-    pub fn compute_slot_range(env: &VarEnv) -> std::ops::Range<i32> {
-        use collomatique_state_colloscopes::ids::Id;
-        let ids = env
-            .slots
-            .subject_map
-            .iter()
-            .flat_map(|(_subject_id, subject_slots)| {
-                subject_slots
-                    .ordered_slots
-                    .iter()
-                    .map(|(id, _)| id.inner() as i32)
-            });
-        Self::compute_range_from_iter(ids)
-    }
-
-    pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &i32) -> Vec<i32> {
-        use collomatique_state_colloscopes::ids::Id;
-        let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        crate::tools::enumerate_weeks_for_slot_id(env, slot_id)
+    pub fn enumerate_weeks_for_slot(env: &VarEnv, slot: &SlotId) -> Vec<GlobalWeek> {
+        crate::tools::enumerate_weeks_for_slot_id(env, *slot)
             .into_iter()
-            .map(|w| w as i32)
+            .map(GlobalWeek)
             .collect()
     }
 
-    pub fn compute_week_range(env: &VarEnv, slot: &i32) -> std::ops::Range<i32> {
-        let weeks = Self::enumerate_weeks_for_slot(env, slot);
-        Self::compute_range_from_iter(weeks.into_iter())
+    pub fn compute_week_range(env: &VarEnv, slot: &SlotId) -> Vec<GlobalWeek> {
+        Self::enumerate_weeks_for_slot(env, slot)
     }
 
-    pub fn compute_group_range(env: &VarEnv, slot: &i32, week: &i32) -> std::ops::Range<i32> {
-        use collomatique_state_colloscopes::ids::Id;
-        let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        let week_num = *week as usize;
-        let default_range = 0..0;
-        let subject_id = match env.slots.find_slot_subject_and_position(slot_id) {
+    pub fn compute_group_range(env: &VarEnv, slot: &SlotId, week: &GlobalWeek) -> Vec<GroupNum> {
+        let default = vec![];
+        let subject_id = match env.slots.find_slot_subject_and_position(*slot) {
             Some((subject_id, _pos)) => subject_id,
-            None => return default_range,
+            None => return default,
         };
-        let period_id = match week_to_period_id(env, week_num) {
+        let period_id = match week_to_period_id(env, week.0) {
             Some((id, _)) => id,
-            None => return default_range,
+            None => return default,
         };
-        let period_associations = match env.group_lists.subjects_associations.get(&period_id) {
-            Some(period_associations) => period_associations,
-            None => return default_range,
-        };
-        let group_list_id = match period_associations.get(&subject_id) {
-            Some(id) => id,
-            None => return default_range,
-        };
-        let group_list = match env.group_lists.group_list_map.get(group_list_id) {
-            Some(group_list) => group_list,
-            None => return default_range,
-        };
-        0..group_list.params.group_names.len() as i32
-    }
-
-    pub fn compute_range_from_iter(ids: impl Iterator<Item = i32>) -> std::ops::Range<i32> {
-        let mut group_list_min = i32::MAX;
-        let mut group_list_max = 0;
-        for id in ids {
-            if id < group_list_min {
-                group_list_min = id;
-            }
-            if id > group_list_max {
-                group_list_max = id;
-            }
-        }
-        if group_list_max < group_list_min {
-            return 0..0;
-        }
-        group_list_min..group_list_max + 1
-    }
-
-    pub fn compute_group_list_range(env: &VarEnv) -> std::ops::Range<i32> {
-        use collomatique_state_colloscopes::ids::Id;
-        let ids = env
+        let group_list_id = match env
             .group_lists
-            .group_list_map
-            .keys()
-            .map(|id| id.inner() as i32);
-        Self::compute_range_from_iter(ids)
+            .subjects_associations
+            .get(&(period_id, subject_id))
+        {
+            Some(id) => id,
+            None => return default,
+        };
+        if !env.group_lists.group_list_map.contains(group_list_id) {
+            return default;
+        }
+        GroupNum::enumerate(env, *group_list_id).collect()
     }
 
-    pub fn compute_student_ids(env: &VarEnv, group_list: &i32) -> Vec<i32> {
-        use collomatique_state_colloscopes::ids::Id;
-        let group_list_id =
-            unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
-        let group_list = match env.group_lists.group_list_map.get(&group_list_id) {
+    pub fn compute_group_list_range(env: &VarEnv) -> Vec<GroupListId> {
+        env.group_lists.group_list_map.keys().collect()
+    }
+
+    pub fn compute_student_ids(env: &VarEnv, group_list: &GroupListId) -> Vec<StudentId> {
+        let group_list_data = match env.group_lists.group_list_map.get(group_list) {
             Some(group_list) => group_list,
             None => return Vec::new(),
         };
-        match &group_list.filling {
+        match group_list_data.filling() {
             collomatique_state_colloscopes::group_lists::GroupListFilling::Automatic {
                 excluded_students,
             } => env
                 .students
                 .student_map
                 .keys()
-                .filter_map(|student_id| {
-                    if excluded_students.contains(student_id) {
-                        return None;
-                    }
-                    Some(student_id.inner() as i32)
-                })
-                .collect::<Vec<_>>(),
+                .filter(|student_id| !excluded_students.contains(student_id))
+                .collect(),
             collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { groups } => {
                 groups
                     .iter()
-                    .flat_map(|g| g.students.iter().map(|x| x.inner() as i32))
-                    .collect::<Vec<_>>()
+                    .flat_map(|g| g.students.iter().copied())
+                    .collect()
             }
         }
     }
 
-    pub fn compute_student_range(env: &VarEnv, group_list: &i32) -> std::ops::Range<i32> {
-        let ids = Self::compute_student_ids(env, group_list);
-        Self::compute_range_from_iter(ids.into_iter())
+    pub fn compute_student_range(env: &VarEnv, group_list: &GroupListId) -> Vec<StudentId> {
+        Self::compute_student_ids(env, group_list)
     }
 
-    fn fix_student_group(env: &VarEnv, student: &i32, group_list: &i32) -> Option<f64> {
-        use collomatique_state_colloscopes::ids::Id;
-        let group_list_id =
-            unsafe { collomatique_state_colloscopes::ids::GroupListId::new(*group_list as u64) };
-        let group_list_data = match env.group_lists.group_list_map.get(&group_list_id) {
+    /// Defensive against a stale `group_list` too — `GroupNum::enumerate`
+    /// yields nothing for a list absent from the map.
+    pub fn compute_group_range_for_list(env: &VarEnv, group_list: &GroupListId) -> Vec<GroupNum> {
+        GroupNum::enumerate(env, *group_list).collect()
+    }
+
+    fn fix_student_in_group(
+        env: &VarEnv,
+        student: &StudentId,
+        group_list: &GroupListId,
+        group: &GroupNum,
+    ) -> Option<f64> {
+        let group_list_data = match env.group_lists.group_list_map.get(group_list) {
             Some(data) => data,
-            None => return Some(-1.),
+            None => return Some(0.0),
         };
 
-        let student_id =
-            unsafe { collomatique_state_colloscopes::ids::StudentId::new(*student as u64) };
+        // Stale group coordinate: an out-of-range index, or an embedded shape
+        // (`last_group`, `group_list`) that no longer matches the live list —
+        // `GroupNum` equality covers all of it.
+        if GroupNum::new(env, *group_list, group.index()).as_ref() != Some(group) {
+            return Some(0.0);
+        }
+
         if group_list_data
-            .filling
+            .filling()
             .excluded_students()
-            .contains(&student_id)
+            .contains(student)
         {
-            return Some(-1.);
+            return Some(0.0);
         }
 
         let collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled { .. } =
-            &group_list_data.filling
+            group_list_data.filling()
         else {
+            // Automatic list: the variable is free.
             return None;
         };
 
-        let Some(num) = group_list_data.filling.find_student_group(student_id) else {
-            return Some(-1.0);
-        };
-
-        Some(num as f64)
+        match group_list_data.filling().find_student_group(*student) {
+            Some(num) if num == group.index() => Some(1.0),
+            _ => Some(0.0),
+        }
     }
 
     fn fix_group_in_interrogation(
         env: &VarEnv,
-        slot: &i32,
-        week: &i32,
-        group: &i32,
+        slot: &SlotId,
+        week: &GlobalWeek,
+        group: &GroupNum,
     ) -> Option<f64> {
-        use collomatique_state_colloscopes::ids::Id;
-        let slot_id = unsafe { collomatique_state_colloscopes::ids::SlotId::new(*slot as u64) };
-        if env.slots.find_slot(slot_id).is_none() {
-            return Some(0.0); // Non existent slot, so obviously not in it
+        if env.slots.find_slot(*slot).is_none() {
+            return Some(0.0);
         };
 
         let weeks = Self::enumerate_weeks_for_slot(env, slot);
         if !weeks.contains(week) {
-            return Some(0.0); // Invalid week
+            return Some(0.0);
         }
 
-        let group_range = Self::compute_group_range(env, slot, week);
-        if !group_range.contains(group) {
-            return Some(0.0); // Invalid group
+        let groups = Self::compute_group_range(env, slot, week);
+        if !groups.contains(group) {
+            return Some(0.0);
         }
 
         None

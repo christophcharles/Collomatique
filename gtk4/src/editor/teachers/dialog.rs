@@ -207,7 +207,7 @@ impl SimpleComponent for Dialog {
                     .ordered_subject_list
                     .iter()
                     .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
-                    .cloned()
+                    .map(|(sid, s)| (sid, s.clone()))
                     .collect();
                 crate::tools::factories::update_vec_deque(
                     &mut self.subject_entries,

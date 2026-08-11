@@ -1,5 +1,5 @@
+use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::ids::GlobalWeek;
-use crate::native_extras::{MyBundle, subject_interrogation_params};
 use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
@@ -29,16 +29,16 @@ fn compute_period_runs(
     let mut current_active_weeks = Vec::new();
     let mut global_week = 0usize;
 
-    for (period_id, period_desc) in &env.periods.ordered_period_list {
+    for period_id in env.periods.period_ids() {
+        let period_len = env.weeks.week_count_for_period(period_id).unwrap_or(0);
+        let period_id = &period_id;
         let first_of_period = GlobalWeek(global_week);
-        let last_of_period = GlobalWeek(global_week + period_desc.len().saturating_sub(1));
+        let last_of_period = GlobalWeek(global_week + period_len.saturating_sub(1));
 
         let is_active = !excluded_periods.contains(period_id)
             && env
                 .assignments
-                .period_map
-                .get(period_id)
-                .and_then(|pa| pa.subject_map.get(&subject_id))
+                .students(*period_id, subject_id)
                 .is_some_and(|students| students.contains(&student));
 
         if is_active {
@@ -46,7 +46,9 @@ fn compute_period_runs(
                 current_first = Some(first_of_period);
             }
             current_last = last_of_period;
-            for week_desc in period_desc {
+            for (_week_id, week_desc) in
+                env.weeks.weeks_for_period(*period_id).into_iter().flatten()
+            {
                 if week_desc.interrogations {
                     current_active_weeks.push(GlobalWeek(global_week));
                 }
@@ -60,7 +62,7 @@ fn compute_period_runs(
                     active_weeks: std::mem::take(&mut current_active_weeks),
                 });
             }
-            global_week += period_desc.len();
+            global_week += period_len;
         }
     }
     if let Some(first) = current_first {
@@ -75,7 +77,8 @@ fn compute_period_runs(
 }
 
 pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
-    for (subject_id, subject) in &env.subjects.ordered_subject_list {
+    for (subject_id, subject) in env.subjects.ordered_subject_list.iter() {
+        let subject_id = &subject_id;
         let Some(params) = subject_interrogation_params(env, *subject_id) else {
             continue;
         };

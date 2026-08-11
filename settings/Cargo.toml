@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-settings"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+semver.workspace = true
+serde_json.workspace = true
+directories = "6.0"

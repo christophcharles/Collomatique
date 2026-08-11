@@ -15,6 +15,7 @@ mod dialog;
 pub enum WeekPatternsInput {
     Update(
         collomatique_state_colloscopes::periods::Periods,
+        collomatique_state_colloscopes::weeks::Weeks,
         collomatique_state_colloscopes::week_patterns::WeekPatterns,
     ),
     EditWeekPatternClicked(collomatique_state_colloscopes::WeekPatternId),
@@ -31,6 +32,7 @@ enum WeekPatternModificationReason {
 
 pub struct WeekPatterns {
     periods: collomatique_state_colloscopes::periods::Periods,
+    weeks: collomatique_state_colloscopes::weeks::Weeks,
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
 
     week_pattern_modification_reason: WeekPatternModificationReason,
@@ -69,7 +71,7 @@ impl Component for WeekPatterns {
                     set_margin_top: 10,
                     connect_clicked => WeekPatternsInput::AddWeekPatternClicked,
                     adw::ButtonContent {
-                        set_icon_name: "edit-add",
+                        set_icon_name: "list-add-symbolic",
                         set_label: "Ajouter un modèle de périodicité",
                     },
                 },
@@ -100,6 +102,7 @@ impl Component for WeekPatterns {
             });
         let model = WeekPatterns {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
+            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
             week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
             week_pattern_modification_reason: WeekPatternModificationReason::New,
             week_pattern_entries,
@@ -113,8 +116,9 @@ impl Component for WeekPatterns {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            WeekPatternsInput::Update(new_periods, new_week_patterns) => {
+            WeekPatternsInput::Update(new_periods, new_weeks, new_week_patterns) => {
                 self.periods = new_periods;
+                self.weeks = new_weeks;
                 self.week_patterns = new_week_patterns;
                 self.update_factory();
             }
@@ -134,6 +138,7 @@ impl Component for WeekPatterns {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         week_pattern_data.clone(),
                     ))
                     .unwrap();
@@ -144,9 +149,10 @@ impl Component for WeekPatterns {
                     .sender()
                     .send(dialog::DialogInput::Show(
                         self.periods.clone(),
+                        self.weeks.clone(),
                         collomatique_state_colloscopes::week_patterns::WeekPattern {
                             name: "Nouveau modèle".into(),
-                            weeks: vec![true; self.periods.count_weeks()],
+                            excluded_weeks: std::collections::BTreeSet::new(),
                         },
                     ))
                     .unwrap();
@@ -177,7 +183,7 @@ impl WeekPatterns {
             .week_pattern_map
             .iter()
             .map(|(id, week_pattern)| EntryData {
-                id: *id,
+                id,
                 name: week_pattern.name.clone(),
             })
             .collect();
@@ -230,7 +236,7 @@ impl FactoryComponent for Entry {
             set_hexpand: true,
             set_orientation: gtk::Orientation::Horizontal,
             gtk::Button {
-                set_icon_name: "edit-symbolic",
+                set_icon_name: "document-edit-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::EditClicked,
                 set_tooltip_text: Some("Modifier le modèle"),
@@ -243,9 +249,13 @@ impl FactoryComponent for Entry {
                 set_xalign: 0.,
                 set_margin_start: 5,
                 set_margin_end: 5,
+                set_ellipsize: gtk::pango::EllipsizeMode::End,
+                set_width_chars: 20,
+                set_max_width_chars: 20,
                 #[watch]
                 set_label: &self.data.name,
-                set_size_request: (200, -1),
+                #[watch]
+                set_tooltip_text: Some(&self.data.name),
             },
             gtk::Box {
                 set_hexpand: true,

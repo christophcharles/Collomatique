@@ -20,6 +20,8 @@ pub enum Op {
     Student(StudentOp),
     /// Operation on periods
     Period(PeriodOp),
+    /// Operation on weeks
+    Week(WeekOp),
     /// Operation on the subjects
     Subject(SubjectOp),
     /// Operation on the teachers
@@ -74,14 +76,50 @@ pub enum StudentOp {
 pub enum PeriodOp {
     /// Set the start of periods on a specific week
     ChangeStartDate(Option<collomatique_time::WeekStart>),
-    /// Add a new period at the beginning
-    AddFront(Vec<periods::WeekDesc>),
-    /// Add a period after an existing period
-    AddAfter(PeriodId, Vec<periods::WeekDesc>),
+    /// Add a new (empty) period at the beginning
+    ///
+    /// Periods are always created week-less; weeks are then spliced in with the
+    /// [WeekOp] family. This is what makes `force_apply_week` the single writer
+    /// of week data.
+    AddFront,
+    /// Add a new (empty) period after an existing period
+    AddAfter(PeriodId),
     /// Remove an existing period
+    ///
+    /// Elementary: this removes the period row and nothing else. There is
+    /// **no** week-empty guard: leftover weeks are never a reason to reject
+    /// the removal, they are cascade-deleted. `force_apply` lands the removal
+    /// and leaves the weeks' `Week::period_id` FKs dangling; the dangling FK
+    /// is a *fixable* invariant break, so the cascade repairs it by removing
+    /// each leftover week (with whatever hangs off it). Only a bare `apply` —
+    /// the apply/check/rollback gate with no cascade above it — sees the
+    /// break as `Error::BrokenInvariants`; there, empty the period first with
+    /// [WeekOp::Remove]. The user-facing "delete a period *and its weeks*"
+    /// semantics live in `ops`' `DeletePeriodAndWeeks`, which authors the
+    /// week removals itself before calling this op.
     Remove(PeriodId),
-    /// Update an existing period
-    Update(PeriodId, Vec<periods::WeekDesc>),
+}
+
+/// Week operation enumeration
+///
+/// This is the list of all possible operations related to individual weeks
+/// (as opposed to whole periods) we can do on a [Data]. Weeks live inside
+/// periods; these ops splice a single week in or out, edit it, or move it
+/// (possibly to another period), carrying its content.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum WeekOp {
+    /// Add a week at the front of a period
+    AddFront(PeriodId, weeks::WeekDesc),
+    /// Add a week right after an existing week
+    AddAfter(WeekId, weeks::WeekDesc),
+    /// Remove an existing week
+    Remove(WeekId),
+    /// Update the status/annotation of an existing week
+    Update(WeekId, weeks::WeekDesc),
+    /// Move a week to a position (same or different period), preserving its id
+    /// and its content. The position is interpreted after the week is
+    /// detached from its current spot.
+    Move(WeekId, PeriodId, usize),
 }
 
 /// Subject operation enumeration
@@ -121,8 +159,10 @@ pub enum TeacherOp {
 /// assignments of students we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AssignmentOp {
-    /// Assign (or deassign) a student to a subject on a given period
-    Assign(PeriodId, StudentId, SubjectId, bool),
+    /// Sets the whole assignments row for a `(period, subject)` pair.
+    /// An empty set removes the row (rows are canonical-absent: a row exists
+    /// iff at least one student is assigned).
+    SetRow(PeriodId, SubjectId, BTreeSet<StudentId>),
 }
 
 /// Week pattern operation enumeration
@@ -147,12 +187,15 @@ pub enum WeekPatternOp {
 pub enum SlotOp {
     /// Add a slot after an existing slot
     /// If `None`, it is placed first
-    AddAfter(SubjectId, Option<SlotId>, slots::Slot),
+    ///
+    /// The subject the slot belongs to is carried by the slot itself
+    /// (`slot.subject_id`).
+    AddAfter(Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
-    /// Move a subject to another position in the list
+    /// Move a slot to another position in the list
     ChangePosition(SlotId, usize),
-    /// Update the parameters of an existing subject
+    /// Update the parameters of an existing slot
     Update(SlotId, slots::Slot),
 }
 
@@ -177,13 +220,11 @@ pub enum IncompatOp {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GroupListOp {
     /// Add a group list
-    Add(group_lists::GroupListParameters),
+    Add(group_lists::GroupList),
     /// Remove an existing group list
     Remove(GroupListId),
-    /// Update a group list
-    Update(GroupListId, group_lists::GroupListParameters),
-    /// Set filling strategy for a group list
-    SetFilling(GroupListId, group_lists::GroupListFilling),
+    /// Update a group list (replaces the whole value)
+    Update(GroupListId, group_lists::GroupList),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -194,8 +235,10 @@ pub enum GroupListOp {
 /// settings we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SettingsOp {
-    /// Update the settings
-    Update(settings::Settings),
+    /// Replace the global limits
+    SetGlobal(settings::Limits),
+    /// Set or clear the per-student limits override. `None` removes the entry.
+    SetStudent(StudentId, Option<settings::Limits>),
 }
 
 /// Pairing rule operation enumeration
@@ -232,8 +275,10 @@ pub enum SlotPairingOp {
 /// balancing configuration we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BalancingOp {
-    /// Update the balancing configuration
-    Update(balancing::Balancing),
+    /// Replace the global balancing options
+    SetGlobal(balancing::BalancingOptions),
+    /// Set or clear the per-subject override. `None` removes the entry.
+    SetSubject(SubjectId, Option<balancing::BalancingOptions>),
 }
 
 /// Colloscope operation enumeration
@@ -242,15 +287,10 @@ pub enum BalancingOp {
 /// colloscopes we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ColloscopeOp {
-    /// Update a group list
-    UpdateGroupList(GroupListId, colloscopes::ColloscopeGroupList),
-    /// Update an interrogation
-    UpdateInterrogation(
-        PeriodId,
-        SlotId,
-        usize,
-        colloscopes::ColloscopeInterrogation,
-    ),
+    /// Set the group placements of a group list (empty map clears it)
+    SetGroupList(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    /// Set the assigned groups on `(slot, week)` (empty set clears the row)
+    SetInterrogation(SlotId, WeekId, std::collections::BTreeSet<u32>),
 }
 
 /// Export configuration operation enumeration
@@ -259,17 +299,8 @@ pub enum ColloscopeOp {
 /// export configuration we can do on a [Data]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ExportConfigOp {
-    UpdateGlobalConfig(export_config::GlobalConfig),
-    UpdateColloscopeEnabled(bool),
-    UpdateAllGroupsEnabled(bool),
-    UpdatePrefilledGroupsEnabled(bool),
-    UpdateAutomaticGroupsEnabled(bool),
-    UpdatePerGroupListEnabled(bool),
-    UpdateColloscopeConfig(export_config::ColloscopeConfig),
-    UpdateAllGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePrefilledGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdateAutomaticGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePerGroupListConfig(export_config::PerGroupListConfig),
+    /// Replace the whole export configuration at once
+    Update(export_config::ExportConfig),
 }
 
 /// Annotated operation
@@ -285,6 +316,8 @@ pub enum AnnotatedOp {
     Student(AnnotatedStudentOp),
     /// Operation on the periods
     Period(AnnotatedPeriodOp),
+    /// Operation on the weeks
+    Week(AnnotatedWeekOp),
     /// Operation on the subjects
     Subject(AnnotatedSubjectOp),
     /// Operation on the teachers
@@ -295,7 +328,7 @@ pub enum AnnotatedOp {
     WeekPattern(AnnotatedWeekPatternOp),
     /// Operation on slots
     Slot(AnnotatedSlotOp),
-    /// Operation on slots
+    /// Operation on incompatibilities
     Incompat(AnnotatedIncompatOp),
     /// Operation on group lists
     GroupList(AnnotatedGroupListOp),
@@ -324,6 +357,12 @@ impl From<AnnotatedStudentOp> for AnnotatedOp {
 impl From<AnnotatedPeriodOp> for AnnotatedOp {
     fn from(value: AnnotatedPeriodOp) -> Self {
         AnnotatedOp::Period(value)
+    }
+}
+
+impl From<AnnotatedWeekOp> for AnnotatedOp {
+    fn from(value: AnnotatedWeekOp) -> Self {
+        AnnotatedOp::Week(value)
     }
 }
 
@@ -433,15 +472,43 @@ pub enum AnnotatedStudentOp {
 pub enum AnnotatedPeriodOp {
     /// Set the start of periods on a specific week
     ChangeStartDate(Option<collomatique_time::WeekStart>),
-    /// Add a new period at the beginning
-    AddFront(PeriodId, Vec<periods::WeekDesc>),
-    /// Add a period after an existing period
-    /// First parameter is the period id for the new period
-    AddAfter(PeriodId, PeriodId, Vec<periods::WeekDesc>),
+    /// Add a new (empty) period at the beginning
+    ///
+    /// The parameter is the period id for the new period.
+    AddFront(PeriodId),
+    /// Add a new (empty) period after an existing period
+    ///
+    /// The first parameter is the period id for the new period.
+    AddAfter(PeriodId, PeriodId),
     /// Remove an existing period
+    ///
+    /// See [PeriodOp::Remove]: leftover weeks are cascade-deleted, never a
+    /// reason to reject the removal.
     Remove(PeriodId),
-    /// Update an existing period
-    Update(PeriodId, Vec<periods::WeekDesc>),
+}
+
+/// Week annotated operation enumeration
+///
+/// Compared to [WeekOp], this is a annotated operation,
+/// meaning the operation has been annotated to contain
+/// all the necessary data to make it *reproducible*.
+///
+/// See [collomatique_state::history] for a complete discussion of the problem.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AnnotatedWeekOp {
+    /// Add a week at the front of a period
+    /// First parameter is the week id for the new week
+    AddFront(WeekId, PeriodId, weeks::WeekDesc),
+    /// Add a week right after an existing week
+    /// First parameter is the week id for the new week
+    AddAfter(WeekId, WeekId, weeks::WeekDesc),
+    /// Remove an existing week
+    Remove(WeekId),
+    /// Update the status/annotation of an existing week
+    Update(WeekId, weeks::WeekDesc),
+    /// Move a week to a position (same or different period), preserving its id
+    /// and its content
+    Move(WeekId, PeriodId, usize),
 }
 
 /// Subject annotated operation enumeration
@@ -453,8 +520,8 @@ pub enum AnnotatedPeriodOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedSubjectOp {
-    /// Add a period after an existing period
-    /// First parameter is the period id for the new period
+    /// Add a subject after an existing subject
+    /// First parameter is the subject id for the new subject
     /// If the second parameter is `None`, the subject is added at the first place
     AddAfter(SubjectId, Option<SubjectId>, subjects::Subject),
     /// Remove an existing subject
@@ -492,8 +559,10 @@ pub enum AnnotatedTeacherOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedAssignmentOp {
-    /// Assign (or deassign) a student to a subject on a given period
-    Assign(PeriodId, StudentId, SubjectId, bool),
+    /// Sets the whole assignments row for a `(period, subject)` pair.
+    /// An empty set removes the row (rows are canonical-absent: a row exists
+    /// iff at least one student is assigned).
+    SetRow(PeriodId, SubjectId, BTreeSet<StudentId>),
 }
 
 /// Week pattern operation enumeration
@@ -526,12 +595,15 @@ pub enum AnnotatedSlotOp {
     /// Add a slot after an existing slot
     /// If `None`, it is placed first
     /// First parameter is the slot id for the new slot
-    AddAfter(SlotId, SubjectId, Option<SlotId>, slots::Slot),
+    ///
+    /// The subject the slot belongs to is carried by the slot itself
+    /// (`slot.subject_id`).
+    AddAfter(SlotId, Option<SlotId>, slots::Slot),
     /// Remove an existing slot
     Remove(SlotId),
-    /// Move a subject to another position in the list
+    /// Move a slot to another position in the list
     ChangePosition(SlotId, usize),
-    /// Update the parameters of an existing subject
+    /// Update the parameters of an existing slot
     Update(SlotId, slots::Slot),
 }
 
@@ -564,13 +636,15 @@ pub enum AnnotatedIncompatOp {
 pub enum AnnotatedGroupListOp {
     /// Add a group list
     /// First parameter is the group list id for the new group list
-    Add(GroupListId, group_lists::GroupListParameters),
+    ///
+    /// The whole group list value is carried, so undoing a removal
+    /// (this op is the reverse of a [AnnotatedGroupListOp::Remove])
+    /// naturally restores the original value.
+    Add(GroupListId, group_lists::GroupList),
     /// Remove an existing group list
     Remove(GroupListId),
-    /// Update a group list
-    Update(GroupListId, group_lists::GroupListParameters),
-    /// Set filling strategy for a group list
-    SetFilling(GroupListId, group_lists::GroupListFilling),
+    /// Update a group list (replaces the whole value)
+    Update(GroupListId, group_lists::GroupList),
     /// Assign a group list to a subject
     AssignToSubject(PeriodId, SubjectId, Option<GroupListId>),
 }
@@ -620,8 +694,10 @@ pub enum AnnotatedSlotPairingOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedSettingsOp {
-    /// Update the settings
-    Update(settings::Settings),
+    /// Replace the global limits
+    SetGlobal(settings::Limits),
+    /// Set or clear the per-student limits override. `None` removes the entry.
+    SetStudent(StudentId, Option<settings::Limits>),
 }
 
 /// Balancing annotated operation enumeration
@@ -633,8 +709,10 @@ pub enum AnnotatedSettingsOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedBalancingOp {
-    /// Update the balancing configuration
-    Update(balancing::Balancing),
+    /// Replace the global balancing options
+    SetGlobal(balancing::BalancingOptions),
+    /// Set or clear the per-subject override. `None` removes the entry.
+    SetSubject(SubjectId, Option<balancing::BalancingOptions>),
 }
 
 /// Colloscope operation enumeration
@@ -646,15 +724,10 @@ pub enum AnnotatedBalancingOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedColloscopeOp {
-    /// Update a group list
-    UpdateGroupList(GroupListId, colloscopes::ColloscopeGroupList),
-    /// Update an interrogation
-    UpdateInterrogation(
-        PeriodId,
-        SlotId,
-        usize,
-        colloscopes::ColloscopeInterrogation,
-    ),
+    /// Set the group placements of a group list (empty map clears it)
+    SetGroupList(GroupListId, std::collections::BTreeMap<StudentId, u32>),
+    /// Set the assigned groups on `(slot, week)` (empty set clears the row)
+    SetInterrogation(SlotId, WeekId, std::collections::BTreeSet<u32>),
 }
 
 /// Export configuration annotated operation enumeration
@@ -666,17 +739,8 @@ pub enum AnnotatedColloscopeOp {
 /// See [collomatique_state::history] for a complete discussion of the problem.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AnnotatedExportConfigOp {
-    UpdateGlobalConfig(export_config::GlobalConfig),
-    UpdateColloscopeEnabled(bool),
-    UpdateAllGroupsEnabled(bool),
-    UpdatePrefilledGroupsEnabled(bool),
-    UpdateAutomaticGroupsEnabled(bool),
-    UpdatePerGroupListEnabled(bool),
-    UpdateColloscopeConfig(export_config::ColloscopeConfig),
-    UpdateAllGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePrefilledGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdateAutomaticGroupsConfig(export_config::PerStudentGroupsConfig),
-    UpdatePerGroupListConfig(export_config::PerGroupListConfig),
+    /// Replace the whole export configuration at once
+    Update(export_config::ExportConfig),
 }
 
 impl Operation for AnnotatedOp {}
@@ -699,6 +763,10 @@ impl AnnotatedOp {
             }
             Op::Period(period_op) => {
                 let (op, id) = AnnotatedPeriodOp::annotate(period_op, id_issuer);
+                (op.into(), id.map(|x| x.into()))
+            }
+            Op::Week(week_op) => {
+                let (op, id) = AnnotatedWeekOp::annotate(week_op, id_issuer);
                 (op.into(), id.map(|x| x.into()))
             }
             Op::Subject(subject_op) => {
@@ -755,7 +823,18 @@ impl AnnotatedOp {
             }
             Op::GlobalUpdate(inner_data) => {
                 if let Some(max_id) = inner_data.ids().max() {
-                    id_issuer.skip_to_id(max_id + 1).expect(
+                    // `checked_add`, not `+`: a forged payload carrying the raw
+                    // id `u64::MAX` would wrap to 0 in a release build, making
+                    // `skip_to_id(0)` a silent no-op — the exhaustion `expect`
+                    // below would never fire and the gate would instead panic
+                    // in `assert_id_issuer_high_water` *after* the mutation
+                    // landed. Both `expect`s carry the same message: the two
+                    // are one policy, "this payload is out of the id space".
+                    let next = max_id.checked_add(1).expect(
+                        "GlobalUpdate: ID space exhausted. \
+                         This is either a critical bug or a malicious data payload.",
+                    );
+                    id_issuer.skip_to_id(next).expect(
                         "GlobalUpdate: ID space exhausted. \
                          This is either a critical bug or a malicious data payload.",
                     );
@@ -797,19 +876,44 @@ impl AnnotatedPeriodOp {
     ) -> (AnnotatedPeriodOp, Option<PeriodId>) {
         match period_op {
             PeriodOp::ChangeStartDate(date) => (AnnotatedPeriodOp::ChangeStartDate(date), None),
-            PeriodOp::AddFront(desc) => {
+            PeriodOp::AddFront => {
                 let new_id = id_issuer.get_period_id();
-                (AnnotatedPeriodOp::AddFront(new_id, desc), Some(new_id))
+                (AnnotatedPeriodOp::AddFront(new_id), Some(new_id))
             }
-            PeriodOp::AddAfter(after_id, desc) => {
+            PeriodOp::AddAfter(after_id) => {
                 let new_id = id_issuer.get_period_id();
+                (AnnotatedPeriodOp::AddAfter(new_id, after_id), Some(new_id))
+            }
+            PeriodOp::Remove(period_id) => (AnnotatedPeriodOp::Remove(period_id), None),
+        }
+    }
+}
+
+impl AnnotatedWeekOp {
+    /// Used internally
+    ///
+    /// Annotates the subcategory of operations [WeekOp].
+    fn annotate(week_op: WeekOp, id_issuer: &mut IdIssuer) -> (AnnotatedWeekOp, Option<WeekId>) {
+        match week_op {
+            WeekOp::AddFront(period_id, desc) => {
+                let new_id = id_issuer.get_week_id();
                 (
-                    AnnotatedPeriodOp::AddAfter(new_id, after_id, desc),
+                    AnnotatedWeekOp::AddFront(new_id, period_id, desc),
                     Some(new_id),
                 )
             }
-            PeriodOp::Remove(period_id) => (AnnotatedPeriodOp::Remove(period_id), None),
-            PeriodOp::Update(period_id, desc) => (AnnotatedPeriodOp::Update(period_id, desc), None),
+            WeekOp::AddAfter(after_id, desc) => {
+                let new_id = id_issuer.get_week_id();
+                (
+                    AnnotatedWeekOp::AddAfter(new_id, after_id, desc),
+                    Some(new_id),
+                )
+            }
+            WeekOp::Remove(week_id) => (AnnotatedWeekOp::Remove(week_id), None),
+            WeekOp::Update(week_id, desc) => (AnnotatedWeekOp::Update(week_id, desc), None),
+            WeekOp::Move(week_id, period_id, pos) => {
+                (AnnotatedWeekOp::Move(week_id, period_id, pos), None)
+            }
         }
     }
 }
@@ -866,8 +970,8 @@ impl AnnotatedAssignmentOp {
     /// Annotates the subcategory of operations [AssignmentOp].
     fn annotate(assignment_op: AssignmentOp) -> AnnotatedAssignmentOp {
         match assignment_op {
-            AssignmentOp::Assign(period_id, student_id, subject_id, status) => {
-                AnnotatedAssignmentOp::Assign(period_id, student_id, subject_id, status)
+            AssignmentOp::SetRow(period_id, subject_id, students) => {
+                AnnotatedAssignmentOp::SetRow(period_id, subject_id, students)
             }
         }
     }
@@ -903,10 +1007,10 @@ impl AnnotatedSlotOp {
     /// Annotates the subcategory of operations [SlotOp].
     fn annotate(slot_op: SlotOp, id_issuer: &mut IdIssuer) -> (AnnotatedSlotOp, Option<SlotId>) {
         match slot_op {
-            SlotOp::AddAfter(subject_id, after_id, slot) => {
+            SlotOp::AddAfter(after_id, slot) => {
                 let new_id = id_issuer.get_slot_id();
                 (
-                    AnnotatedSlotOp::AddAfter(new_id, subject_id, after_id, slot),
+                    AnnotatedSlotOp::AddAfter(new_id, after_id, slot),
                     Some(new_id),
                 )
             }
@@ -949,18 +1053,15 @@ impl AnnotatedGroupListOp {
         id_issuer: &mut IdIssuer,
     ) -> (AnnotatedGroupListOp, Option<GroupListId>) {
         match group_list_op {
-            GroupListOp::Add(params) => {
+            GroupListOp::Add(group_list) => {
                 let new_id = id_issuer.get_group_list_id();
-                (AnnotatedGroupListOp::Add(new_id, params), Some(new_id))
+                (AnnotatedGroupListOp::Add(new_id, group_list), Some(new_id))
             }
             GroupListOp::Remove(group_list_id) => {
                 (AnnotatedGroupListOp::Remove(group_list_id), None)
             }
-            GroupListOp::Update(group_list_id, params) => {
-                (AnnotatedGroupListOp::Update(group_list_id, params), None)
-            }
-            GroupListOp::SetFilling(group_list_id, filling) => (
-                AnnotatedGroupListOp::SetFilling(group_list_id, filling),
+            GroupListOp::Update(group_list_id, group_list) => (
+                AnnotatedGroupListOp::Update(group_list_id, group_list),
                 None,
             ),
             GroupListOp::AssignToSubject(period_id, subject_id, group_list_id) => (
@@ -1015,7 +1116,10 @@ impl AnnotatedSettingsOp {
     /// Annotates the subcategory of operations [SettingsOp].
     fn annotate(settings_op: SettingsOp) -> AnnotatedSettingsOp {
         match settings_op {
-            SettingsOp::Update(general_settings) => AnnotatedSettingsOp::Update(general_settings),
+            SettingsOp::SetGlobal(limits) => AnnotatedSettingsOp::SetGlobal(limits),
+            SettingsOp::SetStudent(student_id, limits) => {
+                AnnotatedSettingsOp::SetStudent(student_id, limits)
+            }
         }
     }
 }
@@ -1026,7 +1130,10 @@ impl AnnotatedBalancingOp {
     /// Annotates the subcategory of operations [BalancingOp].
     fn annotate(balancing_op: BalancingOp) -> AnnotatedBalancingOp {
         match balancing_op {
-            BalancingOp::Update(balancing) => AnnotatedBalancingOp::Update(balancing),
+            BalancingOp::SetGlobal(options) => AnnotatedBalancingOp::SetGlobal(options),
+            BalancingOp::SetSubject(subject_id, options) => {
+                AnnotatedBalancingOp::SetSubject(subject_id, options)
+            }
         }
     }
 }
@@ -1037,20 +1144,12 @@ impl AnnotatedColloscopeOp {
     /// Annotates the subcategory of operations [ColloscopeOp].
     fn annotate(colloscope_op: ColloscopeOp) -> AnnotatedColloscopeOp {
         match colloscope_op {
-            ColloscopeOp::UpdateGroupList(group_list_id, group_list) => {
-                AnnotatedColloscopeOp::UpdateGroupList(group_list_id, group_list)
+            ColloscopeOp::SetGroupList(group_list_id, placements) => {
+                AnnotatedColloscopeOp::SetGroupList(group_list_id, placements)
             }
-            ColloscopeOp::UpdateInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                interrogation,
-            ) => AnnotatedColloscopeOp::UpdateInterrogation(
-                period_id,
-                slot_id,
-                week_in_period,
-                interrogation,
-            ),
+            ColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups) => {
+                AnnotatedColloscopeOp::SetInterrogation(slot_id, week_id, assigned_groups)
+            }
         }
     }
 }
@@ -1061,37 +1160,41 @@ impl AnnotatedExportConfigOp {
     /// Annotates the subcategory of operations [ExportConfigOp].
     fn annotate(export_config_op: ExportConfigOp) -> AnnotatedExportConfigOp {
         match export_config_op {
-            ExportConfigOp::UpdateGlobalConfig(v) => AnnotatedExportConfigOp::UpdateGlobalConfig(v),
-            ExportConfigOp::UpdateColloscopeEnabled(v) => {
-                AnnotatedExportConfigOp::UpdateColloscopeEnabled(v)
-            }
-            ExportConfigOp::UpdateAllGroupsEnabled(v) => {
-                AnnotatedExportConfigOp::UpdateAllGroupsEnabled(v)
-            }
-            ExportConfigOp::UpdatePrefilledGroupsEnabled(v) => {
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsEnabled(v)
-            }
-            ExportConfigOp::UpdateAutomaticGroupsEnabled(v) => {
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsEnabled(v)
-            }
-            ExportConfigOp::UpdatePerGroupListEnabled(v) => {
-                AnnotatedExportConfigOp::UpdatePerGroupListEnabled(v)
-            }
-            ExportConfigOp::UpdateColloscopeConfig(v) => {
-                AnnotatedExportConfigOp::UpdateColloscopeConfig(v)
-            }
-            ExportConfigOp::UpdateAllGroupsConfig(v) => {
-                AnnotatedExportConfigOp::UpdateAllGroupsConfig(v)
-            }
-            ExportConfigOp::UpdatePrefilledGroupsConfig(v) => {
-                AnnotatedExportConfigOp::UpdatePrefilledGroupsConfig(v)
-            }
-            ExportConfigOp::UpdateAutomaticGroupsConfig(v) => {
-                AnnotatedExportConfigOp::UpdateAutomaticGroupsConfig(v)
-            }
-            ExportConfigOp::UpdatePerGroupListConfig(v) => {
-                AnnotatedExportConfigOp::UpdatePerGroupListConfig(v)
-            }
+            ExportConfigOp::Update(v) => AnnotatedExportConfigOp::Update(v),
         }
+    }
+}
+
+#[cfg(test)]
+mod annotate_tests {
+    //! Annotation is a pure `(Op, &mut IdIssuer) -> (AnnotatedOp, Option<NewId>)`
+    //! step that runs *before* the gate, so a payload it mishandles corrupts
+    //! the issuer with no rollback behind it. Only [Op::GlobalUpdate] reads its
+    //! payload's ids here; this is its extreme-value pin.
+
+    use super::*;
+    use crate::students::Student;
+
+    #[test]
+    #[should_panic(expected = "ID space exhausted")]
+    fn a_global_update_at_the_top_of_the_id_space_panics_before_mutating() {
+        // `unsafe { StudentId::new }` is the documented test-forgery door: the
+        // safe surface cannot produce this id, since the issuer refuses to
+        // hand out anything past `u64::MAX >> 1`. Only a hand-built (or
+        // maliciously deserialized) payload can carry it.
+        let mut inner_data = InnerData::default();
+        let student = unsafe { StudentId::new(u64::MAX) };
+        inner_data
+            .params
+            .students
+            .student_map
+            .insert(student, Student::default());
+
+        let mut id_issuer = IdIssuer::new(std::iter::empty()).expect("an empty issuer is valid");
+
+        // Without the checked increment this wraps to `skip_to_id(0)` — a
+        // silent no-op — and the panic only arrives later, from the gate's
+        // high-water assertion, after the payload has already landed.
+        let _ = AnnotatedOp::annotate(Op::GlobalUpdate(inner_data), &mut id_issuer);
     }
 }

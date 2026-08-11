@@ -1,0 +1,748 @@
+{
+  "header": {
+    "file_type": "Collomatique",
+    "produced_with_version": "0.1.0-alpha.0.99",
+    "file_content": "Colloscope"
+  },
+  "entries": [
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GeneralPlanning": {
+          "first_week": "2026-08-31",
+          "periods": [
+            {
+              "id": 0,
+              "weeks": [
+                {
+                  "id": 1,
+                  "interrogations": true,
+                  "annotation": "Rentrée"
+                },
+                {
+                  "id": 2,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 3,
+                  "interrogations": false,
+                  "annotation": null
+                }
+              ]
+            },
+            {
+              "id": 4,
+              "weeks": [
+                {
+                  "id": 5,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 6,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 7,
+                  "interrogations": false,
+                  "annotation": "Vacances"
+                },
+                {
+                  "id": 8,
+                  "interrogations": true,
+                  "annotation": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Subjects": [
+          {
+            "id": 13,
+            "name": "Mathématiques",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "OnceForEveryBlockOfWeeks": {
+                  "weeks_per_block": 2,
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 14,
+            "name": "Physique-Chimie",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 2
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": false,
+              "periodicity": {
+                "ExactlyPeriodic": {
+                  "periodicity_in_weeks": 2
+                }
+              }
+            },
+            "excluded_periods": [
+              4
+            ]
+          },
+          {
+            "id": 15,
+            "name": "Anglais",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 2
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountInYear": {
+                  "interrogation_count_in_year": {
+                    "min": 1,
+                    "max": 3
+                  },
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 16,
+            "name": "Philosophie",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 2
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountForEveryArbitraryBlock": {
+                  "blocks": [
+                    {
+                      "delay_in_weeks": 0,
+                      "size_in_weeks": 3,
+                      "interrogation_count_in_block": {
+                        "min": 1,
+                        "max": 2
+                      }
+                    }
+                  ],
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 17,
+            "name": "Sport",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Teachers": [
+          {
+            "id": 18,
+            "surname": "Rogue",
+            "firstname": "Severus",
+            "tel": "0605060708",
+            "email": null,
+            "subjects": [
+              13,
+              14
+            ]
+          },
+          {
+            "id": 19,
+            "surname": "McGonagall",
+            "firstname": "Minerva",
+            "tel": null,
+            "email": "minerva@poudlard.fr",
+            "subjects": [
+              13
+            ]
+          },
+          {
+            "id": 20,
+            "surname": "Lupin",
+            "firstname": "Remus",
+            "tel": null,
+            "email": null,
+            "subjects": [
+              15,
+              16
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Students": [
+          {
+            "id": 9,
+            "surname": "Potter",
+            "firstname": "Harry",
+            "tel": "0601020304",
+            "email": "harry@poudlard.fr",
+            "excluded_periods": []
+          },
+          {
+            "id": 10,
+            "surname": "Granger",
+            "firstname": "Hermione",
+            "tel": null,
+            "email": "hermione@poudlard.fr",
+            "excluded_periods": [
+              4
+            ]
+          },
+          {
+            "id": 11,
+            "surname": "Weasley",
+            "firstname": "Ron",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 12,
+            "surname": "Lovegood",
+            "firstname": "Luna",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Assignments": [
+          {
+            "period_id": 0,
+            "subject_id": 13,
+            "students": [
+              9,
+              10,
+              11
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 14,
+            "students": [
+              9
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 15,
+            "students": [
+              12
+            ]
+          },
+          {
+            "period_id": 4,
+            "subject_id": 13,
+            "students": [
+              9
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "WeekPatterns": [
+          {
+            "id": 21,
+            "name": "Quinzaine A",
+            "excluded_weeks": [
+              2,
+              5,
+              7
+            ]
+          },
+          {
+            "id": 22,
+            "name": "Toutes les semaines",
+            "excluded_weeks": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Slots": [
+          {
+            "subject_id": 13,
+            "slots": [
+              {
+                "id": 23,
+                "teacher_id": 18,
+                "start": {
+                  "day": "monday",
+                  "time": "14:00"
+                },
+                "extra_info": "Salle 101",
+                "week_pattern_id": null,
+                "cost": 0
+              },
+              {
+                "id": 24,
+                "teacher_id": 19,
+                "start": {
+                  "day": "tuesday",
+                  "time": "17:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": 21,
+                "cost": 2
+              }
+            ]
+          },
+          {
+            "subject_id": 14,
+            "slots": [
+              {
+                "id": 25,
+                "teacher_id": 18,
+                "start": {
+                  "day": "wednesday",
+                  "time": "15:30"
+                },
+                "extra_info": "Labo",
+                "week_pattern_id": 22,
+                "cost": -1
+              }
+            ]
+          },
+          {
+            "subject_id": 15,
+            "slots": [
+              {
+                "id": 26,
+                "teacher_id": 20,
+                "start": {
+                  "day": "friday",
+                  "time": "08:00"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Incompatibilities": [
+          {
+            "id": 27,
+            "subject_id": 13,
+            "name": "Option latin",
+            "slots": [
+              {
+                "day": "monday",
+                "time": "08:00",
+                "duration_minutes": 60
+              },
+              {
+                "day": "thursday",
+                "time": "10:00",
+                "duration_minutes": 90
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": 22
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GroupLists": [
+          {
+            "id": 28,
+            "name": "Groupes de maths",
+            "students_per_group": {
+              "min": 2,
+              "max": 3
+            },
+            "group_names": [
+              "Gryffondor",
+              null
+            ],
+            "filling": {
+              "Prefilled": {
+                "groups": [
+                  {
+                    "students": [
+                      9,
+                      10
+                    ]
+                  },
+                  {
+                    "students": [
+                      11
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": 29,
+            "name": "Groupes de physique",
+            "students_per_group": {
+              "min": 1,
+              "max": 2
+            },
+            "group_names": [
+              null,
+              "Binôme B",
+              null
+            ],
+            "filling": {
+              "Automatic": {
+                "excluded_students": [
+                  12
+                ]
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GroupListAssociations": [
+          {
+            "period_id": 0,
+            "subject_id": 13,
+            "group_list_id": 28
+          },
+          {
+            "period_id": 0,
+            "subject_id": 14,
+            "group_list_id": 29
+          },
+          {
+            "period_id": 4,
+            "subject_id": 13,
+            "group_list_id": 28
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Pairings": [
+          {
+            "id": 30,
+            "antecedent": {
+              "subject_id": 13,
+              "should_have": true
+            },
+            "consequent": {
+              "subject_id": 15,
+              "should_have": false
+            },
+            "excluded_periods": [
+              4
+            ],
+            "soft": true
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "SlotPairings": [
+          {
+            "id": 31,
+            "antecedent": {
+              "slot_id": 23,
+              "should_have": true
+            },
+            "consequent": {
+              "slot_id": 24,
+              "should_have": true
+            },
+            "excluded_periods": [],
+            "soft": false
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Settings": {
+          "global": {
+            "interrogations_per_week_min": {
+              "soft": false,
+              "value": 1
+            },
+            "interrogations_per_week_max": {
+              "soft": true,
+              "value": 4
+            },
+            "max_interrogations_per_day": {
+              "soft": false,
+              "value": 2
+            }
+          },
+          "students": [
+            {
+              "student_id": 9,
+              "limits": {
+                "interrogations_per_week_min": null,
+                "interrogations_per_week_max": {
+                  "soft": true,
+                  "value": 3
+                },
+                "max_interrogations_per_day": null
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Balancing": {
+          "global": {
+            "teacher_rotation": {
+              "soft": true
+            },
+            "slot_rotation": null,
+            "avoid_twice_in_a_row": {
+              "soft": false
+            },
+            "year_teacher_rotation": false,
+            "period_teacher_rotation": true
+          },
+          "subjects": [
+            {
+              "subject_id": 13,
+              "options": {
+                "teacher_rotation": null,
+                "slot_rotation": {
+                  "soft": false
+                },
+                "avoid_twice_in_a_row": {
+                  "soft": true
+                },
+                "year_teacher_rotation": true,
+                "period_teacher_rotation": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Colloscope": {
+          "interrogations": [
+            {
+              "slot_id": 23,
+              "week_id": 1,
+              "assigned_groups": [
+                0
+              ]
+            },
+            {
+              "slot_id": 24,
+              "week_id": 1,
+              "assigned_groups": [
+                1
+              ]
+            },
+            {
+              "slot_id": 25,
+              "week_id": 2,
+              "assigned_groups": [
+                0,
+                2
+              ]
+            }
+          ],
+          "group_lists": [
+            {
+              "group_list_id": 29,
+              "students": [
+                {
+                  "student_id": 9,
+                  "group": 0
+                },
+                {
+                  "student_id": 10,
+                  "group": 1
+                },
+                {
+                  "student_id": 11,
+                  "group": 2
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "ExportConfig": {
+          "global": {
+            "background_color": {
+              "red": 240,
+              "green": 240,
+              "blue": 255
+            },
+            "stripes_color_enabled": false,
+            "stripes_color": {
+              "red": 200,
+              "green": 200,
+              "blue": 200
+            }
+          },
+          "colloscope_enabled": false,
+          "all_groups_enabled": true,
+          "automatic_groups_enabled": false,
+          "prefilled_groups_enabled": true,
+          "per_group_list_enabled": true,
+          "colloscope_config": {
+            "sheet_name": "Colloscope 2026",
+            "extra_info_column_enabled": true,
+            "extra_info_column_name": "Salle",
+            "teacher_email_enabled": true,
+            "teacher_email": "Courriel",
+            "teacher_tel_enabled": false,
+            "teacher_tel": "",
+            "orientation": "Landscape",
+            "display_week_dates": true,
+            "display_annotations": true,
+            "no_interrogation_color": {
+              "red": 128,
+              "green": 128,
+              "blue": 128
+            },
+            "annotation_color_enabled": true,
+            "annotation_color": {
+              "red": 255,
+              "green": 255,
+              "blue": 0
+            },
+            "extra_colors": [
+              {
+                "name": "Vacances",
+                "color": {
+                  "red": 0,
+                  "green": 128,
+                  "blue": 0
+                }
+              }
+            ]
+          },
+          "all_groups_config": {
+            "sheet_name": "Groupes",
+            "orientation": "Portrait",
+            "show_emails": true,
+            "show_tel": false
+          },
+          "automatic_groups_config": {
+            "sheet_name": "Groupes automatiques",
+            "orientation": null,
+            "show_emails": true,
+            "show_tel": false
+          },
+          "prefilled_groups_config": {
+            "sheet_name": "Groupes préremplis",
+            "orientation": null,
+            "show_emails": true,
+            "show_tel": false
+          },
+          "per_group_list_config": {
+            "orientation": "Landscape",
+            "show_emails": false,
+            "show_tel": true,
+            "center_vertically": true
+          }
+        }
+      }
+    }
+  ]
+}
