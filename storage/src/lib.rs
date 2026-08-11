@@ -37,7 +37,7 @@ pub enum DeserializationError {
     #[error("Invalid JSON structure in colloscope file: {0}")]
     InvalidJson(#[from] serde_json::Error),
     /// Well-formed JSON structure but issues when decoding it
-    #[error("Error whild decoding the colloscope file: {0}")]
+    #[error("Error while decoding the colloscope file: {0}")]
     Decode(#[from] DecodeError),
     /// The file uses the retired pre-alpha format (spec 1)
     ///
