@@ -22,9 +22,23 @@ Collomatique est en développement actif et au stade alpha. L'interface et le fo
 
 ## Copies d'écran
 
-![Écran d'accueil](screenshots/welcome_screen.png?raw=true "Écran d'accueil de Collomatique")
-![Édition des périodes](screenshots/periods.png?raw=true "Écran d'édition des périodes")
-![Édition des modèles de périodicité](screenshots/week_patterns.png?raw=true "Écran d'édition des modèles de périodicité")
+Le colloscope : une ligne par créneau, une colonne par semaine. Il peut être modifié à la main ou construit automatiquement.
+
+![Colloscope](screenshots/colloscope.png?raw=true "Le colloscope")
+
+Le planning général : découpage de l'année en périodes et en semaines.
+
+![Planning général](screenshots/general_planning.png?raw=true "Planning général")
+
+Les matières, avec la taille des groupes et la périodicité de chacune.
+
+![Matières](screenshots/subjects.png?raw=true "Édition des matières")
+
+La résolution en cours.
+
+![Résolution en cours](screenshots/solver_running.png?raw=true "Résolution du colloscope en cours")
+
+**[Voir toutes les copies d'écran](screenshots/README.md)** — tous les panneaux de l'application.
 
 ## Installation
 
