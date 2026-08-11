@@ -40,37 +40,6 @@ impl KeyedRow for Interrogation {
     }
 }
 
-/// The shape this block had before week ids — read-only
-///
-/// Transitional, like [super::general_planning::LegacyGeneralPlanning]: an
-/// interrogation used to name its week by *global week index* rather than
-/// by id. Only the interrogation rows differ; the group-list rows are
-/// unchanged and shared with the current shape.
-#[derive(Clone, Debug, PartialEq, Deserialize, Default)]
-#[serde(deny_unknown_fields)]
-pub struct LegacyColloscope {
-    pub interrogations: KeyedVec<LegacyInterrogation>,
-    pub group_lists: KeyedVec<FilledGroupList>,
-}
-
-#[derive(Clone, Debug, PartialEq, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct LegacyInterrogation {
-    pub slot_id: u64,
-    /// Global week index (the week determines the period)
-    pub week: u32,
-    /// 0-based group numbers
-    pub assigned_groups: UniqueVec<u32>,
-}
-
-impl KeyedRow for LegacyInterrogation {
-    type Key = (u64, u32);
-
-    fn key(&self) -> (u64, u32) {
-        (self.slot_id, self.week)
-    }
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct FilledGroupList {
@@ -125,28 +94,10 @@ mod tests {
         })
     }
 
-    /// The same block in the shape it had before week ids
-    fn legacy_example() -> serde_json::Value {
-        json!({
-            "interrogations": [
-                { "slot_id": 8, "week": 0, "assigned_groups": [0] },
-                { "slot_id": 8, "week": 2, "assigned_groups": [0, 1] }
-            ],
-            "group_lists": []
-        })
-    }
-
     #[test]
     fn spec_example_round_trips() {
         let block: Colloscope = serde_json::from_value(spec_example()).unwrap();
         assert_eq!(serde_json::to_value(&block).unwrap(), spec_example());
-    }
-
-    #[test]
-    fn legacy_example_parses_as_legacy_only() {
-        assert!(serde_json::from_value::<LegacyColloscope>(legacy_example()).is_ok());
-        assert!(serde_json::from_value::<Colloscope>(legacy_example()).is_err());
-        assert!(serde_json::from_value::<LegacyColloscope>(spec_example()).is_err());
     }
 
     #[test]

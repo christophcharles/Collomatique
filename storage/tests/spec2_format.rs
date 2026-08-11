@@ -876,70 +876,6 @@ fn a_rule_naming_one_uninterrogated_subject_twice_is_still_inconsistent() {
     );
 }
 
-/// A document in the **pre-week-id shape** with a single period of seven
-/// weeks and one week pattern whose bitmask has `week_count` entries
-///
-/// That shape required exactly one entry per week of the schedule, so
-/// only `week_count == 7` is well-formed here. Both blocks are legacy:
-/// weeks carry no id and the pattern is a positional bitmask.
-fn seven_week_document_with_pattern_of_length(week_count: usize) -> String {
-    let weeks = vec![r#"{ "interrogations": true, "annotation": null }"#; 7].join(", ");
-    let bits = vec!["true"; week_count].join(", ");
-    document(&[
-        entry(&format!(
-            r#"{{ "GeneralPlanning": {{
-                "first_week": null,
-                "periods": [ {{ "id": 1, "weeks": [{weeks}] }} ]
-            }} }}"#
-        )),
-        entry(&format!(
-            r#"{{ "WeekPatterns": [ {{ "id": 6, "name": "Quinzaine", "weeks": [{bits}] }} ] }}"#
-        )),
-    ])
-}
-
-#[test]
-fn week_pattern_matching_the_schedule_decodes() {
-    // The control: the exact-length bitmask is the well-formed shape.
-    let content = seven_week_document_with_pattern_of_length(7);
-
-    let (_data, caveats) = deserialize_data(&content).expect("Exact-length pattern should decode");
-    assert!(caveats.is_empty());
-}
-
-#[test]
-fn week_pattern_shorter_than_the_schedule_is_rejected() {
-    // Decode zips the bitmask against the walk order, so the missing
-    // bits silently default to active.
-    let content = seven_week_document_with_pattern_of_length(1);
-
-    assert_eq!(
-        expect_decode_error(&content),
-        DecodeError::WrongWeekCountInWeekPattern {
-            week_pattern_id: 6,
-            expected: 7,
-            found: 1
-        }
-    );
-}
-
-#[test]
-fn week_pattern_longer_than_the_schedule_is_rejected() {
-    // The surplus bits vanish in the zip. Since the in-memory type keeps
-    // only the exclusion set (no length), nothing downstream can catch
-    // this — decode is the only place it can be seen.
-    let content = seven_week_document_with_pattern_of_length(8);
-
-    assert_eq!(
-        expect_decode_error(&content),
-        DecodeError::WrongWeekCountInWeekPattern {
-            week_pattern_id: 6,
-            expected: 7,
-            found: 8
-        }
-    );
-}
-
 #[test]
 fn incompatibility_slot_crossing_midnight_is_rejected() {
     let entries = vec![
@@ -1007,39 +943,6 @@ fn object_id_exactly_at_the_ceiling_is_accepted() {
         r#"{{ "Students": [
             {{ "id": {}, "surname": "Potter", "firstname": "Harry", "tel": null, "email": null, "excluded_periods": [] }}
         ] }}"#,
-        u64::MAX >> 1
-    ))]);
-
-    let (inner, caveats) = deserialize_data(&content).expect("boundary id should decode");
-    assert!(caveats.is_empty());
-    gate(inner);
-}
-
-#[test]
-fn an_id_at_the_ceiling_next_to_a_legacy_week_is_accepted() {
-    // The same boundary id as above, in a **pre-week-id** document that
-    // also has a week. The file is just as legal: it defines one id,
-    // 2^63 - 1, and in that shape weeks carry no id at all.
-    //
-    // This pins the hole-filling rule for synthesized week ids. When the
-    // decoder minted them *above* every id the file defines, the week here
-    // got 2^63, one past the ceiling: nothing in the decoder objected —
-    // the id it built is not one the file wrote — but the in-memory id
-    // issuer refused to resume from it, and decoding a file that is not
-    // broken at all failed. Week ids now fill the holes of the id space
-    // from the bottom, so the week gets id 0 and the document decodes.
-    //
-    // The failure lives in the id issuer, which is built by the invariant
-    // gate — the decoder itself never looks at it. So the `gate` call
-    // below is the point of this test, not a formality: without it the
-    // test passes no matter where the week ids land.
-    let content = document(&[entry(&format!(
-        r#"{{ "GeneralPlanning": {{
-            "first_week": null,
-            "periods": [
-                {{ "id": {}, "weeks": [ {{ "interrogations": true, "annotation": null }} ] }}
-            ]
-        }} }}"#,
         u64::MAX >> 1
     ))]);
 
@@ -2580,234 +2483,14 @@ fn colloscope_week_id_out_of_64_bits_is_rejected() {
     );
 }
 
-// ---------------------------------------------------------------------
-// The transitional reader: files written before weeks carried an id
-//
-// Three blocks had a different shape then — `GeneralPlanning` (weeks
-// without ids), `WeekPatterns` (a dense bitmask over the global week
-// indices) and `Colloscope` (interrogations naming a week by index). The
-// reader still takes both shapes so those files can be re-saved once; the
-// tests below pin that path until it is removed. `week_pattern_*_than_the
-// _schedule_is_rejected` and `an_id_at_the_ceiling_next_to_a_legacy_week
-// _is_accepted`, further up, belong to this family too.
-// ---------------------------------------------------------------------
-
-/// The scheduling setup of [scheduling_entries], written in the
-/// pre-week-id shape: no week ids, a positional pattern bitmask
-fn legacy_scheduling_entries(week1_interrogations: bool, with_pattern: bool) -> Vec<String> {
-    let mut entries = vec![
-        entry(&format!(
-            r#"{{ "GeneralPlanning": {{
-                "first_week": null,
-                "periods": [
-                    {{ "id": 1, "weeks": [
-                        {{ "interrogations": true, "annotation": null }},
-                        {{ "interrogations": {week1_interrogations}, "annotation": null }}
-                    ] }}
-                ]
-            }} }}"#
-        )),
-        entry(
-            r#"{ "Subjects": [
-                {
-                    "id": 2,
-                    "name": "Mathématiques",
-                    "interrogation_parameters": {
-                        "students_per_group": { "min": 1, "max": 2 },
-                        "groups_per_interrogation": { "min": 1, "max": 1 },
-                        "duration_minutes": 60,
-                        "take_duration_into_account": true,
-                        "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
-                    },
-                    "excluded_periods": []
-                }
-            ] }"#,
-        ),
-        entry(
-            r#"{ "Teachers": [
-                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2] }
-            ] }"#,
-        ),
-    ];
-    if with_pattern {
-        entries.push(entry(
-            r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
-        ));
-    }
-    let week_pattern_id = if with_pattern { "6" } else { "null" };
-    entries.push(entry(&format!(
-        r#"{{ "Slots": [
-            {{ "subject_id": 2, "slots": [
-                {{ "id": 7, "teacher_id": 3, "start": {{ "day": "monday", "time": "14:00" }}, "extra_info": "", "week_pattern_id": {week_pattern_id}, "cost": 0 }}
-            ] }}
-        ] }}"#
-    )));
-    entries
-}
-
-/// The proof the transitional reader is faithful: the same document in
-/// the two shapes decodes to exactly the same state
-///
-/// The old shape carries no week ids, so the decoder synthesizes them —
-/// the smallest values the file leaves free, which here are 0 and 4 (the
-/// file defines 1, 2, 3, 6 and 7). Spelling those very ids out in the
-/// current-shape twin is what lets the two states be compared as they
-/// are, with no renumbering to blunt the comparison.
+/// A week with no `id` is not a week: the field is required, like every
+/// other field of every record
 #[test]
-fn a_legacy_document_decodes_like_its_current_twin() {
-    let common = |week_pattern: &str, colloscope: &str| {
-        vec![
-            entry(
-                r#"{ "Subjects": [
-                    {
-                        "id": 2,
-                        "name": "Mathématiques",
-                        "interrogation_parameters": {
-                            "students_per_group": { "min": 1, "max": 2 },
-                            "groups_per_interrogation": { "min": 1, "max": 1 },
-                            "duration_minutes": 60,
-                            "take_duration_into_account": true,
-                            "periodicity": { "ExactlyPeriodic": { "periodicity_in_weeks": 2 } }
-                        },
-                        "excluded_periods": []
-                    }
-                ] }"#,
-            ),
-            entry(
-                r#"{ "Teachers": [
-                    { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2] }
-                ] }"#,
-            ),
-            entry(week_pattern),
-            entry(
-                r#"{ "Slots": [
-                    { "subject_id": 2, "slots": [
-                        { "id": 7, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": 6, "cost": 0 }
-                    ] }
-                ] }"#,
-            ),
-            entry(colloscope),
-        ]
-    };
-
-    let mut legacy = vec![entry(
-        r#"{ "GeneralPlanning": {
-            "first_week": null,
-            "periods": [ { "id": 1, "weeks": [
-                { "interrogations": true, "annotation": null },
-                { "interrogations": true, "annotation": null }
-            ] } ]
-        } }"#,
-    )];
-    legacy.extend(common(
-        r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
-        r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [] } ],
-            "group_lists": []
-        } }"#,
-    ));
-
-    let mut current = vec![entry(
-        r#"{ "GeneralPlanning": {
-            "first_week": null,
-            "periods": [ { "id": 1, "weeks": [
-                { "id": 0, "interrogations": true, "annotation": null },
-                { "id": 4, "interrogations": true, "annotation": null }
-            ] } ]
-        } }"#,
-    )];
-    current.extend(common(
-        r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "excluded_weeks": [4] } ] }"#,
-        r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week_id": 0, "assigned_groups": [] } ],
-            "group_lists": []
-        } }"#,
-    ));
-
-    let (legacy_inner, legacy_caveats) =
-        deserialize_data(&document(&legacy)).expect("The legacy document should decode");
-    let (current_inner, current_caveats) =
-        deserialize_data(&document(&current)).expect("The current document should decode");
-    assert!(legacy_caveats.is_empty());
-    assert!(current_caveats.is_empty());
-
-    assert_eq!(legacy_inner, current_inner);
-}
-
-/// Blocks are read independently, so a half-migrated file is legal
-#[test]
-fn a_document_mixing_the_two_shapes_decodes() {
-    // Current `GeneralPlanning`, legacy `WeekPatterns` and legacy
-    // `Colloscope`: both legacy paths resolve through the week table the
-    // decoder has already built, whichever shape built it.
-    let mut entries = scheduling_entries(true, false);
-    entries.push(entry(
-        r#"{ "WeekPatterns": [ { "id": 6, "name": "Quinzaine", "weeks": [true, false] } ] }"#,
-    ));
-    entries.push(entry(
-        r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 0, "assigned_groups": [] } ],
-            "group_lists": []
-        } }"#,
-    ));
-
-    let (_inner, caveats) =
-        deserialize_data(&document(&entries)).expect("A mixed document should decode");
-    assert!(caveats.is_empty());
-}
-
-#[test]
-fn a_legacy_colloscope_week_past_the_schedule_is_rejected() {
-    let mut entries = legacy_scheduling_entries(true, false);
-    entries.push(entry(
-        r#"{ "Colloscope": {
-            "interrogations": [ { "slot_id": 7, "week": 5, "assigned_groups": [] } ],
-            "group_lists": []
-        } }"#,
-    ));
-
-    assert_eq!(
-        expect_decode_error(&document(&entries)),
-        DecodeError::ColloscopeWeekIndexOutOfRange {
-            slot_id: 7,
-            week: 5
-        }
-    );
-}
-
-#[test]
-fn a_block_name_appearing_in_both_shapes_is_a_duplicate() {
-    // A name appears at most once whichever shape it wears.
-    let content = document(&[
-        entry(
-            r#"{ "GeneralPlanning": {
-                "first_week": null,
-                "periods": [ { "id": 1, "weeks": [ { "id": 30, "interrogations": true, "annotation": null } ] } ]
-            } }"#,
-        ),
-        entry(
-            r#"{ "GeneralPlanning": {
-                "first_week": null,
-                "periods": [ { "id": 2, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
-            } }"#,
-        ),
-    ]);
-
-    assert_eq!(
-        expect_decode_error(&content),
-        DecodeError::DuplicatedBlock("GeneralPlanning")
-    );
-}
-
-/// A block that is neither shape is reported with the *current* shape's
-/// diagnostics — the legacy attempt is silent, so the message stays about
-/// the format as it is today
-#[test]
-fn a_block_matching_neither_shape_reports_the_current_one() {
+fn a_week_without_an_id_is_rejected() {
     let content = document(&[entry(
         r#"{ "GeneralPlanning": {
             "first_week": null,
-            "periods": [ { "id": 1, "weeks": [ { "id": 30, "interrogations": true } ] } ]
+            "periods": [ { "id": 1, "weeks": [ { "interrogations": true, "annotation": null } ] } ]
         } }"#,
     )]);
 
@@ -2817,7 +2500,7 @@ fn a_block_matching_neither_shape_reports_the_current_one() {
     };
     assert_eq!(block, "GeneralPlanning");
     assert!(
-        detail.contains("annotation"),
-        "The diagnostics should name the missing field of the current shape, got {detail:?}"
+        detail.contains("id"),
+        "The diagnostics should name the missing field, got {detail:?}"
     );
 }

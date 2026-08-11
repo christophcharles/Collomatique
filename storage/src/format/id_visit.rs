@@ -12,10 +12,6 @@
 //! What is deliberately **not** an id, and therefore not visited: the
 //! colloscope's group numbers, the group numbers of a placement, and the
 //! limit values of the settings.
-//!
-//! Only the current shapes are walked. The reader's transitional
-//! `legacy_*` blocks are never visited because the encoder never fills
-//! them, and this module serves the writer.
 
 use super::Blocks;
 

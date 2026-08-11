@@ -19,7 +19,6 @@ pub enum DebugMode {
     NoObjectiveStarter,
     Incremental,
     Conductor,
-    Resave,
 }
 
 pub fn print_help() -> Result<(), anyhow::Error> {
@@ -63,9 +62,6 @@ pub fn print_help() -> Result<(), anyhow::Error> {
     eprintln!(
         "    conductor              Solve via the conductor strategy (spawns subprocess workers)"
     );
-    eprintln!(
-        "    resave                 Rewrite the file in the current format, in place (no backup)"
-    );
     eprintln!();
     eprintln!("  All modes except 'help' require a file argument.");
     eprintln!("  Blame modes use 'minimal' filtering by default: redundant constraints implied");
@@ -80,23 +76,8 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
 
         let t = Instant::now();
         eprintln!("Loading file: {:?}", file);
-        let (inner_data, caveats) = collomatique_storage::load_data_from_file(&file).await?;
+        let (inner_data, _caveats) = collomatique_storage::load_data_from_file(&file).await?;
         eprintln!("  File loaded in {:.2?}", t.elapsed());
-
-        // Rewriting is the one mode with no model behind it, so it returns
-        // before the model is built. It writes in place: the caller keeps
-        // the backups.
-        if matches!(mode, DebugMode::Resave) {
-            // A caveat means the reader dropped something it did not
-            // understand, and rewriting makes that loss permanent.
-            for caveat in &caveats {
-                eprintln!("  WARNING, this will be lost on rewrite: {caveat:?}");
-            }
-            collomatique_storage::save_data_to_file(&inner_data, &file).await?;
-            eprintln!("Re-saved {file:?} in the current format");
-            eprintln!("Total: {:.2?}", t_total.elapsed());
-            return Ok(());
-        }
 
         eprintln!("Building ILP model...");
         let model = collomatique_constraints_colloscopes::build_model_with_log(
@@ -133,7 +114,6 @@ pub fn run(mode: DebugMode, file: PathBuf) -> Result<(), anyhow::Error> {
             DebugMode::NoObjectiveStarter => no_objective_starter_solve(&model),
             DebugMode::Incremental => incremental_solve(&model),
             DebugMode::Conductor => conductor_solve(&model).await,
-            DebugMode::Resave => unreachable!("handled before the model is built"),
         }
 
         eprintln!("Total: {:.2?}", t_total.elapsed());

@@ -64,18 +64,6 @@ impl format::Blocks {
     fn store(&mut self, block: format::Block) -> Result<(), DecodeError> {
         let name = block.name().as_str();
         use format::Block;
-        // A block name appears at most once whichever shape it wears, so
-        // the three transitional names also have to check their legacy
-        // slot (and vice versa in `store_legacy`).
-        let legacy_taken = match block.name() {
-            BlockName::GeneralPlanning => self.legacy_general_planning.is_some(),
-            BlockName::WeekPatterns => self.legacy_week_patterns.is_some(),
-            BlockName::Colloscope => self.legacy_colloscope.is_some(),
-            _ => false,
-        };
-        if legacy_taken {
-            return Err(DecodeError::DuplicatedBlock(name));
-        }
         match block {
             Block::GeneralPlanning(b) => store_block(&mut self.general_planning, b, name),
             Block::Subjects(b) => store_block(&mut self.subjects, b, name),
@@ -95,28 +83,6 @@ impl format::Blocks {
             Block::Balancing(b) => store_block(&mut self.balancing, b, name),
             Block::Colloscope(b) => store_block(&mut self.colloscope, b, name),
             Block::ExportConfig(b) => store_block(&mut self.export_config, b, name),
-        }
-    }
-
-    /// Transitional twin of [Self::store] for the pre-week-id shapes
-    fn store_legacy(&mut self, block: format::LegacyBlock) -> Result<(), DecodeError> {
-        let name = block.name().as_str();
-        use format::LegacyBlock;
-        let current_taken = match block.name() {
-            BlockName::GeneralPlanning => self.general_planning.is_some(),
-            BlockName::WeekPatterns => self.week_patterns.is_some(),
-            BlockName::Colloscope => self.colloscope.is_some(),
-            _ => unreachable!("LegacyBlock only covers three block names"),
-        };
-        if current_taken {
-            return Err(DecodeError::DuplicatedBlock(name));
-        }
-        match block {
-            LegacyBlock::GeneralPlanning(b) => {
-                store_block(&mut self.legacy_general_planning, b, name)
-            }
-            LegacyBlock::WeekPatterns(b) => store_block(&mut self.legacy_week_patterns, b, name),
-            LegacyBlock::Colloscope(b) => store_block(&mut self.legacy_colloscope, b, name),
         }
     }
 }
@@ -169,29 +135,10 @@ fn collect_blocks(
         match serde_json::from_str::<format::Block>(entry.content.get()) {
             Ok(block) => blocks.store(block)?,
             Err(error) => {
-                // Transitional: three block names have a second, older
-                // shape (weeks without ids). Try it before giving up. The
-                // two shapes are mutually exclusive — records deny unknown
-                // fields and have no defaults — so this never guesses, and
-                // if neither parses the *current* shape's diagnostics are
-                // the ones worth showing.
-                let legacy = match block_name {
-                    BlockName::GeneralPlanning
-                    | BlockName::WeekPatterns
-                    | BlockName::Colloscope => {
-                        serde_json::from_str::<format::LegacyBlock>(entry.content.get()).ok()
-                    }
-                    _ => None,
-                };
-                match legacy {
-                    Some(block) => blocks.store_legacy(block)?,
-                    None => {
-                        return Err(DecodeError::IllformedBlock {
-                            block: block_name.as_str(),
-                            detail: error.to_string(),
-                        });
-                    }
-                }
+                return Err(DecodeError::IllformedBlock {
+                    block: block_name.as_str(),
+                    detail: error.to_string(),
+                });
             }
         }
     }
@@ -262,12 +209,9 @@ fn soft_flag(flag: format::scalars::SoftFlag) -> mem::soft_param::SoftParam<()> 
 /// slots, incompatibilities, group lists, pairing rules, slot pairing
 /// rules.
 ///
-/// A pre-week-id `GeneralPlanning` contributes only its period ids: its
-/// weeks carry none, and the decoder synthesizes theirs from the holes
-/// this walk leaves. In a valid file every reference id is also a defining
-/// id, so the defining ids of each block bound the whole id space; a
-/// reference id outside that set is dangling and rejected as such
-/// regardless.
+/// In a valid file every reference id is also a defining id, so the
+/// defining ids of each block bound the whole id space; a reference id
+/// outside that set is dangling and rejected as such regardless.
 fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) {
     if let Some(b) = &blocks.general_planning {
         for period in &b.periods {
@@ -275,11 +219,6 @@ fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) 
             for week in &period.weeks {
                 f(BlockName::GeneralPlanning.as_str(), week.id);
             }
-        }
-    }
-    if let Some(b) = &blocks.legacy_general_planning {
-        for period in &b.periods {
-            f(BlockName::GeneralPlanning.as_str(), period.id);
         }
     }
     if let Some(b) = &blocks.subjects {
@@ -298,11 +237,6 @@ fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) 
         }
     }
     if let Some(b) = &blocks.week_patterns {
-        for week_pattern in b.iter() {
-            f(BlockName::WeekPatterns.as_str(), week_pattern.id);
-        }
-    }
-    if let Some(b) = &blocks.legacy_week_patterns {
         for week_pattern in b.iter() {
             f(BlockName::WeekPatterns.as_str(), week_pattern.id);
         }
@@ -333,39 +267,6 @@ fn for_each_defining_id(blocks: &Blocks, f: &mut impl FnMut(&'static str, u64)) 
         for slot_pairing in b.iter() {
             f(BlockName::SlotPairings.as_str(), slot_pairing.id);
         }
-    }
-}
-
-/// Allocates the synthesized week ids: the smallest values the file does
-/// not define, issued in ascending order
-///
-/// Transitional: only the pre-week-id reader needs this. Weeks were
-/// positional in that shape and carried no id, so the decoder had to
-/// invent ids that collide with nothing and stay at or below the
-/// 2^63 - 1 ceiling — the in-memory id issuer refuses to resume above it,
-/// and minting week ids above the maximum defining id trips exactly that
-/// refusal when a file legally uses ids near the ceiling. Filling holes
-/// from the bottom gives both properties for free: the k-th issued id is
-/// at most `defined.len() + k`, and every defining id and every week costs
-/// bytes in the file, so a document big enough to push that sum anywhere
-/// near 2^63 cannot exist.
-struct WeekIdAllocator {
-    /// The defining ids of the document, all distinct and at most
-    /// 2^63 - 1 (checked by the sweep in [reconstruct])
-    defined: BTreeMap<u64, &'static str>,
-    /// The next value to try; it strictly increases, so the issued ids
-    /// are also distinct among themselves
-    candidate: u64,
-}
-
-impl WeekIdAllocator {
-    fn get_new_id(&mut self) -> u64 {
-        while self.defined.contains_key(&self.candidate) {
-            self.candidate += 1;
-        }
-        let id = self.candidate;
-        self.candidate += 1;
-        id
     }
 }
 
@@ -401,20 +302,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     if let Some(error) = first_error {
         return Err(error);
     }
-    // Transitional: in the pre-week-id shape, week ids are synthesized in
-    // the holes of the id space — the smallest values the file does not
-    // define, in ascending walk order. All defining ids are at most
-    // 2^63 - 1 here, and the holes are filled from the bottom, so the
-    // synthesized ids stay below the ceiling even when the file's own ids
-    // sit right at it.
-    let mut week_ids = WeekIdAllocator {
-        defined: seen,
-        candidate: 0,
-    };
-    let (periods, weeks) = match blocks.legacy_general_planning {
-        Some(block) => reconstruct_legacy_periods(block, &mut week_ids)?,
-        None => reconstruct_periods(blocks.general_planning.unwrap_or_default())?,
-    };
+    let (periods, weeks) = reconstruct_periods(blocks.general_planning.unwrap_or_default())?;
     let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default(), &periods)?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default(), &subjects)?;
     let students = reconstruct_students(blocks.students.unwrap_or_default(), &periods)?;
@@ -424,10 +312,8 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         &subjects,
         &students,
     )?;
-    let week_patterns = match blocks.legacy_week_patterns {
-        Some(block) => reconstruct_legacy_week_patterns(block, &weeks, &periods)?,
-        None => reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks)?,
-    };
+    let week_patterns =
+        reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks)?;
     let slots = reconstruct_slots(
         blocks.slots.unwrap_or_default(),
         &subjects,
@@ -469,10 +355,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         balancing,
     };
 
-    let colloscope = match blocks.legacy_colloscope {
-        Some(block) => reconstruct_legacy_colloscope(block, &params)?,
-        None => reconstruct_colloscope(blocks.colloscope.unwrap_or_default(), &params)?,
-    };
+    let colloscope = reconstruct_colloscope(blocks.colloscope.unwrap_or_default(), &params)?;
     let export_config = reconstruct_export_config(blocks.export_config.unwrap_or_default());
 
     Ok(InnerData {
@@ -509,57 +392,11 @@ fn reconstruct_periods(
                     .collect(),
             )
         })
-        .collect::<Vec<_>>();
+        .collect::<Vec<(PeriodId, Vec<(WeekId, mem::weeks::WeekDesc)>)>>();
 
-    build_periods_and_weeks(first_week, rows)
-}
-
-/// Transitional twin of [reconstruct_periods] for the pre-week-id shape,
-/// where weeks are positional and their ids are synthesized on load
-fn reconstruct_legacy_periods(
-    block: format::general_planning::LegacyGeneralPlanning,
-    week_ids: &mut WeekIdAllocator,
-) -> Result<(mem::periods::Periods, mem::weeks::Weeks), DecodeError> {
-    let first_week = block.first_week.map(|date| {
-        collomatique_time::WeekStart::new(date.date()).expect("Format week start date is a Monday")
-    });
-    let rows = block
-        .periods
-        .into_iter()
-        .map(|period| {
-            (
-                id(period.id),
-                period
-                    .weeks
-                    .into_iter()
-                    .map(|week| {
-                        // Synthesize the week's id in walk order.
-                        let week_id = id::<WeekId>(week_ids.get_new_id());
-                        (
-                            week_id,
-                            mem::weeks::WeekDesc {
-                                interrogations: week.interrogations,
-                                annotation: week.annotation,
-                            },
-                        )
-                    })
-                    .collect(),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    build_periods_and_weeks(first_week, rows)
-}
-
-/// Builds the two containers out of the per-period rows both shapes produce
-///
-/// The period set is exactly the week-row keys by construction, so the two
-/// containers are built from the same rows: periods carry only the ordered
-/// ids, weeks carry the per-period ordering and the week table.
-fn build_periods_and_weeks(
-    first_week: Option<collomatique_time::WeekStart>,
-    rows: Vec<(PeriodId, Vec<(WeekId, mem::weeks::WeekDesc)>)>,
-) -> Result<(mem::periods::Periods, mem::weeks::Weeks), DecodeError> {
+    // The period set is exactly the week-row keys by construction, so the
+    // two containers are built from the same rows: periods carry only the
+    // ordered ids, weeks carry the per-period ordering and the week table.
     let period_ids = rows.iter().map(|(id, _)| *id).collect();
     let periods = mem::periods::Periods::from_ordered_ids(first_week, period_ids).map_err(|e| {
         DecodeError::DuplicatedIdInBlock {
@@ -568,8 +405,7 @@ fn build_periods_and_weeks(
         }
     })?;
     // Defensive: a week id repeated inside the block was already caught by
-    // the id-space sweep in [reconstruct] (and, on the legacy path, cannot
-    // happen at all — the allocator's candidate strictly increases).
+    // the id-space sweep in [reconstruct].
     let weeks = mem::weeks::Weeks::from_period_rows(rows).map_err(|e| {
         DecodeError::DuplicatedIdInBlock {
             block: BlockName::GeneralPlanning.as_str(),
@@ -837,51 +673,6 @@ fn reconstruct_week_patterns(
                 mem::week_patterns::WeekPattern {
                     name: week_pattern.name,
                     excluded_weeks: id_set(week_pattern.excluded_weeks),
-                },
-            ))
-        })
-        .collect::<Result<_, _>>()?;
-
-    Ok(mem::week_patterns::WeekPatterns { week_pattern_map })
-}
-
-/// Transitional twin of [reconstruct_week_patterns] for the pre-week-id
-/// shape, where a pattern is a dense bitmask over the global week indices
-fn reconstruct_legacy_week_patterns(
-    block: format::week_patterns::LegacyWeekPatterns,
-    weeks: &mem::weeks::Weeks,
-    periods: &mem::periods::Periods,
-) -> Result<mem::week_patterns::WeekPatterns, DecodeError> {
-    // The positional bitmask carries one bit per week in global walk
-    // order; a `false` bit excludes that week. That shape required
-    // exactly one element per week of the schedule — no shorter, no longer —
-    // and the in-memory type has no length to re-check later, so the length
-    // is enforced here.
-    let week_ids: Vec<WeekId> = weeks
-        .walk(periods)
-        .map(|(_period_id, week_id, _week)| week_id)
-        .collect();
-    let week_pattern_map = block
-        .into_inner()
-        .into_iter()
-        .map(|week_pattern| {
-            if week_pattern.weeks.len() != week_ids.len() {
-                return Err(DecodeError::WrongWeekCountInWeekPattern {
-                    week_pattern_id: week_pattern.id,
-                    expected: week_ids.len(),
-                    found: week_pattern.weeks.len(),
-                });
-            }
-            let excluded_weeks = week_ids
-                .iter()
-                .zip(week_pattern.weeks)
-                .filter_map(|(&week_id, active)| (!active).then_some(week_id))
-                .collect();
-            Ok((
-                id::<WeekPatternId>(week_pattern.id),
-                mem::week_patterns::WeekPattern {
-                    name: week_pattern.name,
-                    excluded_weeks,
                 },
             ))
         })
@@ -1403,55 +1194,12 @@ fn reconstruct_balancing(
     })
 }
 
-/// Transitional twin of [reconstruct_colloscope] for the pre-week-id
-/// shape, where an interrogation names its week by global index
-///
-/// The indices are resolved to week ids up front, and everything
-/// downstream is the current-shape code: only the way a row names its
-/// week differed.
-fn reconstruct_legacy_colloscope(
-    block: format::colloscope::LegacyColloscope,
-    params: &mem::colloscope_params::Parameters,
-) -> Result<mem::colloscopes::Colloscope, DecodeError> {
-    // Global week index -> week id, in walk order.
-    let week_table: Vec<WeekId> = params
-        .walk_weeks()
-        .map(|(_period_id, week_id, _week)| week_id)
-        .collect();
-
-    let mut interrogations = Vec::new();
-    for row in block.interrogations.into_inner() {
-        let week_id = usize::try_from(row.week)
-            .ok()
-            .and_then(|week| week_table.get(week).copied());
-        let Some(week_id) = week_id else {
-            return Err(DecodeError::ColloscopeWeekIndexOutOfRange {
-                slot_id: row.slot_id,
-                week: row.week,
-            });
-        };
-        interrogations.push(format::colloscope::Interrogation {
-            slot_id: row.slot_id,
-            week_id: week_id.inner(),
-            assigned_groups: row.assigned_groups,
-        });
-    }
-
-    reconstruct_colloscope_rows(interrogations, block.group_lists, params)
-}
-
 fn reconstruct_colloscope(
     block: format::colloscope::Colloscope,
     params: &mem::colloscope_params::Parameters,
 ) -> Result<mem::colloscopes::Colloscope, DecodeError> {
-    reconstruct_colloscope_rows(block.interrogations.into_inner(), block.group_lists, params)
-}
-
-fn reconstruct_colloscope_rows(
-    interrogations: Vec<format::colloscope::Interrogation>,
-    filled_group_lists: format::keyed::KeyedVec<format::colloscope::FilledGroupList>,
-    params: &mem::colloscope_params::Parameters,
-) -> Result<mem::colloscopes::Colloscope, DecodeError> {
+    let interrogations = block.interrogations.into_inner();
+    let filled_group_lists = block.group_lists;
     // The whole key structure is derived (spec §4.15): rows are placed
     // through the sparse colloscope surface, whose canonical form drops
     // empty cells. The trust-boundary checks that the dense skeleton used

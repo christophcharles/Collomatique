@@ -214,10 +214,6 @@ impl FileLoader {
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope référence une semaine inconnue, id {})",
                 week_id
             ),
-            DecodeError::ColloscopeWeekIndexOutOfRange { slot_id, week } => format!(
-                "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur le créneau {} à la semaine numéro {}, en dehors du calendrier)",
-                slot_id, week
-            ),
             DecodeError::InvalidInterrogationCell { slot_id, week_id } => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Le colloscope place une interrogation sur une case inexistante : créneau {}, semaine id {})",
                 slot_id, week_id
@@ -318,10 +314,6 @@ impl FileLoader {
             DecodeError::BalancingForSubjectWithoutInterrogations { subject_id } => format!(
                 "Le fichier est mal formé et est probablement corrompu.\n(Les options d'équilibrage portent sur la matière id {}, qui n'a pas d'interrogations)",
                 subject_id
-            ),
-            DecodeError::WrongWeekCountInWeekPattern { week_pattern_id, expected, found } => format!(
-                "Fichier mal formé et est probablement corrompu.\n(Le motif de semaines {} décrit {} semaines alors que le calendrier en compte {})",
-                week_pattern_id, found, expected
             ),
         }
     }

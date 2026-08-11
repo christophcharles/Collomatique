@@ -21,11 +21,6 @@ use std::collections::BTreeSet;
 fn build_blocks(inner: &InnerData) -> format::Blocks {
     let params = &inner.params;
     format::Blocks {
-        // The writer never produces the pre-week-id shapes: the three
-        // `legacy_*` fields exist for the reader alone.
-        legacy_general_planning: None,
-        legacy_week_patterns: None,
-        legacy_colloscope: None,
         general_planning: Some(build_general_planning(params)),
         subjects: Some(build_subjects(params)),
         teachers: Some(build_teachers(params)),

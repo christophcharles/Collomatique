@@ -73,16 +73,6 @@ pub enum DecodeError {
     UnknownSlotInColloscope(u64),
     #[error("The colloscope references an unknown week id ({week_id})")]
     UnknownWeekInColloscope { week_id: u64 },
-    /// A pre-week-id file names a week by its global index, and the index
-    /// is past the end of the schedule
-    ///
-    /// Transitional: the current format names weeks by id, so this cannot
-    /// arise from a file written today. It disappears with the legacy
-    /// reader.
-    #[error(
-        "The colloscope interrogation cell (slot id {slot_id}, week index {week}) is outside the schedule"
-    )]
-    ColloscopeWeekIndexOutOfRange { slot_id: u64, week: u32 },
     #[error(
         "The colloscope interrogation cell (slot id {slot_id}, week id {week_id}) does not exist"
     )]
@@ -198,19 +188,6 @@ pub enum DecodeError {
     },
     #[error("The balancing options name subject id {subject_id}, which has no interrogations")]
     BalancingForSubjectWithoutInterrogations { subject_id: u64 },
-    /// A pre-week-id file carries a dense week bitmask whose length does
-    /// not match the schedule
-    ///
-    /// Transitional: the current format stores an exclusion set, which has
-    /// no length to be wrong. It disappears with the legacy reader.
-    #[error(
-        "Week pattern id {week_pattern_id} has {found} week entries but the schedule has {expected} weeks"
-    )]
-    WrongWeekCountInWeekPattern {
-        week_pattern_id: u64,
-        expected: usize,
-        found: usize,
-    },
 }
 
 /// File-vocabulary coordinates of a row inside a block
