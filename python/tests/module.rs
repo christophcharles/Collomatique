@@ -8251,6 +8251,64 @@ fn the_colloscope_comes_back_detached() {
         )
     );
 
+    // A mapping naming one entity twice — a handle key and an id key, which
+    // python cannot merge — is refused rather than keeping the last entry: a
+    // cell, a placements row, and a student inside one placement.
+    {
+        use collomatique_state_colloscopes::group_lists::GroupListFilling;
+        use collomatique_state_colloscopes::ids::Id as _;
+
+        let (slot, week) = first_cell.0;
+        assert_eq!(
+            refused::<ColloscopeData>(&globals, "with_a_doubled_cell"),
+            (
+                "ValueError".to_owned(),
+                format!(
+                    "a ColloscopeData's interrogations names the (<SlotId {}>, <WeekId {}>) cell \
+                     twice",
+                    slot.inner(),
+                    week.inner()
+                ),
+            )
+        );
+
+        let automatic = params
+            .group_lists
+            .group_list_map
+            .iter()
+            .find(|(_, list)| matches!(list.filling(), GroupListFilling::Automatic { .. }))
+            .expect("the fixture has an automatic list")
+            .0;
+        assert_eq!(
+            refused::<ColloscopeData>(&globals, "with_a_doubled_list"),
+            (
+                "ValueError".to_owned(),
+                format!(
+                    "a ColloscopeData's group_lists names <GroupListId {}> twice",
+                    automatic.inner()
+                ),
+            )
+        );
+
+        let harry = params
+            .students
+            .student_map
+            .iter()
+            .find(|(_, student)| student.desc.surname == "Potter")
+            .expect("the fixture holds Potter")
+            .0;
+        assert_eq!(
+            refused::<ColloscopeData>(&globals, "with_a_doubled_student"),
+            (
+                "ValueError".to_owned(),
+                format!(
+                    "a ColloscopeData's group_lists names <StudentId {}> twice in one placement",
+                    harry.inner()
+                ),
+            )
+        );
+    }
+
     // A reference that belongs to another document is stale, whatever its id
     // says — the same refusal every method of this api already makes.
     for name in ["foreign_slot", "foreign_group_list"] {
@@ -10252,6 +10310,69 @@ fn the_snapshot_holds_the_whole_document() {
                 .to_owned(),
         )
     );
+
+    // A section naming one entity twice — a handle key and an id key, which
+    // python cannot merge — is refused rather than keeping the last entry, in
+    // the section's own words: an entity section, and the two junction tables.
+    {
+        use collomatique_state_colloscopes::ids::Id as _;
+
+        let first_teacher = inner
+            .params
+            .teachers
+            .teacher_map
+            .keys()
+            .next()
+            .expect("the fixture has teachers");
+        assert_eq!(
+            refused::<DocumentData>(&globals, "with_a_doubled_teacher"),
+            (
+                "ValueError".to_owned(),
+                format!(
+                    "a DocumentData's teachers names <TeacherId {}> twice",
+                    first_teacher.inner()
+                ),
+            )
+        );
+
+        let first_period = inner
+            .params
+            .periods
+            .period_ids()
+            .next()
+            .expect("the fixture has periods");
+        let first_subject = inner
+            .params
+            .subjects
+            .ordered_subject_list
+            .keys()
+            .next()
+            .expect("the fixture has subjects");
+        assert_eq!(
+            refused::<DocumentData>(&globals, "with_a_doubled_assignment"),
+            (
+                "ValueError".to_owned(),
+                format!(
+                    "a DocumentData's assignments names the (<PeriodId {}>, <SubjectId {}>) row \
+                     twice",
+                    first_period.inner(),
+                    first_subject.inner()
+                ),
+            )
+        );
+        assert_eq!(
+            refused::<DocumentData>(&globals, "with_a_doubled_association"),
+            (
+                "ValueError".to_owned(),
+                format!(
+                    "a DocumentData's group_list_associations names the (<PeriodId {}>, \
+                     <SubjectId {}>) row twice",
+                    first_period.inner(),
+                    first_subject.inner()
+                ),
+            )
+        );
+    }
 
     // A week of another document names nothing here — the same refusal every
     // method of this api already makes.

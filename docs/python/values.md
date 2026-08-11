@@ -293,6 +293,16 @@ extraction, through the same `handles::argument` check every method uses: a
 foreign handle raises `StaleHandleError`, and an id this document does not hold
 raises it too.
 
+The two spellings leave a mapping key one more way to go wrong: a dict that
+names one entity twice — once by handle and once by id — holds two keys python
+cannot merge, since they hash differently. Extraction refuses that loudly, as a
+`ValueError` naming the section and the id both spellings resolve to, rather
+than letting one entry silently overwrite the other. The rule holds everywhere
+a value is keyed by entities: the sections of `DocumentData`, its two junction
+tables, and both tables of `ColloscopeData` — the placements inside one row
+included. A *set* field needs no such refusal: two spellings of one student
+collapse into one member on extraction, which is exactly what a set means.
+
 ### 2.4 Validation: where it happens, and what it raises
 
 **The dataclasses are dumb.** No `__post_init__`, no property setters, no checks.

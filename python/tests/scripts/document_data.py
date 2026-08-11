@@ -199,3 +199,27 @@ foreign_week = list(other.weeks)[0]
 with_a_foreign_week = collomatique.DocumentData(
     weeks={foreign_week: collomatique.WeekData(first_period)}
 )
+
+# The two spellings of one entity are different dict keys, so a section can
+# name the same entity twice. Silence would keep only one entry, so the
+# extraction refuses instead — for an entity section, and for the two
+# junction tables.
+group_list = list(doc.group_lists)[0]
+with_a_doubled_teacher = collomatique.DocumentData(
+    teachers={
+        teacher: collomatique.TeacherData("Emmy", "Noether"),
+        teacher.id: collomatique.TeacherData("Emmy", "Noether"),
+    }
+)
+with_a_doubled_assignment = collomatique.DocumentData(
+    assignments={
+        (first_period, subject): set(),
+        (first_period.id, subject.id): set(),
+    }
+)
+with_a_doubled_association = collomatique.DocumentData(
+    group_list_associations={
+        (first_period, subject): group_list,
+        (first_period.id, subject.id): group_list.id,
+    }
+)

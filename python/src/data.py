@@ -944,7 +944,10 @@ class ColloscopeData:
     interchangeably, in any mix, like every other place in this API;
     `to_data()` fills them with ids, so that a value carries no document
     around with it. Two values naming the same cells, one by handles and one
-    by ids, do not compare equal — a handle and an id hash differently.
+    by ids, do not compare equal — a handle and an id hash differently. For
+    the same reason a mapping can name one cell, one list or one student
+    twice, once in each spelling; that is refused when the value is used,
+    rather than quietly keeping the last entry.
 
     A hand-built value need not be canonical: an empty group set or an empty
     placement map just means "no row", which is what the payload promises
@@ -1027,7 +1030,9 @@ class DocumentData:
     `snapshot()` always fills them with ids, so that a tree carries no
     document around with it. Two trees naming the same entities, one by
     handles and one by ids, do not compare equal — a handle and an id hash
-    differently.
+    differently. For the same reason a section can name one entity twice,
+    once in each spelling; that is refused when the tree is used, rather
+    than quietly keeping the last entry.
 
     The two junction tables hold the stored rows only: an absent row is
     simply not there, exactly as the model stores it.

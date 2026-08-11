@@ -669,6 +669,11 @@ where
 /// entity, against this document — and each entry is a value of its own class,
 /// extracted the way every other value is, at the site of the section it
 /// sits in.
+///
+/// The two spellings give a mapping one more way to go wrong: a handle and an
+/// id of one entity are *different* dict keys, so a section can name the same
+/// entity twice. Keeping the last entry would be a silent loss, so the double
+/// naming is refused instead, naming the id both spellings resolve to.
 fn entity_dict<H, V>(
     doc: &Py<Document>,
     site: Site<'_>,
@@ -699,7 +704,15 @@ where
                 shown(&item, "that pair"),
             ))
         })?;
-        entries.push((argument::<H>(doc, &key)?, V::from_py(doc, &entry)?));
+        let id = argument::<H>(doc, &key)?;
+        if entries.iter().any(|(seen, _)| *seen == id) {
+            return Err(PyValueError::new_err(format!(
+                "{} names {} twice",
+                site.field(name),
+                <H::IdClass as IdClass>::text(id),
+            )));
+        }
+        entries.push((id, V::from_py(doc, &entry)?));
     }
 
     Ok(entries)
@@ -2063,10 +2076,15 @@ fn interrogation_rows(
             ))
         })?;
 
-        rows.insert(
-            (argument::<Slot>(doc, &slot)?, argument::<Week>(doc, &week)?),
-            groups,
-        );
+        let cell = (argument::<Slot>(doc, &slot)?, argument::<Week>(doc, &week)?);
+        if rows.insert(cell, groups).is_some() {
+            return Err(PyValueError::new_err(format!(
+                "{} names the ({}, {}) cell twice",
+                site.field(name),
+                SlotId::text(cell.0),
+                WeekId::text(cell.1),
+            )));
+        }
     }
 
     Ok(rows)
@@ -2134,10 +2152,23 @@ fn placement_rows(
                 ))
             })?;
 
-            placed.insert(argument::<Student>(doc, &student)?, group);
+            let student = argument::<Student>(doc, &student)?;
+            if placed.insert(student, group).is_some() {
+                return Err(PyValueError::new_err(format!(
+                    "{} names {} twice in one placement",
+                    site.field(name),
+                    StudentId::text(student),
+                )));
+            }
         }
 
-        rows.insert(group_list, placed);
+        if rows.insert(group_list, placed).is_some() {
+            return Err(PyValueError::new_err(format!(
+                "{} names {} twice",
+                site.field(name),
+                GroupListId::text(group_list),
+            )));
+        }
     }
 
     Ok(rows)
@@ -2373,13 +2404,19 @@ impl Value for DocumentData {
                         shown(&key, "that key"),
                     ))
                 })?;
-            assignments.insert(
-                (
-                    argument::<Period>(doc, &period)?,
-                    argument::<Subject>(doc, &subject)?,
-                ),
-                entity_members::<Student>(doc, site, "assignments", &students)?,
+            let row = (
+                argument::<Period>(doc, &period)?,
+                argument::<Subject>(doc, &subject)?,
             );
+            let members = entity_members::<Student>(doc, site, "assignments", &students)?;
+            if assignments.insert(row, members).is_some() {
+                return Err(PyValueError::new_err(format!(
+                    "{} names the ({}, {}) row twice",
+                    site.field("assignments"),
+                    PeriodId::text(row.0),
+                    SubjectId::text(row.1),
+                )));
+            }
         }
 
         let week_patterns =
@@ -2440,13 +2477,19 @@ impl Value for DocumentData {
                         shown(&key, "that key"),
                     ))
                 })?;
-            subjects_associations.insert(
-                (
-                    argument::<Period>(doc, &period)?,
-                    argument::<Subject>(doc, &subject)?,
-                ),
-                argument::<GroupList>(doc, &group_list)?,
+            let row = (
+                argument::<Period>(doc, &period)?,
+                argument::<Subject>(doc, &subject)?,
             );
+            let association = argument::<GroupList>(doc, &group_list)?;
+            if subjects_associations.insert(row, association).is_some() {
+                return Err(PyValueError::new_err(format!(
+                    "{} names the ({}, {}) row twice",
+                    site.field("group_list_associations"),
+                    PeriodId::text(row.0),
+                    SubjectId::text(row.1),
+                )));
+            }
         }
         let group_lists = group_lists::GroupLists {
             group_list_map,

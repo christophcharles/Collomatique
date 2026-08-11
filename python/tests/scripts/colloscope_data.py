@@ -122,3 +122,16 @@ foreign_slot = collomatique.ColloscopeData(
     interrogations={(next(iter(other.slots)), first_week): {0}})
 foreign_group_list = collomatique.ColloscopeData(
     group_lists={next(iter(other.group_lists)): {harry: 0}})
+
+# The two spellings of one entity are different dict keys, so a mapping can
+# name the same cell, the same list, or the same student twice. Silence would
+# keep only one entry, so the extraction refuses instead.
+with_a_doubled_cell = collomatique.ColloscopeData(
+    interrogations={
+        (first_slot, first_week): {0},
+        (first_slot.id, first_week.id): {0},
+    })
+with_a_doubled_list = collomatique.ColloscopeData(
+    group_lists={automatic: {harry: 0}, automatic.id: {harry: 0}})
+with_a_doubled_student = collomatique.ColloscopeData(
+    group_lists={automatic: {harry: 0, harry.id: 0}})
