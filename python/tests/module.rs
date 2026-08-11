@@ -19,7 +19,7 @@ use collomatique_python::data::{
     ExportGlobalConfigData, ExportGroupListConfigData, ExportStudentGroupsConfigData,
     GroupListData, IncompatData, InterrogationData, LimitsData, PairingRuleData,
     PairingRuleSideData, SlotData, SlotPairingRuleData, SlotPairingRuleSideData, StudentData,
-    SubjectData, TeacherData, WeekPatternData,
+    SubjectData, TeacherData, WeekData, WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -3735,8 +3735,195 @@ fn a_removed_pattern_or_week_stales_the_slot_values_that_name_it() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
-/// A document written here rather than copied, holding a sparse assignments
-/// table
+/// A week value round-trips, and names its own period
+///
+/// The example is worth reading here for the four shapes the weeks of a real
+/// colloscope have: a week that runs colles and one that does not, an
+/// annotation and a week without one. `to_data()` must carry all four, and
+/// the derived `.index` and `.monday` must stay the handle's — a value that
+/// stored them could contradict itself, since both are computed from the
+/// week's place and the document's start date.
+#[test]
+fn the_week_values_round_trip_and_name_their_period() {
+    let dir = workspace("week-values");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let globals = run(include_str!("scripts/week_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let walk: Vec<_> = params
+        .walk_weeks()
+        .map(|(period, id, week)| (period, id, week.clone()))
+        .collect();
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+
+    // The example is only worth reading if it has something to say: weeks of
+    // both flags, and annotations that are sometimes absent.
+    assert!(walk.iter().any(|(_p, _id, week)| week.interrogations));
+    assert!(walk.iter().any(|(_p, _id, week)| !week.interrogations));
+    assert!(walk.iter().any(|(_p, _id, week)| week.annotation.is_some()));
+    assert!(walk.iter().any(|(_p, _id, week)| week.annotation.is_none()));
+
+    // Out and back, whole: the owning period, the flag, the annotation.
+    assert_eq!(
+        extracted_all::<WeekData>(&globals, "week_values"),
+        walk.iter()
+            .map(|(_period, _id, week)| week.clone())
+            .collect::<Vec<_>>()
+    );
+
+    // And the same fields as python saw them.
+    assert_eq!(
+        global::<Vec<usize>>(&globals, "value_period_indices"),
+        walk.iter()
+            .map(|(period, _id, _week)| period_ids
+                .iter()
+                .position(|id| id == period)
+                .expect("a walked week names a live period"))
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<bool>>(&globals, "value_interrogations"),
+        walk.iter()
+            .map(|(_period, _id, week)| week.interrogations)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "value_annotations"),
+        walk.iter()
+            .map(|(_period, _id, week)| week.annotation.as_ref().map(|text| text.to_string()))
+            .collect::<Vec<_>>()
+    );
+
+    // The handle-or-id pair extracts to the same week, though the two python
+    // objects do not compare equal — the wart §2.3 records.
+    assert_eq!(
+        extracted::<WeekData>(&globals, "week_by_handle"),
+        extracted::<WeekData>(&globals, "week_by_id")
+    );
+
+    // Nothing but the period, so the defaulted two come out as the model's
+    // own: a week that runs colles, and no annotation.
+    assert_eq!(
+        extracted::<WeekData>(&globals, "bare_week"),
+        collomatique_state_colloscopes::weeks::Week {
+            period_id: walk[0].0,
+            interrogations: true,
+            annotation: None,
+        }
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<WeekData>(&globals, "not_a_period"),
+        (
+            "TypeError".to_owned(),
+            "a period argument takes a Period or a PeriodId, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<WeekData>(&globals, "not_a_flag"),
+        (
+            "TypeError".to_owned(),
+            "a WeekData's interrogations is True or False, and 1 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<WeekData>(&globals, "not_an_annotation"),
+        (
+            "TypeError".to_owned(),
+            "a WeekData's annotation is a string or None, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<WeekData>(&globals, "empty_annotation"),
+        (
+            "ValueError".to_owned(),
+            "a WeekData's annotation is a non-empty string or None, and '' is neither".to_owned(),
+        )
+    );
+
+    // A handle of another document names nothing here — the same refusal every
+    // method of this api already makes.
+    let (kind, _message) = refused::<WeekData>(&globals, "foreign_period");
+    assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A removed period stales the week values that name it
+///
+/// The mutation between the two stages is the one the pattern and slot tests
+/// already use, because there are two failures to tell apart: a `Week` handle
+/// whose week is gone refuses the read `to_data()` is, and a value holding a
+/// dead reference — a period in a `WeekData` — names nothing and is refused
+/// on extraction. The week that survives keeps working and its value still
+/// names its own period.
+///
+/// The mutation comes from rust: the write surface does not exist yet, and
+/// this is what `run_stages` is for.
+#[test]
+fn a_removed_week_stales_the_week_values_that_name_it() {
+    let dir = workspace("week-values-stale");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entities the script is
+    // holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The same end the script picks: the last period, whose weeks are all
+    // about to go. The week the script doomed is among them.
+    let doomed_period = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/week_data_stale_before.py"),
+            include_str!("scripts/week_data_stale_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        // Two scripts, so this runs once — and it removes the whole last
+        // period, because the week the script doomed is in it.
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::GeneralPlanning(
+                        collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(
+                            doomed_period,
+                        ),
+                    ),
+                )
+                .expect("the example takes this change");
+        },
+    );
+
+    // The value naming the dead period no longer names anything, and the
+    // values naming what survived still extract.
+    let (kind, _message) = refused::<WeekData>(&globals, "naming_the_dead_period");
+    assert_eq!(kind, "StaleHandleError");
+    assert_eq!(
+        extracted::<WeekData>(&globals, "naming_the_living_period").period_id,
+        params.walk_weeks().next().expect("the example has weeks").0
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
 ///
 /// The example's table is complete — every subject holds a row on every
 /// period — so the absent-address shape, the empty frozenset of a valid pair

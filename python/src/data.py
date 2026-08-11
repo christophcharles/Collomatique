@@ -81,6 +81,7 @@ __all__ = [
     "ExportGroupListConfigData",
     "ExportConfigData",
     "ColloscopeData",
+    "WeekData",
 ]
 
 
@@ -934,3 +935,45 @@ class ColloscopeData:
         default_factory=dict)
     group_lists: dict[GroupList | GroupListId, dict[Student | StudentId, int]] = field(
         default_factory=dict)
+
+
+@dataclass
+class WeekData:
+    """One week of the document, detached.
+
+    `doc.weeks[...].to_data()` hands one back:
+
+        clm.WeekData(first_period)
+        clm.WeekData(first_period, interrogations=False,
+                     annotation="Rentrée")
+
+    `period` is the period this week belongs to, and it is authoritative in
+    the model: a week is filed under its period in the list that gives it its
+    position. It takes a `Period` handle or a `PeriodId`, like every other
+    place in this API that names an entity; `to_data()` fills it with an id,
+    so that a value carries no document around with it.
+
+    `interrogations` is whether colles happen on this week at all. It
+    defaults to `True`, which is the model's own default — a week that is
+    added is a week that runs colles.
+
+    `annotation` is the week's label — « Rentrée », « Vacances » — or
+    `None`. Absent is `None`, never `""`: the model types this field as an
+    optional non-empty string, so the empty one is refused when the value
+    is used.
+
+    No week op takes a `WeekData`: the two week writes carry one field
+    each, as `doc.weeks.set_status(week, active)` and
+    `.set_annotation(week, text)`. This class exists so that `week.to_data()`
+    has a detached shape to hand back and `doc.snapshot()` can hold a whole
+    document.
+
+    The handle's `.index` and `.monday` are not fields: both are derived —
+    the index from the week's place in the walk, the monday from the index
+    and the document's start date. A value that stored them could contradict
+    itself.
+    """
+
+    period: Period | PeriodId
+    interrogations: bool = True
+    annotation: str | None = None

@@ -231,6 +231,25 @@ impl Week {
         crate::refs::week_references(py, self)
     }
 
+    /// This week, detached — a `WeekData` holding what the handle shows
+    ///
+    /// A fresh object every call: two calls give two values that compare equal
+    /// and share nothing. The period comes out as a `PeriodId` rather than as
+    /// a handle, because a value holding handles would carry this document
+    /// around with it and keep it alive (`docs/python/values.md` §2.3).
+    ///
+    /// A stale handle raises `StaleHandleError` like every other read.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let week = self.read(py, |data| data.params.weeks.find_week(self.id).cloned())?;
+
+        crate::data::WeekData::to_py(py, &week)
+    }
+
     /// Whether two handles name the same week of the same document
     ///
     /// Never reads the state, so it keeps working once the week is gone — a

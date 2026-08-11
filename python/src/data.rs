@@ -29,7 +29,7 @@ use collomatique_state_colloscopes::export_config::{
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
     balancing, group_lists, incompats, pairings, settings, slot_pairings, slots, students,
-    subjects, teachers, week_patterns,
+    subjects, teachers, week_patterns, weeks,
 };
 
 use crate::Document;
@@ -2124,6 +2124,45 @@ impl Value for ColloscopeData {
             group_lists.set_item(GroupListId::wrap(*group_list), placed)?;
         }
         kwargs.set_item("group_lists", group_lists)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One week — the period it belongs to, whether colles run on it, and its label
+///
+/// The one value class no op consumes: the two week ops carry a single field
+/// each (`UpdateWeekStatus` a bool, `UpdateWeekAnnotation` an annotation),
+/// addressed by `(period, index)`. So the class exists for `week.to_data()`
+/// and for the whole-document snapshot of the next commit, and the boundary
+/// mirrors the model's stored `weeks::Week` — the entity, per §2.0 — whole.
+pub struct WeekData;
+
+impl Value for WeekData {
+    type Model = weeks::Week;
+
+    const CLASS: &'static str = "WeekData";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<weeks::Week> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(weeks::Week {
+            period_id: entity::<Period>(doc, site, "period", obj)?,
+            interrogations: flag(site, "interrogations", obj)?,
+            annotation: optional_text(site, "annotation", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, week: &weeks::Week) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("period", PeriodId::wrap(week.period_id))?;
+        kwargs.set_item("interrogations", week.interrogations)?;
+        kwargs.set_item(
+            "annotation",
+            week.annotation.as_ref().map(|text| text.to_string()),
+        )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }
