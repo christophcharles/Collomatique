@@ -156,7 +156,8 @@ class StudentData:
 
     `excluded_periods` is the set of periods this student takes no part in. It
     takes `Period` handles and `PeriodId`s interchangeably, and `to_data()`
-    fills it with ids.
+    fills it with ids. Two values naming the same periods, one by handles and
+    one by ids, do not compare equal — a handle and an id hash differently.
 
     Which subjects a student takes is not here. The model keeps that in a
     junction table of its own, keyed by period and subject, which python reads
@@ -223,7 +224,8 @@ class SubjectData:
 
     `excluded_periods` is the set of periods this subject does not run in. It
     takes `Period` handles and `PeriodId`s interchangeably, and `to_data()`
-    fills it with ids.
+    fills it with ids. Two values naming the same periods, one by handles and
+    one by ids, do not compare equal — a handle and an id hash differently.
 
     That field is here because a subject really holds it — `doc.snapshot()`
     would lose which subjects skip which periods otherwise. No subject op
@@ -258,7 +260,9 @@ class WeekPatternData:
     way, so a pattern the user never named reads as `""` rather than as `None`.
 
     `excluded_weeks` takes `Week` handles and `WeekId`s interchangeably, and
-    `to_data()` fills it with ids.
+    `to_data()` fills it with ids. Two values naming the same weeks, one by
+    handles and one by ids, do not compare equal — a handle and an id hash
+    differently.
 
     A week that runs no interrogations of its own may perfectly well be in the
     set. The model keeps the two apart, so that switching such a week back on
@@ -287,7 +291,9 @@ class SlotData:
     since `to_data()` fills the field with the slot's own subject.
 
     `subject`, `teacher` and `week_pattern` take handles and ids
-    interchangeably, and `to_data()` fills them with ids.
+    interchangeably, and `to_data()` fills them with ids. Two values naming
+    the same entities, one by handles and one by ids, do not compare equal — a
+    handle and an id hash differently.
 
     `weekday` is one of the seven `Weekday` values, and `start_time` a
     `datetime.time` falling on a whole minute — the model stores the time with
@@ -339,7 +345,8 @@ class IncompatData:
     them, without the subject having colles. It takes a `Subject` handle or a
     `SubjectId`, like every other place in this API that names an entity;
     `to_data()` fills it with an id, so that a value carries no document around
-    with it.
+    with it. Two values naming the same subject, one by handle and one by id,
+    do not compare equal — a handle and an id hash differently.
 
     `slots` is the list of busy windows, as `TimeSlot` values — a day, a start
     time and a duration. The windows are data, not handles: nothing points at
@@ -398,8 +405,10 @@ class GroupListData:
     `doc.group_lists[...].to_data()` hands one back, and the group list
     mutators will take one:
 
-        clm.GroupListData("Maisons", filling=clm.PrefilledGroups(
-            (({harry, hermione}), ({ron},), ({neville},))))
+        clm.GroupListData(
+            "Maisons",
+            group_names=["Gryffondor", "Serpentard"],
+            filling=clm.PrefilledGroups(({harry, hermione}, {ron, neville})))
 
     Every field takes the model's own default, so `clm.GroupListData()` is
     exactly what the application creates when a user adds a group list — a
@@ -424,13 +433,15 @@ class GroupListData:
     neither — so they stay two classes under the `Filling` base:
 
         clm.AutomaticGroups(excluded_students={ron})
-        clm.PrefilledGroups(((harry, hermione), (ron,), (neville,)))
+        clm.PrefilledGroups(({harry, hermione}, {ron, neville}))
 
     The students inside take `Student` handles and `StudentId`s
-    interchangeably, and `to_data()` fills them with ids. A prefilled filling
-    must have exactly `len(group_names)` groups, and no student may appear in
-    two of them; both are checked when the value is used, by the model's own
-    constructor, whose message is the one a script meets.
+    interchangeably, and `to_data()` fills them with ids — two fillings naming
+    the same students in the two spellings do not compare equal, since a
+    handle and an id hash differently. A prefilled filling must have exactly
+    `len(group_names)` groups, and no student may appear in two of them; both
+    are checked when the value is used, by the model's own constructor, whose
+    message is the one a script meets.
     """
 
     name: str = "Liste"
@@ -452,7 +463,9 @@ class PairingRuleSideData:
     `subject` is the subject this end of the rule is about. It takes a
     `Subject` handle or a `SubjectId`, like every other place in this API
     that names an entity; `to_data()` fills it with an id, so that a value
-    carries no document around with it.
+    carries no document around with it. Two sides naming the same subject,
+    one by handle and one by id, do not compare equal — a handle and an id
+    hash differently.
 
     `should_have` is whether a student marked for the rule is marked *for*
     this subject's interrogation, or marked off it. `True` is the neutral
@@ -484,7 +497,8 @@ class PairingRuleData:
 
     `excluded_periods` is the set of periods the rule does not apply to. It
     takes `Period` handles and `PeriodId`s interchangeably, and `to_data()`
-    fills it with ids.
+    fills it with ids. Two values naming the same periods, one by handles and
+    one by ids, do not compare equal — a handle and an id hash differently.
 
     `soft` says whether the rule is an objective for the solver to optimize
     rather than a constraint it must enforce. `False` is the strict spelling,
@@ -517,8 +531,9 @@ class SlotPairingRuleSideData:
     it is about and whether a week marked for the rule has that slot used.
 
     `slot` takes a `Slot` handle or a `SlotId`, and `to_data()` fills it with
-    an id. `should_have` defaults to `True`, the spelling the application
-    itself starts a new rule with.
+    an id — two sides naming the same slot in the two spellings do not compare
+    equal, since a handle and an id hash differently. `should_have` defaults
+    to `True`, the spelling the application itself starts a new rule with.
     """
 
     slot: Slot | SlotId
@@ -928,7 +943,8 @@ class ColloscopeData:
     The keys of both tables name entities, so they take handles and ids
     interchangeably, in any mix, like every other place in this API;
     `to_data()` fills them with ids, so that a value carries no document
-    around with it.
+    around with it. Two values naming the same cells, one by handles and one
+    by ids, do not compare equal — a handle and an id hash differently.
 
     A hand-built value need not be canonical: an empty group set or an empty
     placement map just means "no row", which is what the payload promises
@@ -955,7 +971,9 @@ class WeekData:
     the model: a week is filed under its period in the list that gives it its
     position. It takes a `Period` handle or a `PeriodId`, like every other
     place in this API that names an entity; `to_data()` fills it with an id,
-    so that a value carries no document around with it.
+    so that a value carries no document around with it. Two values naming the
+    same period, one by handle and one by id, do not compare equal — a handle
+    and an id hash differently.
 
     `interrogations` is whether colles happen on this week at all. It
     defaults to `True`, which is the model's own default — a week that is
@@ -993,7 +1011,7 @@ class DocumentData:
         tree = doc.snapshot()   # DocumentData
 
     The tree mirrors the document section by section: `params` in the first
-    nineteen fields, then the colloscope and the export configuration. The
+    eighteen fields, then the colloscope and the export configuration. The
     entity sections are dicts keyed by id, so the order of a section is the
     order of its dict — python has preserved insertion order since 3.7, and
     that is what carries the document's user orders: `subjects` in the order
@@ -1007,7 +1025,9 @@ class DocumentData:
     The keys and the entity references inside name entities, so they take
     handles and ids interchangeably, like every other place in this API;
     `snapshot()` always fills them with ids, so that a tree carries no
-    document around with it.
+    document around with it. Two trees naming the same entities, one by
+    handles and one by ids, do not compare equal — a handle and an id hash
+    differently.
 
     The two junction tables hold the stored rows only: an absent row is
     simply not there, exactly as the model stores it.

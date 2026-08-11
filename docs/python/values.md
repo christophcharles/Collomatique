@@ -212,8 +212,7 @@ pub trait Value: Sized {
     fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<Self::Model>;
 
     /// The python value for one entity
-    fn to_py<'py>(doc: &Py<Document>, py: Python<'py>, model: &Self::Model)
-        -> PyResult<Bound<'py, PyAny>>;
+    fn to_py<'py>(py: Python<'py>, model: &Self::Model) -> PyResult<Bound<'py, PyAny>>;
 }
 ```
 
@@ -228,15 +227,18 @@ Two directions, both explicit:
   fetched from the `collomatique._data` module. `to_data()` is its only caller in
   this milestone.
 
-**Both take the document, and that is why neither is a `FromPyObject` impl.** A
-field that names an entity has to be resolved against *this* document — a handle
-of another one names nothing here, and a dead id has to be refused — and that is
-`handles::argument`, which takes a `&Py<Document>`. `FromPyObject::extract_bound`
-has nowhere to put one. Half the classes could implement it (the export configs
-name no entity) and half could not, and two shapes for one boundary would be
-worse than one shape that carries an argument it sometimes ignores. Going out is
-symmetric: `to_py` needs the document to *avoid* handing out live objects, since
-it mints the ids that a handle would otherwise have to be.
+**`from_py` takes the document, and that is why it is not a `FromPyObject`
+impl.** A field that names an entity has to be resolved against *this* document
+— a handle of another one names nothing here, and a dead id has to be refused —
+and that is `handles::argument`, which takes a `&Py<Document>`.
+`FromPyObject::extract_bound` has nowhere to put one. Half the classes could
+implement it (the export configs name no entity) and half could not, and two
+shapes for one boundary would be worse than one shape that carries an argument
+it sometimes ignores. Going out is *not* symmetric, which the implementation
+proved against this document's first draft: `to_py` needs no document at all — a
+value holds ids, and an id is minted detached (`SubjectId::wrap` and its kin),
+resolving nothing and keeping nothing alive — so the outbound half takes only
+the model, and `from_py` alone carries the argument.
 
 The check is done where §5 of the design says all argument checks are done —
 **before** anything takes the mutable borrow, never inside it. `from_py` borrows
@@ -1013,7 +1015,12 @@ another (`SubjectData.interrogation`), they land together.
     orders (periods, weeks, subjects, slots) surviving as list and dict order,
     checked against the model's own walks; `clm.DocumentData()` equal to the
     snapshot of `clm.new_document()`; the sparse sections holding the stored
-    rows only.
+    rows only. (As landed, the section-by-section comparison runs against a
+    purpose-built fixture rather than hogwarts: the completeness check wants
+    something in every section — both shapes of every optional field, rows in
+    both junction tables, a filled colloscope, non-default settings, balancing
+    and export configuration — and the fixture guarantees that by
+    construction.)
 
 Eleven commits; each leaves the suite green and none changes a surface a previous
 commit published. After commit 11 every op payload in `ops/` has a Python value
