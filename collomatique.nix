@@ -32,6 +32,9 @@ rustPlatform.buildRustPackage rec {
 
     cargoHash = "sha256-4/RGLLZ4nQ8Ejq0790gqmj3XuuIgra0tMQqJDp2oJro=";
 
+    # The test suite is run from the dev shell, not from the package build.
+    doCheck = false;
+
     nativeBuildInputs = [
         rustPlatform.bindgenHook
         gettext
