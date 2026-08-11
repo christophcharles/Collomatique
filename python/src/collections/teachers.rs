@@ -233,7 +233,7 @@ impl Teacher {
     /// and share nothing, and writing to one changes nothing anywhere. The
     /// subjects come out as `SubjectId`s rather than as handles, because a value
     /// holding handles would carry this document around with it and keep it
-    /// alive (`docs/python/values.md` §2.3).
+    /// alive.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

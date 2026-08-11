@@ -112,17 +112,32 @@ subj.name = "X"              # AttributeError — handles have no setters
 ### Values — detached, mutable, dumb
 
 A value is a plain **Python dataclass** (defined in a `.py` file shipped with the
-module, converted at the Rust boundary). It mirrors an op payload: `SubjectData`,
-`TeacherData`, `LimitsData`, `GroupListData`, … It has no `.id`, is fully mutable,
-and is connected to nothing.
+module, converted at the Rust boundary). It mirrors the **entity**, flattened the
+way the matching handle shows it: `SubjectData`, `TeacherData`, `LimitsData`,
+`GroupListData`, … It has no `.id`, is fully mutable, and is connected to nothing.
+
+The entity, not the op payload — the two differ in exactly two places, and the
+value is the larger one both times: `SubjectData` carries the excluded periods no
+subject op takes, and `SlotData` names its subject though no slot op really
+carries it. The snapshot of §8 is why: a tree built from these classes must hold
+a whole document, and dropping either field would lose it information. The ops
+mirror handles the mismatch loudly — an `add` or `update` that cannot carry a
+field raises, naming the op that moves it, rather than discarding it silently.
 
 Values are chosen to be Python dataclasses rather than Rust pyclasses deliberately:
 pyo3 getters clone nested structs, which would reintroduce the temporary trap
 *inside* values (`teacher_value.person.email = ...` mutating a clone). As plain
 Python objects, values get real nested mutation, `==`, `repr`, defaults and type
-hints for free. The Rust boundary extracts them by attribute access (pyo3
-`FromPyObject`) and validates on the way in. The dataclass definitions must be kept
-in sync with the Rust payload structs; round-trip tests pin the correspondence.
+hints for free. The flat immutable leaf values (`Weekday`, `TimeSlot`, `Limit`,
+the periodicity family, the two group-list fillings) stay frozen Rust pyclasses —
+the clone trap only bites what nests — and a `*Data` field holds them, so the two
+kinds meet without defining anything twice. The Rust boundary extracts a
+dataclass by attribute access and validates on the way in — through a `Value`
+trait rather than a pyo3 `FromPyObject` impl, because a field that names an
+entity is resolved against the document, and `extract_bound` has nowhere to put
+one. The dataclass definitions must be kept in sync with the Rust structs;
+round-trip tests pin the correspondence, and the Python-side defaults are pinned
+against the model's own.
 
 You get a value in exactly two ways:
 
@@ -137,7 +152,13 @@ doc.subjects.update(sid, d)            # the only way anything reaches the docum
 returning a copy is how the old API laid its trap.
 
 **Rule of thumb: handles have `.id`, values don't.** Every write method accepts a
-handle or an id interchangeably.
+handle or an id interchangeably, and so does a value field that names an entity:
+`subjects={maths}` and `subjects={maths.id}` extract to the same payload.
+`to_data()` always *produces* ids, because a value holding handles would carry
+its document around and keep it alive. (The wart, stated plainly: a dataclass
+stores what it is given, so those two spellings compare unequal — a handle and
+an id hash differently. The extraction also refuses, loudly, a mapping that
+names one entity twice through the two spellings.)
 
 ### Ids — fully opaque
 
@@ -156,8 +177,10 @@ Consistency *of the public API* is the rule:
   `Week`, `WeekPattern`, `Slot`, `Incompat`, `GroupList`, `PairingRule`,
   `SlotPairingRule`.
 - Value classes: uniformly `*Data` — `SubjectData`, `TeacherData`, `StudentData`,
-  `WeekPatternData`, `SlotData`, `IncompatData`, `GroupListData`,
-  `PairingRuleData`, `SlotPairingRuleData`, `LimitsData`, `BalancingData`,
+  `WeekData`, `WeekPatternData`, `SlotData`, `IncompatData`, `GroupListData`,
+  `PairingRuleData`, `SlotPairingRuleData`, `LimitsData`, `BalancingData` (the
+  `BalancingOptions` sub-view's value — the one place `to_data()`'s naming is
+  not mechanical, and this list settles it),
   `ExportConfigData` (and its sub-configs), `ColloscopeData`, `DocumentData`.
 - Copy-out: `handle.to_data()` returns the matching `*Data`.
 - Collection methods: `add(data) -> handle`, `update(id_or_handle, data)`,
@@ -166,7 +189,9 @@ Consistency *of the public API* is the rule:
   `move_up`/`move_down` where user-visible order exists.
 - Absent optional text is `None`, never `""`. The boundary rejects empty strings
   where the model requires non-empty (`tel`, `email`, week annotations, group
-  names) instead of silently conflating them.
+  names) instead of silently conflating them. A *boundary* rule, not a dataclass
+  rule: a dataclass is dumb and stores what it is given, and the refusal happens
+  on extraction — the last moment the failure can still name the field.
 - Enumerations (`Weekday`, periodicity kinds, …) are Python `enum`/dataclass unions
   with working `==` (the old API's `Weekday == Weekday.Monday` identity-comparison
   trap is gone).
@@ -269,7 +294,7 @@ colloscope, export config).
 | Students (3) | `doc.students.add/update/remove` |
 | Assignments (3) | `doc.assignments.set(p, subj, student, assigned)`, `.set_all(p, subj, assigned)`, `.duplicate_previous_period(p)` |
 | WeekPatterns (3) | `doc.week_patterns.add/update/remove` |
-| Slots (5) | `doc.slots.add(subject, SlotData)`, `.update(slot, SlotData)`, `.remove(slot)`, `.move_up/.move_down` — the subject is fixed at creation |
+| Slots (5) | `doc.slots.add(SlotData)`, `.update(slot, SlotData)`, `.remove(slot)`, `.move_up/.move_down` — the value names its subject (§2), which is fixed at creation |
 | Incompatibilities (3) | `doc.incompats.add/update/remove` |
 | Pairings (3) | `doc.pairings.add/update/remove` |
 | SlotPairings (3) | `doc.slot_pairings.add/update/remove` |
@@ -410,6 +435,17 @@ doc.replace_all(tree, "Rebuilt from scratch")   # one GlobalUpdate, one undo slo
 `replace_all` validates at the existing trust boundary (`Data::from_inner_data`);
 an invalid tree raises with the invariant diagnostics. `DocumentData` is built from
 the same `*Data` dataclasses, so the two interfaces share one vocabulary.
+
+`snapshot()` is built — it landed with the values (§13.3), because it is a pure
+read and because it is what forces the values to be entity-complete (§2). The
+orders are carried by the containers themselves (dicts keep insertion order),
+and the sparse sections hold the stored rows only. What `replace_all` inherits
+is a question the snapshot never has to answer: a tree names its entities by id,
+and ids have no constructor (§2), so a script can rename, delete and rewire a
+snapshot, but cannot *add* an entity to one. Whether ids gain a document-scoped
+minting call, or a tree may key a new entry by something that means "give it a
+fresh id", or `replace_all` is simply the door for transformations that add
+nothing — step 4 decides; handing trees out forecloses none of the three.
 
 ## 9. Documents, dialogs and maintenance operations
 
@@ -821,8 +857,16 @@ first.
    `git show 04888a59:docs/python/handle_api.md`; the refinements it recorded
    over this document's §2 and §4 are folded in above.
 3. Write surface: ops mirror, `OpResult` warnings, transactions, undo. Value
-   dataclasses land here.
-4. Coarse door (`snapshot`/`replace_all`), then the document plumbing of §9:
+   dataclasses land here — **done except the ops mirror**: transactions and undo
+   came first (§5's stack), then the value dataclasses in eleven commits plus
+   two review follow-ups, the last being the double-naming refusal (`3ae29f8d`).
+   The design the values were built from, class by class, is in
+   `git show 3ae29f8d:docs/python/values.md`; the refinements it recorded over
+   this document's §2, §3 and §5 are folded in above, and `doc.snapshot()` came
+   with it (§8). The ops mirror that remains is a mapping exercise with no
+   vocabulary left to invent.
+4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
+   document plumbing of §9:
    `default_document`, `save`/`send_to_host`, dialogs, export and maintenance (with
    the Rust prerequisites of §11 as they are needed).
 5. Solver (last), including the engine-location mechanism.

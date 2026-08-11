@@ -244,8 +244,8 @@ impl Subject {
     /// A fresh object every call, and a whole one: the interrogation parameters
     /// come out as an `InterrogationData` of their own — or as `None` for a
     /// subject that holds no colles — and the excluded periods as `PeriodId`s,
-    /// because a value holding handles would carry this document around with it
-    /// (`docs/python/values.md` §2.3).
+    /// because a value holding handles would carry this document around with
+    /// it.
     ///
     /// The exclusions are in the value although no subject op carries them:
     /// what `to_data()` hands back is the subject, whole, which is what makes

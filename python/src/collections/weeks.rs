@@ -236,7 +236,7 @@ impl Week {
     /// A fresh object every call: two calls give two values that compare equal
     /// and share nothing. The period comes out as a `PeriodId` rather than as
     /// a handle, because a value holding handles would carry this document
-    /// around with it and keep it alive (`docs/python/values.md` §2.3).
+    /// around with it and keep it alive.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

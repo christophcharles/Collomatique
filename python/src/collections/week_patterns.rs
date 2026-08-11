@@ -202,7 +202,7 @@ impl WeekPattern {
     /// A fresh object every call: two calls give two values that compare equal
     /// and share nothing. The excluded weeks come out as `WeekId`s rather than
     /// as handles, because a value holding handles would carry this document
-    /// around with it and keep it alive (`docs/python/values.md` §2.3).
+    /// around with it and keep it alive.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

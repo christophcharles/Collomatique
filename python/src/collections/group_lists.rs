@@ -439,8 +439,7 @@ impl GroupList {
     /// value — `PrefilledGroups` or `AutomaticGroups` — because the value
     /// keeps the sum the model keeps; the students inside come out as ids
     /// rather than as handles, since a value holding handles would carry this
-    /// document around with it and keep it alive (`docs/python/values.md`
-    /// §2.3).
+    /// document around with it and keep it alive.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

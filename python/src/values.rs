@@ -250,7 +250,7 @@ impl WeekBlock {
     ///
     /// Nothing can be refused here: a block was born whole, so its count was
     /// checked when it was built, which is the whole difference between a leaf
-    /// value and a dataclass (`docs/python/values.md` §1).
+    /// value and a dataclass.
     fn to_model(&self) -> collomatique_state_colloscopes::subjects::WeekBlock {
         collomatique_state_colloscopes::subjects::WeekBlock {
             delay_in_weeks: self.delay_in_weeks,
@@ -692,7 +692,7 @@ impl TimeSlot {
     ///
     /// Nothing can be refused here: a window was born whole, so its three
     /// checks were run when it was built, which is the whole difference
-    /// between a leaf value and a dataclass (`docs/python/values.md` §1).
+    /// between a leaf value and a dataclass.
     /// This is the inbound half of the travel `from_model` makes out.
     pub(crate) fn to_model(&self) -> collomatique_time::SlotWithDuration {
         let start = collomatique_time::SlotStart {
@@ -1003,7 +1003,7 @@ impl Color {
     /// colors, and the boundary turns them back into the model's own type.
     /// A color was born whole, so its three channels were checked when it was
     /// built — nothing can be refused here, which is the whole difference
-    /// between a leaf value and a dataclass (`docs/python/values.md` §1).
+    /// between a leaf value and a dataclass.
     pub(crate) fn to_model(&self) -> RawColor {
         RawColor {
             red: self.red,
@@ -1023,7 +1023,7 @@ impl Color {
 ///
 /// The sum keeps its two shapes in python rather than flattening, because a
 /// flat encoding of a sum type has two states that mean nothing — both shapes
-/// set, or neither (`docs/python/values.md` §3.6).
+/// set, or neither.
 #[pyclass(module = "collomatique", subclass, frozen)]
 pub struct Filling;
 
@@ -1044,8 +1044,7 @@ pub struct Filling;
 ///
 /// `==` and `hash` compare the frozenset, so two fillings naming the same
 /// students, one by handle and one by id, do *not* compare equal — a leaf
-/// value stores what it was given, and a handle and an id hash differently
-/// (`docs/python/values.md` §2.3).
+/// value stores what it was given, and a handle and an id hash differently.
 #[pyclass(module = "collomatique", extends = Filling, frozen)]
 pub struct AutomaticGroups {
     /// The students the automatic filling must skip, as a python frozenset
@@ -1131,7 +1130,7 @@ impl AutomaticGroups {
 /// so nothing is checked here: the constructor takes any iterable of
 /// iterables and freezes each of them. `==` and `hash` compare the tuple, so
 /// two fillings naming the same students, one by handle and one by id, do
-/// *not* compare equal (`docs/python/values.md` §2.3).
+/// *not* compare equal.
 #[pyclass(module = "collomatique", extends = Filling, frozen)]
 pub struct PrefilledGroups {
     /// One frozenset of students per group, in group order

@@ -252,7 +252,7 @@ impl SlotPairingRule {
     /// A fresh object every call. The two ends come out as the matching side
     /// values, their slots as ids rather than as handles, since a value
     /// holding handles would carry this document around with it and keep it
-    /// alive (`docs/python/values.md` §2.3).
+    /// alive.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
@@ -395,7 +395,7 @@ impl SlotPairingRuleSide {
     ///
     /// A fresh object every call. The slot comes out as an id rather than as
     /// a handle, since a value holding handles would carry this document
-    /// around with it and keep it alive (`docs/python/values.md` §2.3).
+    /// around with it and keep it alive.
     ///
     /// A stale view raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

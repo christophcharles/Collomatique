@@ -294,7 +294,7 @@ impl Limits {
     /// field the entry leaves unset comes out as `None`, which is the
     /// whole-entry override rule — it disables the inherited limit rather than
     /// inheriting it — and that meaning stays with the write, not with this
-    /// value (`docs/python/values.md` §3.8).
+    /// value.
     ///
     /// What the view is bound to is what comes out: the resolved view of a
     /// student without an override hands back the global entry. A stale handle

@@ -314,8 +314,7 @@ impl BalancingOptions {
     /// A fresh object every call, the whole entry as the document holds it: a
     /// goal the entry does not pursue comes out as `None`, which is the
     /// whole-entry override rule — not pursued means disabled, never inherited
-    /// — and that meaning stays with the write, not with this value
-    /// (`docs/python/values.md` §3.8).
+    /// — and that meaning stays with the write, not with this value.
     ///
     /// What the view is bound to is what comes out: the resolved view of a
     /// subject without an override hands back the global entry. A stale handle

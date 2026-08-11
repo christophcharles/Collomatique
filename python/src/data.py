@@ -1,6 +1,6 @@
 """The values a script builds, and what a read hands back detached.
 
-`docs/python/values.md` is the design. §2 of `docs/python/new_api_design.md`
+§2 of `docs/python/new_api_design.md` is the design, and it
 says why these are python dataclasses rather than rust classes: a value nests
 and holds real mutable containers, and a pyo3 getter hands back a *clone* of
 the struct it holds — so `value.nested.field = x` would quietly write to a

@@ -295,8 +295,7 @@ impl Slot {
     ///
     /// A fresh object every call. The subject, the teacher and the pattern come
     /// out as ids rather than as handles, because a value holding handles would
-    /// carry this document around with it and keep it alive
-    /// (`docs/python/values.md` §2.3).
+    /// carry this document around with it and keep it alive.
     ///
     /// The subject is in the value although no slot op really carries it: what
     /// `to_data()` hands back is the slot, whole, which is what makes

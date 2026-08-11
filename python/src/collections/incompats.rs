@@ -243,10 +243,9 @@ impl Incompat {
     ///
     /// A fresh object every call. The subject and the pattern come out as ids
     /// rather than as handles, because a value holding handles would carry this
-    /// document around with it and keep it alive (`docs/python/values.md`
-    /// §2.3). The busy windows come out as a *list* of [TimeSlot] — the
-    /// mutable container a value is for (§2.7) — where the handle's read hands
-    /// back the read surface's tuple.
+    /// document around with it and keep it alive. The busy windows come out as
+    /// a *list* of [TimeSlot] — the mutable container a value is for — where
+    /// the handle's read hands back the read surface's tuple.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

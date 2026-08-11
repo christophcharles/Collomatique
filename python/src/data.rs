@@ -1,7 +1,7 @@
 //! The value dataclasses, and the boundary they cross
 //!
-//! `docs/python/values.md` is the design. The classes themselves are written in
-//! python, in `data.py`, for the reason §2 of `new_api_design.md` gives: a value
+//! §2 of `new_api_design.md` is the design. The classes themselves are written
+//! in python, in `data.py`, for the reason that section gives: a value
 //! nests and holds mutable containers, and a pyo3 getter hands back a clone of
 //! the struct it holds. This module is what compiles that file into the module
 //! and what converts between the objects it defines and the model's own types.
@@ -61,8 +61,8 @@ const MODULE: &str = "collomatique._data";
 pub trait Value: Sized {
     /// The model type this value converts to
     ///
-    /// The **entity**, per `values.md` §2.0, and not the op payload. They are
-    /// the same type for eleven of the thirteen classes; where they are not, it
+    /// The **entity**, and not the op payload (`new_api_design.md` §2). They
+    /// are the same type for eleven of the thirteen classes; where they are not, it
     /// is the ops mirror that takes the payload half out of the entity and says
     /// loudly what it cannot carry.
     type Model;
@@ -102,8 +102,8 @@ fn class<'py>(py: Python<'py>, name: &str) -> PyResult<Bound<'py, PyAny>> {
 /// A message names the line the script has in front of it. When a script hands
 /// over a `SubjectData`, that is the class it wrote and the field it wrote is
 /// `interrogation.duration` — even though what is being read at that moment is
-/// an `InterrogationData` of its own. One level of nesting is all the values of
-/// `docs/python/values.md` have: what nests holds leaves.
+/// an `InterrogationData` of its own. One level of nesting is all the value
+/// classes have: what nests holds leaves.
 #[derive(Clone, Copy)]
 struct Site<'a> {
     /// The class a script wrote down
@@ -1076,7 +1076,7 @@ impl Value for InterrogationData {
 pub struct SubjectData;
 
 impl Value for SubjectData {
-    /// The **entity**, `values.md` §2.0: the subject ops take the `parameters`
+    /// The **entity**: the subject ops take the `parameters`
     /// half alone, and it is the ops mirror that takes it out and refuses to
     /// discard the exclusions quietly.
     type Model = subjects::Subject;
@@ -1173,7 +1173,7 @@ impl Value for WeekPatternData {
 pub struct SlotData;
 
 impl Value for SlotData {
-    /// The **entity**, `values.md` §2.0: the add op overwrites the subject with
+    /// The **entity**: the add op overwrites the subject with
     /// a separate argument of its own and the update op refuses a slot whose
     /// subject changed, so no slot op really carries the field. It is here all
     /// the same, because `doc.snapshot()` would otherwise lose which subject
@@ -1693,7 +1693,7 @@ fn global_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawGlobalCo
 
 /// The settings shared by every sheet of the export
 ///
-/// One of the five classes of `docs/python/values.md` §3.9, and one of the
+/// One of the five export configuration classes, and one of the
 /// two of them that no entity lies behind at all: the whole configuration is
 /// pure value data, so nothing here resolves against the document, and the
 /// extraction cannot go stale — the views' `to_data()` is the only source of
@@ -1833,7 +1833,7 @@ fn student_groups_config(
 /// The model has three constructors rather than one `Default` —
 /// `default_all_groups` and its two siblings — so the dataclass mirrors them
 /// as three classmethods and takes a required `sheet_name`: the one field
-/// that says *which* sheet a value is for (`docs/python/values.md` §3.9).
+/// that says *which* sheet a value is for.
 pub struct ExportStudentGroupsConfigData;
 
 impl Value for ExportStudentGroupsConfigData {
@@ -2282,7 +2282,7 @@ type SlotRows = Vec<(RawId<Subject>, Vec<(RawId<Slot>, slots::Slot)>)>;
 
 /// The whole document, detached — one value holding every section
 ///
-/// The tree `doc.snapshot()` assembles (§3.12 of `docs/python/values.md`):
+/// The tree `doc.snapshot()` assembles (`new_api_design.md` §8):
 /// every section of `InnerData` as a field, with the user orders carried by
 /// the python containers themselves. No op takes one and nothing reads one
 /// back in this milestone — `replace_all`, the coarse door's other half, is
