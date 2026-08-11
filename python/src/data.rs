@@ -10,7 +10,7 @@
 //! field that names an entity has to be resolved against *this* document, and
 //! `extract_bound` has nowhere to put one.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::ffi::CString;
 use std::num::NonZeroU32;
 
@@ -20,6 +20,11 @@ use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
+use collomatique_state_colloscopes::export_config::{
+    ColloscopeConfig as RawColloscopeConfig, Color as RawColor, ExportConfig as RawExportConfig,
+    GlobalConfig as RawGlobalConfig, PageOrientation, PerGroupListConfig as RawPerGroupListConfig,
+    PerStudentGroupsConfig as RawPerStudentGroupsConfig,
+};
 use collomatique_state_colloscopes::{
     NonEmptyRangeInclusive, PersonWithContact, SubjectInterrogationParameters, SubjectPeriodicity,
     balancing, group_lists, incompats, pairings, settings, slot_pairings, slots, students,
@@ -459,6 +464,102 @@ fn optional_enforcement(
         soft: enforcement.to_model(),
         value: (),
     }))
+}
+
+/// A field holding a [values::Color]
+///
+/// The colors of the export configuration. The leaf was born whole, so its
+/// three channels were checked when it was built; nothing is refused here but
+/// an object that is not a color at all.
+fn color(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<RawColor> {
+    let value = field(site, name, obj)?;
+    let color: values::Color = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a Color, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(color.to_model())
+}
+
+/// A field holding an orientation
+///
+/// The [values::Orientation] leaf was born whole, so nothing is refused here
+/// but an object that is not an orientation at all.
+fn orientation(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<PageOrientation> {
+    let value = field(site, name, obj)?;
+    let orientation: values::Orientation = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is an Orientation, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(orientation.to_model())
+}
+
+/// A field holding an orientation, or naming none
+///
+/// The auto-detect case of the per-student-groups sheets: `None` means the
+/// orientation is chosen from the group count when the sheet is written, so it
+/// is a value the model holds and not a field left unfilled.
+fn optional_orientation(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<Option<PageOrientation>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let orientation: values::Orientation = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is an Orientation or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    Ok(Some(orientation.to_model()))
+}
+
+/// A field holding the extra cell colors, by the label that names them
+///
+/// Anything mapping-like is accepted — a dict, whatever has an `items()` —
+/// and every pair must be a name and a [values::Color]. The leaf was born
+/// whole, so nothing else can be refused here.
+fn color_map(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<BTreeMap<String, RawColor>> {
+    let value = field(site, name, obj)?;
+    let items = value.call_method0("items").map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a mapping of names to colors, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    let mut colors = BTreeMap::new();
+    for item in items.try_iter()? {
+        let item = item?;
+        let (label, color): (String, values::Color) = item.extract().map_err(|_| {
+            PyTypeError::new_err(format!(
+                "{} holds pairs of a name and a Color, and {} is not one",
+                site.field(name),
+                shown(&item, "that pair"),
+            ))
+        })?;
+        colors.insert(label, color.to_model());
+    }
+
+    Ok(colors)
 }
 
 /// A field naming one entity
@@ -1487,6 +1588,342 @@ impl Value for BalancingData {
         )?;
         kwargs.set_item("year_teacher_rotation", options.year_teacher_rotation)?;
         kwargs.set_item("period_teacher_rotation", options.period_teacher_rotation)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The settings shared by every sheet of the export, read at the site the
+/// script wrote them
+///
+/// Split out of [ExportGlobalConfigData::from_py] because an `ExportConfigData`
+/// holds one of these and reads it at a site of its own: what a script wrote
+/// there is an `ExportConfigData`, so that is the class a refusal names — « an
+/// ExportConfigData's global_config.background_color ».
+fn global_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawGlobalConfig> {
+    Ok(RawGlobalConfig {
+        background_color: color(site, "background_color", obj)?,
+        stripes_color_enabled: flag(site, "stripes_color_enabled", obj)?,
+        stripes_color: color(site, "stripes_color", obj)?,
+    })
+}
+
+/// The settings shared by every sheet of the export
+///
+/// One of the five classes of `docs/python/values.md` §3.9, and one of the
+/// two of them that no entity lies behind at all: the whole configuration is
+/// pure value data, so nothing here resolves against the document, and the
+/// extraction cannot go stale — the views' `to_data()` is the only source of
+/// one of these in this milestone.
+pub struct ExportGlobalConfigData;
+
+impl Value for ExportGlobalConfigData {
+    type Model = RawGlobalConfig;
+
+    const CLASS: &'static str = "ExportGlobalConfigData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawGlobalConfig> {
+        global_config(Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(py: Python<'py>, config: &RawGlobalConfig) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "background_color",
+            values::Color::from_model(&config.background_color),
+        )?;
+        kwargs.set_item("stripes_color_enabled", config.stripes_color_enabled)?;
+        kwargs.set_item(
+            "stripes_color",
+            values::Color::from_model(&config.stripes_color),
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The settings of the colloscope sheet, read at the site the script wrote
+/// them
+///
+/// Split out of [ExportColloscopeConfigData::from_py] for the same reason
+/// [global_config] is: an `ExportConfigData` holds one of these and reads it
+/// at a site of its own.
+fn colloscope_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawColloscopeConfig> {
+    Ok(RawColloscopeConfig {
+        sheet_name: plain_text(site, "sheet_name", obj)?,
+        extra_info_column_enabled: flag(site, "extra_info_column_enabled", obj)?,
+        extra_info_column_name: plain_text(site, "extra_info_column_name", obj)?,
+        teacher_email_enabled: flag(site, "teacher_email_enabled", obj)?,
+        teacher_email: plain_text(site, "teacher_email", obj)?,
+        teacher_tel_enabled: flag(site, "teacher_tel_enabled", obj)?,
+        teacher_tel: plain_text(site, "teacher_tel", obj)?,
+        orientation: orientation(site, "orientation", obj)?,
+        display_week_dates: flag(site, "display_week_dates", obj)?,
+        display_annotations: flag(site, "display_annotations", obj)?,
+        no_interrogation_color: color(site, "no_interrogation_color", obj)?,
+        annotation_color_enabled: flag(site, "annotation_color_enabled", obj)?,
+        annotation_color: color(site, "annotation_color", obj)?,
+        extra_colors: color_map(site, "extra_colors", obj)?,
+    })
+}
+
+/// The settings of the colloscope sheet
+///
+/// The one export class with a container field: the extra cell colors, read
+/// out as a plain dict — a value is written as well as read, and the read
+/// surface's `mappingproxy` has no place in a builder.
+pub struct ExportColloscopeConfigData;
+
+impl Value for ExportColloscopeConfigData {
+    type Model = RawColloscopeConfig;
+
+    const CLASS: &'static str = "ExportColloscopeConfigData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawColloscopeConfig> {
+        colloscope_config(Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(py: Python<'py>, config: &RawColloscopeConfig) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("sheet_name", &config.sheet_name)?;
+        kwargs.set_item(
+            "extra_info_column_enabled",
+            config.extra_info_column_enabled,
+        )?;
+        kwargs.set_item("extra_info_column_name", &config.extra_info_column_name)?;
+        kwargs.set_item("teacher_email_enabled", config.teacher_email_enabled)?;
+        kwargs.set_item("teacher_email", &config.teacher_email)?;
+        kwargs.set_item("teacher_tel_enabled", config.teacher_tel_enabled)?;
+        kwargs.set_item("teacher_tel", &config.teacher_tel)?;
+        kwargs.set_item(
+            "orientation",
+            values::Orientation::from_model(&config.orientation),
+        )?;
+        kwargs.set_item("display_week_dates", config.display_week_dates)?;
+        kwargs.set_item("display_annotations", config.display_annotations)?;
+        kwargs.set_item(
+            "no_interrogation_color",
+            values::Color::from_model(&config.no_interrogation_color),
+        )?;
+        kwargs.set_item("annotation_color_enabled", config.annotation_color_enabled)?;
+        kwargs.set_item(
+            "annotation_color",
+            values::Color::from_model(&config.annotation_color),
+        )?;
+
+        let extra_colors = PyDict::new(py);
+        for (name, color) in &config.extra_colors {
+            extra_colors.set_item(name, values::Color::from_model(color))?;
+        }
+        kwargs.set_item("extra_colors", extra_colors)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The settings of one per-student-groups sheet, read at the site the script
+/// wrote them
+///
+/// Split out of [ExportStudentGroupsConfigData::from_py] for the same reason
+/// [global_config] is: an `ExportConfigData` holds three of these and reads
+/// them at sites of their own.
+fn student_groups_config(
+    site: Site<'_>,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<RawPerStudentGroupsConfig> {
+    Ok(RawPerStudentGroupsConfig {
+        sheet_name: plain_text(site, "sheet_name", obj)?,
+        orientation: optional_orientation(site, "orientation", obj)?,
+        show_emails: flag(site, "show_emails", obj)?,
+        show_tel: flag(site, "show_tel", obj)?,
+    })
+}
+
+/// The settings of one per-student-groups sheet
+///
+/// The model has three constructors rather than one `Default` —
+/// `default_all_groups` and its two siblings — so the dataclass mirrors them
+/// as three classmethods and takes a required `sheet_name`: the one field
+/// that says *which* sheet a value is for (`docs/python/values.md` §3.9).
+pub struct ExportStudentGroupsConfigData;
+
+impl Value for ExportStudentGroupsConfigData {
+    type Model = RawPerStudentGroupsConfig;
+
+    const CLASS: &'static str = "ExportStudentGroupsConfigData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawPerStudentGroupsConfig> {
+        student_groups_config(Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        config: &RawPerStudentGroupsConfig,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("sheet_name", &config.sheet_name)?;
+        kwargs.set_item(
+            "orientation",
+            config
+                .orientation
+                .as_ref()
+                .map(values::Orientation::from_model),
+        )?;
+        kwargs.set_item("show_emails", config.show_emails)?;
+        kwargs.set_item("show_tel", config.show_tel)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The settings of the per-group-list sheets, read at the site the script
+/// wrote them
+///
+/// Split out of [ExportGroupListConfigData::from_py] for the same reason
+/// [global_config] is: an `ExportConfigData` holds one of these and reads it
+/// at a site of its own.
+fn group_list_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawPerGroupListConfig> {
+    Ok(RawPerGroupListConfig {
+        orientation: orientation(site, "orientation", obj)?,
+        show_emails: flag(site, "show_emails", obj)?,
+        show_tel: flag(site, "show_tel", obj)?,
+        center_vertically: flag(site, "center_vertically", obj)?,
+    })
+}
+
+/// The settings of the per-group-list sheets
+///
+/// The smallest of the export classes, and the one with the only model field
+/// the whole configuration has that a `PerStudentGroupsConfig` field is not:
+/// `center_vertically`.
+pub struct ExportGroupListConfigData;
+
+impl Value for ExportGroupListConfigData {
+    type Model = RawPerGroupListConfig;
+
+    const CLASS: &'static str = "ExportGroupListConfigData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawPerGroupListConfig> {
+        group_list_config(Site::whole(Self::CLASS), obj)
+    }
+
+    fn to_py<'py>(py: Python<'py>, config: &RawPerGroupListConfig) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "orientation",
+            values::Orientation::from_model(&config.orientation),
+        )?;
+        kwargs.set_item("show_emails", config.show_emails)?;
+        kwargs.set_item("show_tel", config.show_tel)?;
+        kwargs.set_item("center_vertically", config.center_vertically)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The whole export configuration
+///
+/// The tree `doc.export_config.to_data()` assembles, and the value §8's
+/// `DocumentData` will hold one of. No op takes it: the eleven export
+/// mutators each patch one field of the document's own configuration, so
+/// nothing in this milestone consumes one — its extraction has no caller
+/// until the coarse door lands, which is what the dataclass's docstring says
+/// rather than hiding.
+pub struct ExportConfigData;
+
+impl Value for ExportConfigData {
+    type Model = RawExportConfig;
+
+    const CLASS: &'static str = "ExportConfigData";
+
+    /// Names no entity, so the document goes unused here — the one asymmetry
+    /// §2.2 of the design accepts, since two shapes for one boundary would be
+    /// worse than one shape carrying an argument it sometimes ignores.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawExportConfig> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names. The four nested
+        // configs are fetched first and read at sites of their own, so a
+        // refusal names the class a script wrote down: « an ExportConfigData's
+        // colloscope_config.teacher_email ».
+        let global = field(site, "global_config", obj)?;
+        let colloscope = field(site, "colloscope_config", obj)?;
+        let all_groups = field(site, "all_groups_config", obj)?;
+        let automatic = field(site, "automatic_groups_config", obj)?;
+        let prefilled = field(site, "prefilled_groups_config", obj)?;
+        let per_group_list = field(site, "per_group_list_config", obj)?;
+
+        Ok(RawExportConfig {
+            global: global_config(site.inside("global_config"), &global)?,
+            colloscope_enabled: flag(site, "colloscope_enabled", obj)?,
+            all_groups_enabled: flag(site, "all_groups_enabled", obj)?,
+            automatic_groups_enabled: flag(site, "automatic_groups_enabled", obj)?,
+            prefilled_groups_enabled: flag(site, "prefilled_groups_enabled", obj)?,
+            per_group_list_enabled: flag(site, "per_group_list_enabled", obj)?,
+            colloscope_config: colloscope_config(site.inside("colloscope_config"), &colloscope)?,
+            all_groups_config: student_groups_config(
+                site.inside("all_groups_config"),
+                &all_groups,
+            )?,
+            automatic_groups_config: student_groups_config(
+                site.inside("automatic_groups_config"),
+                &automatic,
+            )?,
+            prefilled_groups_config: student_groups_config(
+                site.inside("prefilled_groups_config"),
+                &prefilled,
+            )?,
+            per_group_list_config: group_list_config(
+                site.inside("per_group_list_config"),
+                &per_group_list,
+            )?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, config: &RawExportConfig) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item(
+            "global_config",
+            ExportGlobalConfigData::to_py(py, &config.global)?,
+        )?;
+        kwargs.set_item("colloscope_enabled", config.colloscope_enabled)?;
+        kwargs.set_item("all_groups_enabled", config.all_groups_enabled)?;
+        kwargs.set_item("automatic_groups_enabled", config.automatic_groups_enabled)?;
+        kwargs.set_item("prefilled_groups_enabled", config.prefilled_groups_enabled)?;
+        kwargs.set_item("per_group_list_enabled", config.per_group_list_enabled)?;
+        kwargs.set_item(
+            "colloscope_config",
+            ExportColloscopeConfigData::to_py(py, &config.colloscope_config)?,
+        )?;
+        kwargs.set_item(
+            "all_groups_config",
+            ExportStudentGroupsConfigData::to_py(py, &config.all_groups_config)?,
+        )?;
+        kwargs.set_item(
+            "automatic_groups_config",
+            ExportStudentGroupsConfigData::to_py(py, &config.automatic_groups_config)?,
+        )?;
+        kwargs.set_item(
+            "prefilled_groups_config",
+            ExportStudentGroupsConfigData::to_py(py, &config.prefilled_groups_config)?,
+        )?;
+        kwargs.set_item(
+            "per_group_list_config",
+            ExportGroupListConfigData::to_py(py, &config.per_group_list_config)?,
+        )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

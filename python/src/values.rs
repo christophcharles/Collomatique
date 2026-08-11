@@ -889,6 +889,18 @@ impl Orientation {
         }
     }
 
+    /// The model orientation for one python orientation
+    ///
+    /// The reverse of [from_model]: an export configuration value holds an
+    /// orientation, and the boundary turns it back into the model's own
+    /// variant. Written as a match for the same reason.
+    pub(crate) fn to_model(self) -> PageOrientation {
+        match self {
+            Orientation::Portrait => PageOrientation::Portrait,
+            Orientation::Landscape => PageOrientation::Landscape,
+        }
+    }
+
     /// The orientation's french word — « Portrait » or « Paysage »
     ///
     /// The word the application's dropdown shows, which is what `str()` hands
@@ -982,6 +994,21 @@ impl Color {
             red: color.red,
             green: color.green,
             blue: color.blue,
+        }
+    }
+
+    /// The model color for one python color
+    ///
+    /// The reverse of [from_model]: the export configuration values hold
+    /// colors, and the boundary turns them back into the model's own type.
+    /// A color was born whole, so its three channels were checked when it was
+    /// built — nothing can be refused here, which is the whole difference
+    /// between a leaf value and a dataclass (`docs/python/values.md` §1).
+    pub(crate) fn to_model(&self) -> RawColor {
+        RawColor {
+            red: self.red,
+            green: self.green,
+            blue: self.blue,
         }
     }
 }

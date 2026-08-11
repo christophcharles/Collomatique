@@ -15,9 +15,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyDict;
 
 use collomatique_python::data::{
-    BalancingData, GroupListData, IncompatData, InterrogationData, LimitsData, PairingRuleData,
-    PairingRuleSideData, SlotData, SlotPairingRuleData, SlotPairingRuleSideData, StudentData,
-    SubjectData, TeacherData, WeekPatternData,
+    BalancingData, ExportColloscopeConfigData, ExportConfigData, ExportGlobalConfigData,
+    ExportGroupListConfigData, ExportStudentGroupsConfigData, GroupListData, IncompatData,
+    InterrogationData, LimitsData, PairingRuleData, PairingRuleSideData, SlotData,
+    SlotPairingRuleData, SlotPairingRuleSideData, StudentData, SubjectData, TeacherData,
+    WeekPatternData,
 };
 use collomatique_python::{FileRequest, collomatique};
 use collomatique_state_colloscopes::Data;
@@ -8121,6 +8123,159 @@ fn the_export_config_reads_back_field_by_field() {
             per_group_list.show_emails,
             per_group_list.show_tel,
             per_group_list.center_vertically,
+        )
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The export configuration comes back detached, out and back
+///
+/// The script walks `doc.export_config` and leaves what it saw; rust compares
+/// it with the same document read straight from the model — the whole tree and
+/// each of its sections, the six model defaults pinned against the model's own
+/// builders (the three per-student-groups constructors included), the
+/// auto-detected orientation round-tripping as `None`, and a detached tree
+/// whose stripes were repainted extracting to the repainted configuration
+/// rather than to the document's own.
+#[test]
+fn the_export_configuration_comes_back_detached() {
+    use collomatique_state_colloscopes::export_config::{
+        ColloscopeConfig, ExportConfig, GlobalConfig, PerGroupListConfig, PerStudentGroupsConfig,
+    };
+
+    let dir = workspace("export-config-data");
+    let source = dir.join("export-config.collomatique");
+    export_config_document(&source);
+
+    let globals = run(include_str!("scripts/export_config_data.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    let data = reload(&source);
+    let config = &data.get_inner_data().export_config;
+
+    // The whole tree, and each of its sections on its own. The all-groups
+    // sheet's auto-detected orientation is `None` on both sides of the trip.
+    assert_eq!(
+        extracted::<ExportConfigData>(&globals, "tree"),
+        config.clone()
+    );
+    assert_eq!(
+        extracted::<ExportGlobalConfigData>(&globals, "global_value"),
+        config.global
+    );
+    assert_eq!(
+        extracted::<ExportColloscopeConfigData>(&globals, "colloscope_value"),
+        config.colloscope_config
+    );
+    assert_eq!(
+        extracted::<ExportStudentGroupsConfigData>(&globals, "all_groups_value"),
+        config.all_groups_config
+    );
+    assert_eq!(
+        extracted::<ExportStudentGroupsConfigData>(&globals, "automatic_value"),
+        config.automatic_groups_config
+    );
+    assert_eq!(
+        extracted::<ExportStudentGroupsConfigData>(&globals, "prefilled_value"),
+        config.prefilled_groups_config
+    );
+    assert_eq!(
+        extracted::<ExportGroupListConfigData>(&globals, "group_list_value"),
+        config.per_group_list_config
+    );
+
+    // The repainted tree extracts to the repainted configuration: mutating a
+    // detached value is a real mutation, and the value that comes back is the
+    // one the script built, not the one the document holds.
+    let mut repainted = config.clone();
+    repainted.global.stripes_color = collomatique_state_colloscopes::export_config::Color {
+        red: 9,
+        green: 9,
+        blue: 9,
+    };
+    assert_eq!(
+        extracted::<ExportConfigData>(&globals, "mutated"),
+        repainted
+    );
+
+    // The defaults: every section the model's own — the six section-level
+    // builders of §3.9, the three per-student-groups constructors included,
+    // and the whole tree — pinned so the python side cannot drift.
+    assert_eq!(
+        extracted::<ExportGlobalConfigData>(&globals, "defaults_global"),
+        GlobalConfig::default()
+    );
+    assert_eq!(
+        extracted::<ExportColloscopeConfigData>(&globals, "defaults_colloscope"),
+        ColloscopeConfig::default()
+    );
+    assert_eq!(
+        extracted::<ExportStudentGroupsConfigData>(&globals, "defaults_student_all"),
+        PerStudentGroupsConfig::default_all_groups()
+    );
+    assert_eq!(
+        extracted::<ExportStudentGroupsConfigData>(&globals, "defaults_student_automatic"),
+        PerStudentGroupsConfig::default_automatic_groups()
+    );
+    assert_eq!(
+        extracted::<ExportStudentGroupsConfigData>(&globals, "defaults_student_prefilled"),
+        PerStudentGroupsConfig::default_prefilled_groups()
+    );
+    assert_eq!(
+        extracted::<ExportGroupListConfigData>(&globals, "defaults_group_list"),
+        PerGroupListConfig::default()
+    );
+    assert_eq!(
+        extracted::<ExportConfigData>(&globals, "defaults_tree"),
+        ExportConfig::default()
+    );
+
+    // The refusals, each with the sentence it raises: the class the script
+    // wrote down, the field, and what was given.
+    assert_eq!(
+        refused::<ExportGlobalConfigData>(&globals, "bad_global"),
+        (
+            "TypeError".to_owned(),
+            "an ExportGlobalConfigData's background_color is a Color, and 'blanc' is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ExportColloscopeConfigData>(&globals, "bad_orientation"),
+        (
+            "TypeError".to_owned(),
+            "an ExportColloscopeConfigData's orientation is an Orientation, and 'auto' is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ExportColloscopeConfigData>(&globals, "bad_colors"),
+        (
+            "TypeError".to_owned(),
+            "an ExportColloscopeConfigData's extra_colors holds pairs of a name and a Color, \
+             and ('Vacances', 'jaune') is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ExportColloscopeConfigData>(&globals, "bad_map"),
+        (
+            "TypeError".to_owned(),
+            "an ExportColloscopeConfigData's extra_colors is a mapping of names to colors, \
+             and ['Vacances'] is not one"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ExportStudentGroupsConfigData>(&globals, "bad_student_orientation"),
+        (
+            "TypeError".to_owned(),
+            "an ExportStudentGroupsConfigData's orientation is an Orientation or None, \
+             and 'auto' is neither"
+                .to_owned(),
         )
     );
 

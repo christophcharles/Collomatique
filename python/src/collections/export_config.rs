@@ -25,6 +25,11 @@ use collomatique_state_colloscopes::export_config::{
 };
 
 use crate::Document;
+use crate::data::Value as _;
+use crate::data::{
+    ExportColloscopeConfigData, ExportConfigData, ExportGlobalConfigData,
+    ExportGroupListConfigData, ExportStudentGroupsConfigData,
+};
 use crate::values::{Color, Orientation};
 
 /// The export configuration of one document
@@ -120,6 +125,23 @@ impl ExportConfig {
         ExportGroupListConfig::mint(self.doc.clone_ref(py))
     }
 
+    /// The whole configuration, detached — an `ExportConfigData` holding the
+    /// tree the views read
+    ///
+    /// A fresh object every call, the whole configuration as the document
+    /// holds it: the settings shared by every sheet, the five enabled flags
+    /// that sit beside the sections they gate, and the four per-sheet
+    /// configs. Nothing here can go stale: the whole configuration is one
+    /// atom, replaced wholesale, so this never raises `StaleHandleError`.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let config = self.with_data(py, |data| data.export_config.clone());
+
+        ExportConfigData::to_py(py, &config)
+    }
+
     /// The view itself — `<collomatique.ExportConfig>`
     ///
     /// Deliberately without a field count: the view has five sections, and a
@@ -174,6 +196,21 @@ impl ExportGlobalConfig {
     #[getter]
     fn stripes_color(&self, py: Python<'_>) -> Color {
         self.read(py, |config| Color::from_model(&config.stripes_color))
+    }
+
+    /// This section, detached — an `ExportGlobalConfigData` holding what the
+    /// view shows
+    ///
+    /// A fresh object every call. Nothing here can go stale: the whole
+    /// configuration is one atom, replaced wholesale, so this never raises
+    /// `StaleHandleError`.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let config = self.read(py, |config| config.clone());
+
+        ExportGlobalConfigData::to_py(py, &config)
     }
 
     /// Whether two views read the same document
@@ -317,6 +354,21 @@ impl ExportColloscopeConfig {
         extra_colors_mapping(py, colors)
     }
 
+    /// This section, detached — an `ExportColloscopeConfigData` holding what
+    /// the view shows
+    ///
+    /// A fresh object every call. Nothing here can go stale: the whole
+    /// configuration is one atom, replaced wholesale, so this never raises
+    /// `StaleHandleError`.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let config = self.read(py, |config| config.clone());
+
+        ExportColloscopeConfigData::to_py(py, &config)
+    }
+
     /// Whether two views read the same document
     fn __eq__(&self, other: &Bound<'_, PyAny>) -> bool {
         match other.cast::<ExportColloscopeConfig>() {
@@ -448,6 +500,23 @@ impl ExportStudentGroupsConfig {
         self.read(py, |config| config.show_tel)
     }
 
+    /// This sheet's settings, detached — an `ExportStudentGroupsConfigData`
+    /// holding what the view shows
+    ///
+    /// A fresh object every call, the section the view is bound to: the
+    /// all-groups view hands back a value whose `sheet_name` is « Tous les
+    /// groupes », and the two siblings hand back their own. Nothing here can
+    /// go stale: the whole configuration is one atom, replaced wholesale, so
+    /// this never raises `StaleHandleError`.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let config = self.read(py, |config| config.clone());
+
+        ExportStudentGroupsConfigData::to_py(py, &config)
+    }
+
     /// Whether two views are bound to the same sheet of the same document
     ///
     /// The kind is part of the identity: a view of the all-groups sheet never
@@ -534,6 +603,21 @@ impl ExportGroupListConfig {
     #[getter]
     fn center_vertically(&self, py: Python<'_>) -> bool {
         self.read(py, |config| config.center_vertically)
+    }
+
+    /// This section, detached — an `ExportGroupListConfigData` holding what
+    /// the view shows
+    ///
+    /// A fresh object every call. Nothing here can go stale: the whole
+    /// configuration is one atom, replaced wholesale, so this never raises
+    /// `StaleHandleError`.
+    fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
+        // Copied out of the borrow before anything python-facing happens:
+        // building the value calls into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`.
+        let config = self.read(py, |config| config.clone());
+
+        ExportGroupListConfigData::to_py(py, &config)
     }
 
     /// Whether two views read the same document
