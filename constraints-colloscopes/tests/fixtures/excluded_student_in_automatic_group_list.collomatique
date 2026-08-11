@@ -20,26 +20,32 @@
               "id": 0,
               "weeks": [
                 {
+                  "id": 1,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 2,
                   "interrogations": false,
                   "annotation": null
                 },
                 {
+                  "id": 3,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 4,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 5,
                   "interrogations": false,
                   "annotation": null
                 },
                 {
+                  "id": 6,
                   "interrogations": true,
                   "annotation": null
                 }
@@ -362,25 +368,19 @@
           {
             "id": 21,
             "name": "Pattern1622",
-            "weeks": [
-              true,
-              false,
-              true,
-              true,
-              true,
-              true
+            "excluded_weeks": [
+              2
             ]
           },
           {
             "id": 53,
             "name": "Pattern66501",
-            "weeks": [
-              false,
-              false,
-              false,
-              false,
-              true,
-              false
+            "excluded_weeks": [
+              1,
+              2,
+              3,
+              4,
+              6
             ]
           }
         ]
@@ -805,7 +805,7 @@
           "interrogations": [
             {
               "slot_id": 45,
-              "week": 2,
+              "week_id": 3,
               "assigned_groups": [
                 2
               ]

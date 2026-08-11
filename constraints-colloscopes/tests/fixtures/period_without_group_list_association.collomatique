@@ -16,18 +16,22 @@
               "id": 124,
               "weeks": [
                 {
+                  "id": 0,
                   "interrogations": false,
                   "annotation": "Rentrée"
                 },
                 {
+                  "id": 6,
                   "interrogations": false,
                   "annotation": "Semaine d'intégration"
                 },
                 {
+                  "id": 7,
                   "interrogations": true,
                   "annotation": "Début des colles"
                 },
                 {
+                  "id": 8,
                   "interrogations": true,
                   "annotation": null
                 }
@@ -37,58 +41,72 @@
               "id": 172,
               "weeks": [
                 {
+                  "id": 9,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 20,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 21,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 22,
                   "interrogations": false,
                   "annotation": "Vacances de Toussaint"
                 },
                 {
+                  "id": 23,
                   "interrogations": false,
                   "annotation": "Halloween - un troll dans les cachots !"
                 },
                 {
+                  "id": 24,
                   "interrogations": false,
                   "annotation": "Préparation aux BUSE (concours blancs)"
                 },
                 {
+                  "id": 25,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 26,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 27,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 28,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 29,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 30,
                   "interrogations": false,
                   "annotation": "Pause des colles avant les vacances"
                 },
                 {
+                  "id": 31,
                   "interrogations": false,
                   "annotation": "Vacances de Noël"
                 },
                 {
+                  "id": 32,
                   "interrogations": false,
                   "annotation": "Vacances de Noël"
                 }
@@ -98,90 +116,112 @@
               "id": 174,
               "weeks": [
                 {
+                  "id": 33,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 34,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 35,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 36,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 37,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 38,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 39,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 40,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 41,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 42,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 43,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 44,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 45,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 46,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 47,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 48,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 49,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 50,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 51,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 52,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 53,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 54,
                   "interrogations": true,
                   "annotation": null
                 }
@@ -1068,93 +1108,31 @@
           {
             "id": 130,
             "name": "Semaines paires",
-            "weeks": [
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true
+            "excluded_weeks": [
+              6,
+              8,
+              20,
+              22,
+              24,
+              26,
+              28,
+              30,
+              32
             ]
           },
           {
             "id": 131,
             "name": "Semaines impaires",
-            "weeks": [
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              false,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true,
-              true
+            "excluded_weeks": [
+              0,
+              7,
+              9,
+              21,
+              23,
+              25,
+              27,
+              29,
+              31
             ]
           }
         ]

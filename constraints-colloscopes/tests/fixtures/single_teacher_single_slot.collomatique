@@ -16,10 +16,12 @@
               "id": 0,
               "weeks": [
                 {
+                  "id": 7,
                   "interrogations": true,
                   "annotation": null
                 },
                 {
+                  "id": 8,
                   "interrogations": true,
                   "annotation": null
                 }
