@@ -12,6 +12,7 @@
     libadwaita,
     adwaita-icon-theme,
     python3,
+    python3Packages,
     clippy,
 }:
 rustPlatform.buildRustPackage rec {
@@ -50,6 +51,7 @@ rustPlatform.buildRustPackage rec {
         wayland
         adwaita-icon-theme
         python3
+        python3Packages.xlsxwriter # For the xlsx export scripts
     ];
 
     preFixup = ''
