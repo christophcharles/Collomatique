@@ -210,6 +210,13 @@ impl Process {
         for arg in args {
             cmd.arg(*arg);
         }
+        // portable_pty otherwise starts the child in `$HOME` (a default meant for terminal
+        // emulators opening a shell). The engine should inherit our working directory like
+        // any other subprocess, as `spawn_pipes` already does. If our own cwd is gone,
+        // `current_dir` fails and the library default is better than refusing to spawn.
+        if let Ok(cwd) = std::env::current_dir() {
+            cmd.cwd(cwd);
+        }
 
         let child = pair
             .slave
