@@ -14,6 +14,7 @@ mod tools;
 mod widgets;
 
 mod editor;
+pub mod icon;
 mod loading;
 mod welcome;
 
@@ -165,7 +166,7 @@ impl Component for AppModel {
             set_version: env!("CARGO_PKG_VERSION"),
             set_website: "https://github.com/christophcharles/Collomatique",
             set_license_type: gtk::License::Agpl30,
-            set_application_icon: "application-x-executable",
+            set_application_icon: icon::ICON_NAME,
         }
     }
 
@@ -174,6 +175,10 @@ impl Component for AppModel {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // The icon must be registered before any widget asks the icon theme
+        // for it (the about dialog does when it is presented).
+        icon::register().expect("failed to register the application icon");
+
         let editor = editor::EditorPanel::builder().launch(()).forward(
             sender.input_sender(),
             |msg| match msg {

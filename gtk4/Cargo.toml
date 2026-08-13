@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+[build-dependencies]
+glib-build-tools = "0.20"
+
 [dependencies]
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
