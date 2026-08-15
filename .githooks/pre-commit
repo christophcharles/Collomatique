@@ -43,18 +43,47 @@ if [ "$cargo_version" != "$nix_version" ]; then
     exit 1
 fi
 
-# Keep the two files generated from Cargo.lock in sync with it.
-if staged Cargo.lock; then
-    if ! staged flatpak/cargo-sources.json; then
-        echo "pre-commit: Cargo.lock is staged but flatpak/cargo-sources.json is not." >&2
-        echo "  Run ./flatpak/generate-cargo-sources.sh and stage the result." >&2
-        exit 1
-    fi
-    if ! staged collomatique.nix; then
-        echo "pre-commit: Cargo.lock is staged but collomatique.nix is not." >&2
-        echo "  Regenerate the cargoHash in collomatique.nix and stage it." >&2
-        exit 1
-    fi
+# The cargoHash in collomatique.nix covers the whole lock file, dependency
+# edges included, so any change to Cargo.lock changes it. Demanding the two be
+# staged together is therefore exact.
+if staged Cargo.lock && ! staged collomatique.nix; then
+    echo "pre-commit: Cargo.lock is staged but collomatique.nix is not." >&2
+    echo "  Regenerate the cargoHash in collomatique.nix and stage it." >&2
+    exit 1
+fi
+
+# flatpak/cargo-sources.json is different: it is derived from the crates.io
+# packages of Cargo.lock and from nothing else, so a lock change that only moves
+# dependency edges around leaves it byte-identical and there is nothing to
+# stage. Check what actually matters instead — that the two agree. Each archive
+# entry of the json carries its crate's checksum, so the two sets of checksums
+# must match exactly. Checked on every commit, not only when one of them is
+# staged: a stale json that slipped through an earlier commit is worth catching
+# too.
+lock_sums=$(staged_content Cargo.lock | sed -n 's/^checksum = "\(.*\)"$/\1/p' | sort)
+json_sums=$(staged_content flatpak/cargo-sources.json |
+            sed -n 's/.*"sha256": "\(.*\)".*/\1/p' | sort)
+
+if [ "$lock_sums" != "$json_sums" ]; then
+    echo "pre-commit: flatpak/cargo-sources.json does not match Cargo.lock." >&2
+    echo "  Run ./flatpak/generate-cargo-sources.sh and stage the result." >&2
+    exit 1
+fi
+
+# That comparison only sees packages that have a checksum, which today means all
+# of them: every source in the lock is crates.io. A git dependency would carry
+# no checksum and slip through unnoticed, so refuse rather than check less than
+# the file contains.
+foreign=$(staged_content Cargo.lock |
+          sed -n 's/^source = "\(.*\)"$/\1/p' |
+          grep -v '^registry+https://github.com/rust-lang/crates.io-index$' |
+          sort -u || true)
+if [ -n "$foreign" ]; then
+    echo "pre-commit: Cargo.lock has a dependency that is not from crates.io:" >&2
+    echo "$foreign" | sed 's/^/  /' >&2
+    echo "  The cargo-sources.json check above compares checksums and cannot see" >&2
+    echo "  it. Teach the hook about this source kind before committing." >&2
+    exit 1
 fi
 
 # Keep the scaled icons in sync with the master they are scaled from.
