@@ -338,7 +338,16 @@ fn spec_complete_example_decodes_and_reserializes_identically() {
     // `populated_round_trip::reserialize_is_stable`.
     let reserialized =
         serialize_data(data.get_inner_data()).expect("The example should be writable");
-    let expected: serde_json::Value = serde_json::from_str(SPEC_COMPLETE_EXAMPLE).unwrap();
+    let mut expected: serde_json::Value = serde_json::from_str(SPEC_COMPLETE_EXAMPLE).unwrap();
+    // One header field cannot match the document above: the writer stamps
+    // `produced_with_version` with the version building it, while the spec text
+    // shows the version it was written against. That string is the package
+    // version, not a format decision, so a version bump must not edit a
+    // document quoted verbatim from the spec — the same reasoning as
+    // `populated_round_trip::mask_version`. Expect the current version rather
+    // than masking the field, so the stamp itself stays under the comparison.
+    expected["header"]["produced_with_version"] =
+        collomatique_settings::current_version().to_string().into();
     let actual: serde_json::Value = serde_json::from_str(&reserialized).unwrap();
     assert_eq!(actual, expected);
 
