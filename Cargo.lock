@@ -403,12 +403,9 @@ dependencies = [
  "glib-build-tools",
  "gtk4",
  "libadwaita",
- "libc",
  "non-empty-string",
- "portable-pty",
  "relm4",
  "rfd",
- "rustix",
  "tokio",
 ]
 
