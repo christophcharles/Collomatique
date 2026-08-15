@@ -129,22 +129,13 @@ modules:
       - install -Dm755 target/release/collomatique-gtk4 ${FLATPAK_DEST}/bin/collomatique-gtk4
       - install -Dm644 flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - install -Dm644 flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
-      # The application icon is one 1024x1024 png; icon themes want the usual
-      # sizes, so scale it down with the gdk-pixbuf the SDK already carries.
-      - |
-        python3 - <<'PY'
-        import gi
-        gi.require_version('GdkPixbuf', '2.0')
-        from gi.repository import GdkPixbuf
-
-        for size in (128, 256, 512):
-            pixbuf = GdkPixbuf.Pixbuf.new_from_file_at_size(
-                'resources/icons/collomatique.png', size, size)
-            pixbuf.savev(f'icon-{size}.png', 'png', [], [])
-        PY
-      - install -Dm644 icon-128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
-      - install -Dm644 icon-256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
-      - install -Dm644 icon-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
+      # The icon sizes an icon theme expects are committed next to the master
+      # png rather than scaled here: gdk-pixbuf now decodes through glycin,
+      # which re-spawns each loader through flatpak-spawn, and there is nothing
+      # to spawn through inside a build sandbox.
+      - install -Dm644 resources/icons/collomatique-128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
+      - install -Dm644 resources/icons/collomatique-256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
+      - install -Dm644 resources/icons/collomatique-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
     sources:
       - type: dir
         path: ..
