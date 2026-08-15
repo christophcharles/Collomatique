@@ -44,7 +44,9 @@ choice trades convenience today against that, maintainability wins.
   install those wheels — that is the known caveat of plan C below.
 - **Already Windows-aware**: `subprocesses/src/process.rs` has a real
   `#[cfg(windows)]` path (ConPTY through `portable-pty`, kill-on-close Job
-  Objects through `windows-sys`); the worker exe lookup handles `EXE_SUFFIX`;
+  Objects through `windows-sys`); the worker re-exec resolves its own path with
+  `std::env::current_exe()`, which already carries the `.exe` suffix, so nothing
+  builds an executable name by hand (`EXE_SUFFIX` appears nowhere in the tree);
   `settings/` uses `directories` (maps to `%APPDATA%`); storage is plain JSON
   over `tokio::fs`; no sqlite, no openssl, no direct dbus. None of this has
   ever actually run on Windows.
@@ -128,6 +130,31 @@ enters the picture. Every Cargo.toml/Cargo.lock change means a
    to confirm.
 5. Run the normal test suite on Linux to prove none of this regresses the
    flatpak platform.
+
+**Done**: `f9e66ce9` (item 1), `74ce9e67` (item 2), `baeb64af` (item 4), plus
+`a05d46b8` and `0f27f08a`, which the work ran into on the way. The workspace
+suite passes and the flatpak still builds from a cold cache.
+
+Two items did not go as written. Item 2 **deletes** the `stdc++` line instead of
+gating it: `cc` already emits the C++ standard library for a `.cpp(true)` build —
+the recorded build metadata carried the flag twice — and it picks the right one
+per target, `stdc++` for gnu, `c++` for darwin, none at all for MSVC. Naming the
+library ourselves, or gating that name on "not MSVC", is guessing in `cc`'s place
+for toolchains that do not exist yet. Item 3 found nothing to fix and produced no
+commit: the only two `#[cfg(unix)]` sites are the SIGHUP reset and the termios
+call on the pty master, both correctly unix-only and both already answered on the
+Windows side by the Job Object; there is no `std::os::unix` import, no hardcoded
+unix path and no `HOME` read anywhere in the workspace, and the `sleep`-spawning
+tests in `subprocesses` are already `#[cfg(all(test, unix))]`.
+
+The two extra commits: `a05d46b8` because the pre-commit hook refused item 1. It
+demanded `cargo-sources.json` be staged with any `Cargo.lock` change, but that
+file follows the crates.io package set only, and dropping three unused
+dependencies changes no package — so there was nothing to stage. It now compares
+the two files' checksum sets instead. (`collomatique.nix` keeps the old rule: its
+cargoHash covers the whole lock, and it did change.) `0f27f08a` fixes a storage
+test that had been red since the version bump in `a66e6b9d`, unrelated to any of
+this but in the way of item 5.
 
 ### Step 2 — VM bootstrap (manual, once)
 
@@ -229,7 +256,7 @@ step 1), so all OS packaging lives under `pkgs/`.
   check the step 2 tools are present; `vcpkg install` from a committed
   manifest; set the env vars recorded in step 3; `cargo build --release -p
   collomatique-gtk4`; stage the step 7 tree; read the version from the
-  workspace `Cargo.toml` (same trick as `flatpak/build.sh`); run `ISCC.exe`
+  workspace `Cargo.toml` (same trick as `pkgs/flatpak/build.sh`); run `ISCC.exe`
   on the `.iss` script to produce `Collomatique-Setup-<version>.exe`.
 - `collomatique.iss` — Inno Setup script: `PrivilegesRequired=lowest` by
   default (per-user install, no UAC, association under HKCU) with an
