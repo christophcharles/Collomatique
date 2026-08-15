@@ -27,9 +27,14 @@ finish-args:
   # Where the embedded Python finds the packages shipped below. Extra packages
   # a user installs themselves need nothing here: the runtime already points
   # PYTHONUSERBASE at /var/data/python, the sandbox name of the private data
-  # directory ~/.var/app/fr.collomatique.Collomatique/data, so
-  # `pip3 install --user <package>` inside the sandbox lands there and survives
-  # updates of the application.
+  # directory ~/.var/app/fr.collomatique.Collomatique/data, so they land there
+  # and survive updates of the application. Installing one takes a shell with
+  # the two things the application itself deliberately does without, pip and
+  # network, neither of which it keeps afterwards:
+  #
+  #     flatpak run --devel --share=network --command=sh fr.collomatique.Collomatique
+  #     pip3 install --user <package>
+  #
   - --env=PYTHONPATH=/app/lib/python3.13/site-packages
 
 # Build leftovers of the solver stack. The Rust binary is already linked
