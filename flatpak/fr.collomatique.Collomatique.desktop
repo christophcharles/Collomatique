@@ -2,8 +2,9 @@
 Type=Application
 Name=Collomatique
 Comment=Colloscope planning for French CPGE classes
-Exec=collomatique-gtk4
+Exec=collomatique-gtk4 %f
 Icon=fr.collomatique.Collomatique
 Terminal=false
 Categories=Office;Education;
+MimeType=application/x-collomatique;
 StartupNotify=true

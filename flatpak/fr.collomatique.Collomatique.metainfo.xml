@@ -26,6 +26,9 @@
     <name>Christoph Charles</name>
   </developer>
   <launchable type="desktop-id">fr.collomatique.Collomatique.desktop</launchable>
+  <provides>
+    <mediatype>application/x-collomatique</mediatype>
+  </provides>
   <content_rating type="oars-1.1"/>
   <url type="homepage">https://github.com/christophcharles/Collomatique</url>
 </component>

@@ -129,6 +129,10 @@ modules:
       - install -Dm755 target/release/collomatique-gtk4 ${FLATPAK_DEST}/bin/collomatique-gtk4
       - install -Dm644 flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - install -Dm644 flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
+      # Registers *.collomatique with the desktop. The %f in the desktop file
+      # is what makes flatpak export the double-clicked file through the
+      # document portal, so this needs no filesystem permission.
+      - install -Dm644 flatpak/${FLATPAK_ID}.mime.xml ${FLATPAK_DEST}/share/mime/packages/${FLATPAK_ID}.xml
       # The icon sizes an icon theme expects are committed next to the master
       # png rather than scaled here: gdk-pixbuf now decodes through glycin,
       # which re-spawns each loader through flatpak-spawn, and there is nothing
