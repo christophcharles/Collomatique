@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>fr.collomatique.Collomatique</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Collomatique</name>
+  <summary>Colloscope planning for French CPGE classes</summary>
+  <description>
+    <p>
+      Collomatique builds colloscopes: the schedules of oral examinations of a
+      French CPGE class. You describe the class — its subjects, its time slots,
+      its student groups, and the rules the schedule has to follow — and
+      Collomatique computes a colloscope that respects them. A colloscope can
+      also be edited by hand at any point.
+    </p>
+    <p>
+      The schedule is computed by an exact integer programming solver, so a
+      rule that can be stated is a rule that is honored: periodicity of each
+      subject, incompatible time slots, group sizes, students left out of a
+      group. Students can be imported from a Pronote CSV export, colloscopes
+      exported to xlsx as a full table or as one sheet per group, and
+      repetitive work automated with Python scripts.
+    </p>
+  </description>
+  <developer id="fr.collomatique">
+    <name>Christoph Charles</name>
+  </developer>
+  <launchable type="desktop-id">fr.collomatique.Collomatique.desktop</launchable>
+  <content_rating type="oars-1.1"/>
+  <url type="homepage">https://github.com/christophcharles/Collomatique</url>
+</component>

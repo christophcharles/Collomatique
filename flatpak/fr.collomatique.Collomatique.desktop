@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Collomatique
+Comment=Colloscope planning for French CPGE classes
+Exec=collomatique-gtk4
+Icon=fr.collomatique.Collomatique
+Terminal=false
+Categories=Office;Education;
+StartupNotify=true
