@@ -19,7 +19,7 @@ staged() { git diff --cached --name-only | grep -qx "$1"; }
 # The version is written out by hand in two places. Read them as the commit
 # would contain them, not as the working tree happens to have them, and refuse
 # a commit that would leave them disagreeing. Cargo.lock repeats the version
-# once per workspace member, but cargo writes those; nothing in flatpak/
+# once per workspace member, but cargo writes those; nothing in pkgs/flatpak/
 # declares a version at all, build.sh takes it from Cargo.toml.
 staged_content() { git show ":$1" 2>/dev/null || true; }
 
@@ -52,7 +52,7 @@ if staged Cargo.lock && ! staged collomatique.nix; then
     exit 1
 fi
 
-# flatpak/cargo-sources.json is different: it is derived from the crates.io
+# pkgs/flatpak/cargo-sources.json is different: it is derived from the crates.io
 # packages of Cargo.lock and from nothing else, so a lock change that only moves
 # dependency edges around leaves it byte-identical and there is nothing to
 # stage. Check what actually matters instead — that the two agree. Each archive
@@ -61,12 +61,12 @@ fi
 # staged: a stale json that slipped through an earlier commit is worth catching
 # too.
 lock_sums=$(staged_content Cargo.lock | sed -n 's/^checksum = "\(.*\)"$/\1/p' | sort)
-json_sums=$(staged_content flatpak/cargo-sources.json |
+json_sums=$(staged_content pkgs/flatpak/cargo-sources.json |
             sed -n 's/.*"sha256": "\(.*\)".*/\1/p' | sort)
 
 if [ "$lock_sums" != "$json_sums" ]; then
-    echo "pre-commit: flatpak/cargo-sources.json does not match Cargo.lock." >&2
-    echo "  Run ./flatpak/generate-cargo-sources.sh and stage the result." >&2
+    echo "pre-commit: pkgs/flatpak/cargo-sources.json does not match Cargo.lock." >&2
+    echo "  Run ./pkgs/flatpak/generate-cargo-sources.sh and stage the result." >&2
     exit 1
 fi
 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regenerate flatpak/cargo-sources.json from Cargo.lock.
+# Regenerate pkgs/flatpak/cargo-sources.json from Cargo.lock.
 #
 # The flatpak build sandbox has no network, so every crate cargo will need must
 # be declared in the manifest beforehand. cargo-sources.json is that list, and
@@ -17,11 +17,11 @@
 set -eu
 
 script=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-cd "$(dirname "$script")/.."
+cd "$(dirname "$script")/../.."
 
 if python3 -c 'import aiohttp, tomlkit' 2>/dev/null; then
-    python3 flatpak/flatpak-cargo-generator.py Cargo.lock -o flatpak/cargo-sources.json
-    echo "wrote flatpak/cargo-sources.json"
+    python3 pkgs/flatpak/flatpak-cargo-generator.py Cargo.lock -o pkgs/flatpak/cargo-sources.json
+    echo "wrote pkgs/flatpak/cargo-sources.json"
     exit 0
 fi
 

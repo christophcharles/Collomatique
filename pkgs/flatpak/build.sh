@@ -18,7 +18,7 @@
 set -eu
 
 script=$(cd "$(dirname "$0")" && pwd)/$(basename "$0")
-cd "$(dirname "$script")/.."
+cd "$(dirname "$script")/../.."
 
 out=${COLLOMATIQUE_FLATPAK_OUT:-${1:-${TMPDIR:-/tmp}/collomatique-flatpak}}
 export COLLOMATIQUE_FLATPAK_OUT=$out
@@ -78,7 +78,7 @@ flatpak-builder \
     --state-dir="$out/state" \
     --repo="$out/repo" \
     "$out/build" \
-    "flatpak/$app_id.yml"
+    "pkgs/flatpak/$app_id.yml"
 
 # The bundle is one app taken out of the repository just written. `master` is
 # the branch flatpak-builder exports to when the manifest names none.
