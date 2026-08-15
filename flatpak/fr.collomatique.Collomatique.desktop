@@ -2,6 +2,7 @@
 Type=Application
 Name=Collomatique
 Comment=Colloscope planning for French CPGE classes
+Comment[fr]=Création de colloscopes pour les classes de CPGE
 Exec=collomatique-gtk4 %f
 Icon=fr.collomatique.Collomatique
 Terminal=false

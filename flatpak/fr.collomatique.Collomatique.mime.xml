@@ -2,6 +2,7 @@
 <mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
   <mime-type type="application/x-collomatique">
     <comment>Collomatique colloscope</comment>
+    <comment xml:lang="fr">Colloscope Collomatique</comment>
     <!-- A colloscope file is JSON: a header naming the file type and the
          version that wrote it, then the entries. Saying so lets anything that
          handles JSON still recognise one. -->
