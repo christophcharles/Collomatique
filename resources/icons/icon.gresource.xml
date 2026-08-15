@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <gresources>
-  <gresource prefix="/fr/collomatique/gtk4/icons">
+  <gresource prefix="/fr/collomatique/Collomatique/icons">
     <file>collomatique.png</file>
   </gresource>
 </gresources>

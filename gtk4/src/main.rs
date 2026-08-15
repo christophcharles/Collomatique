@@ -64,7 +64,7 @@ fn main() -> Result<(), anyhow::Error> {
         .set(WORKER_THREAD_COUNT)
         .expect("RELM_THREADS should not have been set before");
 
-    let app = RelmApp::new("fr.collomatique.gtk4").with_args(gtk_args);
+    let app = RelmApp::new("fr.collomatique.Collomatique").with_args(gtk_args);
     app.allow_multiple_instances(true);
     app.run::<AppModel>(payload);
 

@@ -1,0 +1,157 @@
+# Flatpak manifest for Collomatique.
+#
+#     flatpak-builder --user --install --force-clean \
+#         --state-dir=/tmp/collomatique-flatpak/state \
+#         /tmp/collomatique-flatpak/build \
+#         flatpak/fr.collomatique.Collomatique.yml
+#
+# The state and build directories are kept outside the repository on purpose:
+# the `collomatique` module below copies the whole working tree into the build
+# sandbox, so anything left lying around inside it gets copied too.
+app-id: fr.collomatique.Collomatique
+runtime: org.gnome.Platform
+runtime-version: '50'
+sdk: org.gnome.Sdk
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.rust-stable
+command: collomatique-gtk4
+
+# No filesystem permission is granted: every file the user opens or saves goes
+# through the XDG document portal, which hands the sandbox that one file. The
+# gtk4 UI asks for files with rfd, built with the xdg-portal backend only.
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  # Where the embedded Python finds the packages shipped below. Extra packages
+  # a user installs themselves need nothing here: the runtime already points
+  # PYTHONUSERBASE at /var/data/python, the sandbox name of the private data
+  # directory ~/.var/app/fr.collomatique.Collomatique/data, so they land there
+  # and survive updates of the application. Installing one takes a shell with
+  # the two things the application itself deliberately does without, pip and
+  # network, neither of which it keeps afterwards:
+  #
+  #     flatpak run --devel --share=network --command=sh fr.collomatique.Collomatique
+  #     pip3 install --user <package>
+  #
+  - --env=PYTHONPATH=/app/lib/python3.13/site-packages
+
+# Build leftovers of the solver stack. The Rust binary is already linked
+# against it by the time this runs.
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/coin
+  - /share/doc
+  - /share/man
+  - '*.a'
+  - '*.la'
+
+modules:
+  # The COIN-OR solver stack, in dependency order: CoinUtils, Osi, Clp, Cgl,
+  # then Cbc. Versions and configure flags mirror nixpkgs, which is what
+  # Collomatique is built against outside the flatpak; `-C` is autoconf's
+  # --config-cache. Each module installs a pkg-config file into
+  # /app/lib/pkgconfig, and that is the whole interface: collo-cbc/build.rs
+  # probes for `cbc` and needs nothing else.
+  - name: coinutils
+    buildsystem: autotools
+    config-opts:
+      - -C
+    sources:
+      # nixpkgs builds 2.11.10 with a patch dropping the `register` storage
+      # class specifier, which C++17 removed and gcc refuses. That fix is in
+      # every release from 2.11.11 on, so we take a release instead of
+      # carrying the patch.
+      - type: archive
+        url: https://github.com/coin-or/CoinUtils/archive/refs/tags/releases/2.11.13.tar.gz
+        sha256: ddfea48e10209215748bc9f90a8c04abbb912b662c1aefaf280018d0a181ef79
+
+  - name: osi
+    buildsystem: autotools
+    config-opts:
+      - -C
+    sources:
+      - type: archive
+        url: https://github.com/coin-or/Osi/archive/refs/tags/releases/0.108.11.tar.gz
+        sha256: 1063b6a057e80222e2ede3ef0c73c0c54697e0fee1d913e2bef530310c13a670
+
+  - name: clp
+    buildsystem: autotools
+    config-opts:
+      - -C
+    cleanup:
+      - /bin
+    sources:
+      - type: archive
+        url: https://github.com/coin-or/Clp/archive/refs/tags/releases/1.17.10.tar.gz
+        sha256: 0d79ece896cdaa4a3855c37f1c28e6c26285f74d45f635046ca0b6d68a509885
+
+  - name: cgl
+    buildsystem: autotools
+    config-opts:
+      - -C
+    sources:
+      - type: archive
+        url: https://github.com/coin-or/Cgl/archive/refs/tags/releases/0.60.10.tar.gz
+        sha256: 41b7ac9402db883d9c487eb7101e59eb513cefd726e6e7a669dc94664d9385e6
+
+  - name: cbc
+    buildsystem: autotools
+    config-opts:
+      - -C
+    cleanup:
+      - /bin
+    sources:
+      - type: archive
+        url: https://github.com/coin-or/Cbc/archive/refs/tags/releases/2.10.12.tar.gz
+        sha256: 9ed71e4b61668462fc3794c102e26b4bb01a047efbbbcbd69ae7bde1f04f46a8
+
+  # XlsxWriter, for user scripts that write spreadsheets. Pure Python, so the
+  # wheel is installed as it is.
+  - name: python3-xlsxwriter
+    buildsystem: simple
+    build-commands:
+      - pip3 install --no-index --no-deps --prefix=${FLATPAK_DEST} xlsxwriter-3.2.9-py3-none-any.whl
+    sources:
+      - type: file
+        url: https://files.pythonhosted.org/packages/3a/0c/3662f4a66880196a590b202f0db82d919dd2f89e99a27fadef91c4a33d41/xlsxwriter-3.2.9-py3-none-any.whl
+        sha256: 9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3
+
+  - name: collomatique
+    buildsystem: simple
+    build-options:
+      append-path: /usr/lib/sdk/rust-stable/bin
+      env:
+        # Where cargo-sources.json puts the vendored crates, and the promise
+        # that nothing else will be fetched: the build sandbox has no network.
+        CARGO_HOME: /run/build/collomatique/cargo
+        CARGO_NET_OFFLINE: 'true'
+    build-commands:
+      - cargo --offline fetch --manifest-path Cargo.toml
+      - cargo build --offline --release -p collomatique-gtk4
+      - install -Dm755 target/release/collomatique-gtk4 ${FLATPAK_DEST}/bin/collomatique-gtk4
+      - install -Dm644 flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
+      - install -Dm644 flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
+      # Registers *.collomatique with the desktop. The %f in the desktop file
+      # is what makes flatpak export the double-clicked file through the
+      # document portal, so this needs no filesystem permission.
+      - install -Dm644 flatpak/${FLATPAK_ID}.mime.xml ${FLATPAK_DEST}/share/mime/packages/${FLATPAK_ID}.xml
+      # The icon sizes an icon theme expects are committed next to the master
+      # png rather than scaled here: gdk-pixbuf now decodes through glycin,
+      # which re-spawns each loader through flatpak-spawn, and there is nothing
+      # to spawn through inside a build sandbox.
+      - install -Dm644 resources/icons/collomatique-128.png ${FLATPAK_DEST}/share/icons/hicolor/128x128/apps/${FLATPAK_ID}.png
+      - install -Dm644 resources/icons/collomatique-256.png ${FLATPAK_DEST}/share/icons/hicolor/256x256/apps/${FLATPAK_ID}.png
+      - install -Dm644 resources/icons/collomatique-512.png ${FLATPAK_DEST}/share/icons/hicolor/512x512/apps/${FLATPAK_ID}.png
+    sources:
+      - type: dir
+        path: ..
+        skip:
+          - .flatpak-builder
+          - .git
+          - target
+      # Every crate of Cargo.lock, pre-declared so cargo never needs the
+      # network. Regenerate with flatpak/generate-cargo-sources.sh.
+      - cargo-sources.json
