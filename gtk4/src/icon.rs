@@ -9,7 +9,7 @@ use relm4::gtk;
 
 pub const ICON_NAME: &str = "collomatique";
 
-const ICON_RESOURCE_PATH: &str = "/fr/collomatique/gtk4/icons";
+const ICON_RESOURCE_PATH: &str = "/fr/collomatique/Collomatique/icons";
 
 pub fn register() -> Result<(), gtk::glib::Error> {
     gtk::gio::resources_register_include!("icon.gresource")?;
