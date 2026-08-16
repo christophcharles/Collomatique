@@ -168,11 +168,29 @@ function Get-MsvcPath {
     return $null
 }
 
+# Install-Package reports through this rather than by returning, because it must
+# call winget with no pipeline and no redirection at all: a native command's own
+# output would otherwise join the function's return value.
+#
+# The pipeline is what has to go. `winget install | Out-Host` was seen to sit
+# there for good after winget had printed "Successfully installed" and exited,
+# with no winget process left; a pipeline ends when every handle on its input is
+# closed, and the Visual Studio installer leaves processes behind which had
+# inherited one. Called bare, winget writes to the console directly and there is
+# no pipe to wait on.
+$script:InstallOk = $false
+
 function Install-Package {
     param([hashtable]$Package)
 
+    $script:InstallOk = $false
+
     $id   = $Package.Id
     $name = $Package.Name
+
+    # Announced before the query, not after: the query is silent and can take a
+    # while, so without this a slow one is indistinguishable from a hang.
+    Write-Step "checking $name"
 
     # A package can be registered with winget and still not be usable -- an
     # interrupted Visual Studio install leaves exactly that. Where an entry
@@ -185,7 +203,8 @@ function Install-Package {
                 Write-Note "to change its components, re-run winget by hand:"
                 Write-Note "  winget install --exact --id $id --source winget $($Package.Extra -join ' ')"
             }
-            return $true
+            $script:InstallOk = $true
+            return
         }
         Write-Step "$name is registered but incomplete, installing it again"
     }
@@ -198,18 +217,15 @@ function Install-Package {
     )
     if ($Package.ContainsKey('Extra')) { $wingetArgs += $Package.Extra }
 
-    # Out-Host, not a bare call: inside a function a native command's stdout
-    # joins the return value, and the caller would then test the truth of an
-    # array of winget's chatter instead of the $false below.
-    & winget @wingetArgs | Out-Host
+    & winget @wingetArgs
     if ($LASTEXITCODE -ne 0) {
         Write-Fail "winget failed to install $name (exit code $LASTEXITCODE)."
         Write-Note "if it says no package matched, the id '$id' is wrong or gone;"
         Write-Note "find the current one with: winget search $name"
-        return $false
+        return
     }
 
-    return $true
+    $script:InstallOk = $true
 }
 
 # ---------------------------------------------------------------------------
@@ -244,7 +260,8 @@ Write-Step "asking winget what is already installed"
 
 $failed = @()
 foreach ($package in $Packages) {
-    if (-not (Install-Package -Package $package)) { $failed += $package.Name }
+    Install-Package -Package $package
+    if (-not $script:InstallOk) { $failed += $package.Name }
     Write-Host
 }
 
