@@ -12,7 +12,7 @@ set(VCPKG_LIBRARY_LINKAGE dynamic)
 # rustc links the release CRT whatever the profile.
 set(VCPKG_BUILD_TYPE release)
 
-# The COIN-OR libraries, and only those, are built static.
+# The COIN-OR libraries and the linear algebra they sit on are built static.
 #
 # collo-cbc/cpp/collo_cbc.cpp declares
 #
@@ -25,10 +25,30 @@ set(VCPKG_BUILD_TYPE release)
 # annotating the declaration __declspec(dllimport) under _MSC_VER, would tie
 # that source file to this one with nothing checking that they agree.
 #
-# The rest of CBC's tree -- zlib, bzip2, lapack -- stays dynamic. No data
-# symbols are read from those.
+# zlib and bzip2 stay dynamic. No data symbols are read from those.
 #
-# coinutils carries no coin-or- prefix, hence the second test.
-if(PORT MATCHES "^coin-or-" OR PORT STREQUAL "coinutils")
+# The linear algebra ports are in the list for a different reason, and it is not
+# about symbols at all. vcpkg's `lapack` is a metapackage that picks its provider
+# from a platform expression:
+#
+#     clapack           when  ... (uwp | (arm & windows) | (static & windows & !mingw))
+#     lapack-reference  when  ... !uwp & !(arm & windows) & !(static & windows & !mingw)
+#
+# where `static` means VCPKG_LIBRARY_LINKAGE. Left dynamic, that resolves to
+# lapack-reference, which on Windows pulls in vcpkg-gfortran and fails to build
+# (microsoft/vcpkg#49688, open and stale since January). Built static it resolves
+# to clapack, the f2c translation, whose own dependency openblas needs no Fortran
+# compiler. So this does not repair lapack-reference; it takes it out of the
+# graph. clapack, blas and openblas follow coinutils rather than being linked
+# against it as DLLs, which also keeps CBC and its numerics one static blob with
+# nothing extra to ship.
+#
+# coinutils carries no coin-or- prefix, hence the explicit tests.
+if(PORT MATCHES "^coin-or-"     OR
+   PORT STREQUAL "coinutils"    OR
+   PORT STREQUAL "lapack"       OR
+   PORT STREQUAL "clapack"      OR
+   PORT STREQUAL "blas"         OR
+   PORT STREQUAL "openblas")
     set(VCPKG_LIBRARY_LINKAGE static)
 endif()
