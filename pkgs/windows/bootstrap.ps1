@@ -97,8 +97,12 @@ $Packages = @(
     @{
         # The unsuffixed JRSoftware.InnoSetup id is the older 6.x line. The
         # suffix is the version, so a move to 8 later is an edit here.
-        Id   = 'JRSoftware.InnoSetup.7'
-        Name = 'Inno Setup 7'
+        #
+        # --scope machine because winget's default put it under LOCALAPPDATA,
+        # and a build tool belongs on the machine, not in one account.
+        Id    = 'JRSoftware.InnoSetup.7'
+        Name  = 'Inno Setup 7'
+        Extra = @('--scope', 'machine')
     }
 )
 
@@ -200,7 +204,7 @@ function Install-Package {
         if ((-not $Package.ContainsKey('Verify')) -or (& $Package.Verify)) {
             Write-Step "$name is already installed, skipping"
             if ($Package.ContainsKey('Extra')) {
-                Write-Note "to change its components, re-run winget by hand:"
+                Write-Note "to change how it was installed, re-run winget by hand:"
                 Write-Note "  winget install --exact --id $id --source winget $($Package.Extra -join ' ')"
             }
             $script:InstallOk = $true
@@ -410,8 +414,9 @@ foreach ($probe in @(
 # it on PATH, so the build script will have to name this path; find it here
 # rather than discover it is elsewhere at the end of a build.
 #
-# Which of the two Program Files directories Inno Setup 7 installs into is not
-# known here, so both are searched and the one found is printed.
+# Only the machine-wide locations are searched, because the install above asks
+# for --scope machine. A copy under LOCALAPPDATA is a per-user install that this
+# script did not ask for, and finding it would hide that the scope was ignored.
 $isccCandidates = @(
     (Join-Path $env:ProgramFiles        'Inno Setup 7\ISCC.exe')
     (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
