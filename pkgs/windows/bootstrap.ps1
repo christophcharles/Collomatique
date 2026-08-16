@@ -136,6 +136,11 @@ function Update-SessionPath {
 # not. Which non-zero code means "nothing matched" has moved between winget
 # versions, so only the zero is trusted here.
 #
+# --accept-source-agreements matters even for a query: on a machine where they
+# have not been accepted, winget asks, and this call throws its output away, so
+# the question would be invisible and the script would wait for an answer to a
+# prompt nobody can see.
+#
 # stderr goes to $null rather than being merged with 2>&1: merging turns a
 # native command's stderr into error records, and $ErrorActionPreference =
 # 'Stop' then throws on them, which would fail the check for a package that is
@@ -143,7 +148,7 @@ function Update-SessionPath {
 function Test-PackageInstalled {
     param([string]$Id)
 
-    $null = & winget list --exact --id $Id 2>$null
+    $null = & winget list --exact --id $Id --accept-source-agreements 2>$null
     return ($LASTEXITCODE -eq 0)
 }
 
@@ -211,6 +216,10 @@ function Install-Package {
 # Checks before touching anything
 # ---------------------------------------------------------------------------
 
+# Printed before anything else runs, so that silence afterwards means a command
+# is stuck rather than that the script never started.
+Write-Step "Collomatique Windows dev tools"
+
 if (-not (Get-Command winget -ErrorAction SilentlyContinue)) {
     Write-Fail "winget is not available."
     Write-Note "it ships with Windows 11 as part of App Installer; install or"
@@ -230,6 +239,8 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 # ---------------------------------------------------------------------------
 # Install
 # ---------------------------------------------------------------------------
+
+Write-Step "asking winget what is already installed"
 
 $failed = @()
 foreach ($package in $Packages) {
