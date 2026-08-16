@@ -38,10 +38,16 @@ choice trades convenience today against that, maintainability wins.
   a matching stdlib must be present. Nothing in the repo sets
   `PYTHONHOME`/`PYTHONPATH` today.
 - **User Python packages matter.** The flatpak documents how teachers install
-  their own packages with pip. On Windows this means bundling the **official
-  python.org interpreter**: PyPI binary wheels (`win_amd64`) target it.
-  MSYS2's mingw Python is a patched build with its own platform tag and cannot
-  install those wheels — that is the known caveat of plan C below.
+  their own packages with pip, and PyPI binary wheels (`win_amd64`) target a
+  CPython built with MSVC. MSYS2's mingw Python is a patched build with its own
+  platform tag and cannot install those wheels — that is the known caveat of
+  plan C below.
+- **Python is a build dependency, not a separate tool.** The app links
+  `libpython`, so it comes from vcpkg alongside GTK and CBC. That makes the
+  interpreter linked and the interpreter shipped the same one, which removes
+  the whole question of matching a bundled runtime to whatever `PYO3_PYTHON`
+  found. What it does not remove is the check in step 3: a vcpkg `python3`
+  exists to be linked against, and it has to be shippable to a teacher too.
 - **Already Windows-aware**: `subprocesses/src/process.rs` has a real
   `#[cfg(windows)]` path (ConPTY through `portable-pty`, kill-on-close Job
   Objects through `windows-sys`); the worker re-exec resolves its own path with
@@ -62,8 +68,8 @@ choice trades convenience today against that, maintainability wins.
 
 Every project in the stack has its own blessed way of existing on Windows, so
 instead of one bet the roadmap is a ladder. Try plan A; if it fails in a way
-that is not worth fighting, drop to the next plan. Python comes from
-python.org in plans A and B; only plan C compromises on that.
+that is not worth fighting, drop to the next plan. Python comes from vcpkg in
+plans A and B; only plan C compromises on the MSVC build wheels need.
 
 **Plan A — vcpkg + MSVC for everything.** VS Build Tools (MSVC compiler +
 Windows SDK; no Visual Studio IDE), rustup's default
@@ -80,7 +86,7 @@ gtk-rs book's recommended Windows route, so the exact combination the gtk-rs
 developers test), CBC through **coinbrew** (COIN-OR's own build tool; on
 Windows it runs from an MSYS2 or Cygwin shell with `cl` on PATH and
 `--enable-msvc`, so MSYS2 appears here purely as a build shell while the
-output stays MSVC), Python from python.org, Rust msvc. Alternative for the
+output stays MSVC), Python from vcpkg, Rust msvc. Alternative for the
 CBC piece if coinbrew fights us: vcpkg's `coin-or-cbc` port, as in plan A.
 More moving parts than plan A (several build systems), but maximum upstream
 blessing per component. Pin the gvsbuild version (and the coinbrew/CBC
@@ -95,7 +101,7 @@ lose PyPI binary wheels — or we attempt the hybrid (mingw-built app linking
 the official `python3XX.dll` through the C ABI), which is the least-documented
 configuration of the three.
 
-Installer, independent of the ladder: **Inno Setup 6**. It produces exactly
+Installer, independent of the ladder: **Inno Setup 7**. It produces exactly
 the wanted UX (one setup.exe, wizard, Start-menu entry, uninstaller,
 registry-based file association) from a declarative `.iss` script compiled on
 the command line by `ISCC.exe`. MSIX was considered and does not fit the
@@ -156,38 +162,85 @@ cargoHash covers the whole lock, and it did change.) `0f27f08a` fixes a storage
 test that had been red since the version bump in `a66e6b9d`, unrelated to any of
 this but in the way of item 5.
 
-### Step 2 — VM bootstrap (manual, once)
+### Step 2 — VM bootstrap
 
-Install in the Windows 11 VM: VS Build Tools 2022+ (workload "Desktop
-development with C++", which includes the Windows SDK), rustup (default msvc
-toolchain), git, Python 3.x from python.org, Inno Setup 6, and a vcpkg clone
-(`bootstrap-vcpkg.bat`).
+`pkgs/windows/bootstrap.ps1`, run elevated in the Windows 11 VM. Five tools and
+no more: VS Build Tools 2022, git, vcpkg, rustup, Inno Setup 7. Written as a
+script rather than a list of manual installs because the VM is disposable — the
+point is to roll back to a clean snapshot, run one command, and be back at a
+build environment. Take a snapshot afterwards: that snapshot, not the script, is
+the reproducible artifact.
 
-### Step 3 — Plan A spike: vcpkg GTK stack + gtk4-rs wiring
+**Done**: `d935b4c0`, then `2b7ff721`, `f1f81dd7`, `bb2bd6a9` and `624420a3`,
+each fixing something the previous run surfaced. Everything installs and is
+found. The last full run was against a machine that already had Build Tools; a
+run from a blank snapshot is still owed.
 
-Prove the risky part on a hello-world before touching the workspace.
+Three things the VM taught, all recorded in the script:
 
-1. `vcpkg install gtk libadwaita` (dynamic triplet `x64-windows`) and
-   `vcpkg install coin-or-cbc:x64-windows-static-md` (static libs, dynamic
-   CRT — matches Rust's default `/MD`).
-2. Build a minimal gtk4-rs + libadwaita hello-world against it. The `-sys`
-   crates go through `system-deps`/pkg-config: point `PKG_CONFIG` at vcpkg's
-   pkgconf and `PKG_CONFIG_PATH` at `installed/x64-windows/lib/pkgconfig`.
-   Record every env var that turns out to be needed; they become the setup
-   section of the build script.
-3. Check `glib-compile-resources` runs (vcpkg puts glib tools under
-   `installed/<triplet>/tools/glib/`).
-4. Gate: hello-world adw window renders → stay on plan A. Not workable in
-   reasonable effort → redo this step under plan B (gvsbuild for the GTK
-   stack, vcpkg kept for CBC), then plan C.
+- winget's `--override` **replaces** the switches it would otherwise pass to an
+  installer. The Build Tools line in the Rust documentation contains only
+  `--add` components, so the Visual Studio bootstrapper ran interactively and,
+  with no `--wait`, returned as soon as it had handed off — winget reported
+  success while the install was still going. `--passive --wait --norestart` at
+  the front of the override fixes both.
+- Piping winget into PowerShell (`| Out-Host`) hangs the script after a Build
+  Tools install. A pipeline ends when every handle on its input closes, not when
+  the writing process exits, and the Visual Studio installer leaves processes
+  behind holding that handle. winget is called bare now, which also gives back
+  its real progress display.
+- winget installs Inno Setup per-user by default, under `%LOCALAPPDATA%`.
+  `--scope machine` puts it in `Program Files`, where a build tool belongs.
 
-### Step 4 — First compile of the workspace
+Python is deliberately not on the list. See the next step.
 
-`cargo build --release -p collomatique-gtk4` in the VM, with the step 3
-environment plus `PYO3_PYTHON` pointing at the python.org interpreter.
-Verify the static CBC link line comes through pkg-config's `--static`
+### Step 3 — `build.ps1`, first part: the vcpkg dependencies
+
+The build script is grown in pieces, one per step, rather than written at the
+end: vcpkg here, the cargo build in step 4, bundling in step 7, the installer in
+step 8. Each piece is exercised on its own before the next is added.
+
+There is no hello-world spike. The earlier plan proved the GTK-through-vcpkg
+wiring on a throwaway project first; that is a second build to set up and keep
+working, and the workspace build reaches the same answer.
+
+1. A `vcpkg.json` manifest committed in `pkgs/windows/`, naming `gtk`,
+   `libadwaita`, `coin-or-cbc` and `python3`, with a `builtin-baseline`. That
+   baseline is the real version pin for the whole C/C++ side, including Python;
+   bumping it is a deliberate act, like bumping the flatpak runtime.
+2. `build.ps1` runs `vcpkg install` from that manifest. First build of the GTK
+   stack from source is long — hours, not minutes.
+3. Two things to settle by doing, because neither is known yet:
+   - **Triplets.** GTK and libadwaita want the dynamic `x64-windows`; CBC wants
+     static libs with the dynamic CRT (`x64-windows-static-md`) so that the
+     `cbcPreProcessPointer` data symbol resolves under MSVC. How those coexist
+     in one manifest run is an open question.
+   - **Is vcpkg's `python3` shippable?** It exists to be linked against, so it
+     may not carry a complete stdlib or `pip`. Teachers need `pip install
+     --user` to work. Check `python.exe -m pip --version` and the `Lib/` tree
+     once it is built. If it falls short, that is the moment to reconsider — and
+     only then.
+
+Acceptance: the libraries and their `.pc` files exist under
+`installed\<triplet>\`, and `glib-compile-resources` runs from
+`installed\<triplet>\tools\glib\`.
+
+### Step 4 — `build.ps1`, second part: first compile of the workspace
+
+`cargo build --release -p collomatique-gtk4`, driven by the script.
+
+The `-sys` crates find GTK through `system-deps`/pkg-config, so the script
+points `PKG_CONFIG` at vcpkg's pkgconf and `PKG_CONFIG_PATH` at
+`installed\<triplet>\lib\pkgconfig`, and `PYO3_PYTHON` at vcpkg's interpreter —
+the same one that will be shipped, which is the whole reason Python comes from
+vcpkg. Verify the static CBC link line arrives through pkg-config's `--static`
 metadata. Fix whatever the compiler surfaces (expected to be little, after
 step 1).
+
+**This is the gate for the toolchain ladder.** gtk4-rs against vcpkg-built GTK
+is the least-travelled part of plan A. If it works, plan A stands. If it does
+not, and not for a reason worth fighting, redo steps 3 and 4 under plan B
+(gvsbuild for the GTK stack, vcpkg kept for CBC and Python), then plan C.
 
 ### Step 5 — First run: native-stack verification
 
@@ -234,30 +287,28 @@ Collomatique/
   share/locale/                  # GTK/adw French translations
 ```
 
-Python bundling: start from the **python.org embeddable package**
-(`python-3.X.Y-embed-amd64.zip`, made exactly for app embedding). Ship it
-with a `python3XX._pth` under our control that adds a bundled `site-packages`
-(xlsxwriter, version-pinned like the flatpak) and enables the user site
-directory (`%APPDATA%\Python\...`) so `pip install --user` works for
-teachers. If the `._pth` mechanism fights user-site enablement, fall back to
-shipping the full python.org layout instead — bigger, but standard. The
-bundled minor version is whatever `PYO3_PYTHON` linked (pyo3 is not abi3):
-the packaging script must detect it, never hardcode `3.12`.
+Python bundling: take the interpreter and stdlib out of the vcpkg tree, the
+same build the exe was linked against, so there is no version to detect and
+nothing to match. Ship `xlsxwriter` with it, version-pinned like the flatpak,
+and make sure `pip install --user` lands somewhere under `%APPDATA%` and
+survives an update of the application — the flatpak's equivalent is
+`PYTHONUSERBASE` pointing into the app's private data directory. How the
+paths are arranged (a `python3XX._pth`, `PYTHONHOME`, or nothing at all)
+depends on what step 3 finds in the vcpkg port, so it is decided there.
 
 Acceptance for this step: the staged tree runs on a Windows machine without
 vcpkg, Build Tools or Python installed.
 
-### Step 8 — Installer + one-command build
+### Step 8 — Installer, and `build.ps1` complete
 
 Home: `pkgs/windows/`, next to `pkgs/flatpak/` (the migration happened in
 step 1), so all OS packaging lives under `pkgs/`.
 
-- `build.ps1` — plain PowerShell, the whole build in one command:
-  check the step 2 tools are present; `vcpkg install` from a committed
-  manifest; set the env vars recorded in step 3; `cargo build --release -p
-  collomatique-gtk4`; stage the step 7 tree; read the version from the
-  workspace `Cargo.toml` (same trick as `pkgs/flatpak/build.sh`); run `ISCC.exe`
-  on the `.iss` script to produce `Collomatique-Setup-<version>.exe`.
+- `build.ps1` — by this point it already does steps 3, 4 and 7. What is added
+  here: read the version from the workspace `Cargo.toml` (same trick as
+  `pkgs/flatpak/build.sh`) and run `ISCC.exe` on the `.iss` script to produce
+  `Collomatique-Setup-<version>.exe`. The whole build is then one command.
+  `ISCC.exe` is not on PATH; `bootstrap.ps1` reports where it is.
 - `collomatique.iss` — Inno Setup script: `PrivilegesRequired=lowest` by
   default (per-user install, no UAC, association under HKCU) with an
   all-users option; `[Registry]` entries `Software\Classes\.collomatique` →
@@ -282,11 +333,21 @@ That is the definition of done.
 
 - Rust API floors: already pinned by the crates (`gtk4` 0.9/`v4_10`,
   `libadwaita` 0.7/`v1_7`).
-- C libraries: vcpkg manifest with a `builtin-baseline` (plan A/C-for-CBC);
-  gvsbuild version pin in the build script if plan B is reached.
-- Python: minor version follows whatever the build linked; the packaging
-  script detects and bundles that exact version.
+- C libraries **and Python**: the vcpkg manifest's `builtin-baseline` (plan
+  A/C-for-CBC); gvsbuild version pin in the build script if plan B is reached.
+  This is the pin that matters most, since these are the parts that actually
+  break across versions.
 - Bundled xlsxwriter: version-pinned, same as the flatpak.
+- The Windows SDK: pinned by the component name in `bootstrap.ps1`
+  (`Windows11SDK.22621`).
+- Rust itself: **deliberately not pinned**, tracking stable, the same policy as
+  the flatpak's `rust-stable`. `Cargo.lock` already pins every dependency, and
+  pinning only on Windows would create a skew between the platforms instead of
+  removing one. Pin reactively if a release ever breaks the build. Note that a
+  `rust-toolchain.toml` would not do it: rustup honours that file, the flatpak's
+  SDK extension has no rustup and would ignore it in silence.
+- MSVC and the Visual Studio installer: not pinned. Its installer always fetches
+  current and the ABI is stable.
 
 ## Out of scope for now
 
