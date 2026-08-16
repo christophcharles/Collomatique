@@ -58,7 +58,22 @@ $global:LASTEXITCODE = 0
 #
 # The SDK component carries its version, so it is a real pin: a rebuild next
 # year uses the SDK this line names, not whatever is current then.
+#
+# --override hands this whole string to the Visual Studio bootstrapper and
+# replaces the switches winget would otherwise supply itself, so the first
+# three have to be here:
+#
+#   --passive    a progress bar, and nothing to answer. --quiet would show
+#                nothing at all, and this downloads gigabytes: on a slow line
+#                that is a long time with no way to tell it apart from a hang.
+#   --wait       without it the bootstrapper returns as soon as it has started
+#                the real installer, winget reports success, and the rest of
+#                this script runs while Visual Studio is still installing.
+#   --norestart  a reboot, if one is wanted, happens when you say so.
 $BuildToolsOverride = @(
+    '--passive'
+    '--wait'
+    '--norestart'
     '--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
     '--add Microsoft.VisualStudio.Component.Windows11SDK.22621'
     '--addProductLang En-us'
@@ -66,9 +81,10 @@ $BuildToolsOverride = @(
 
 $Packages = @(
     @{
-        Id       = 'Microsoft.VisualStudio.2022.BuildTools'
-        Name     = 'Visual Studio Build Tools 2022'
-        Extra    = @('--force', '--override', $BuildToolsOverride)
+        Id     = 'Microsoft.VisualStudio.2022.BuildTools'
+        Name   = 'Visual Studio Build Tools 2022'
+        Extra  = @('--force', '--override', $BuildToolsOverride)
+        Verify = { [bool](Get-MsvcPath) }
     }
     @{
         Id   = 'Git.Git'
@@ -131,19 +147,42 @@ function Test-PackageInstalled {
     return ($LASTEXITCODE -eq 0)
 }
 
+# Where the MSVC toolset is, or $null. vswhere.exe ships with any Visual Studio
+# and is the supported way to find one. Asking for the component rather than the
+# product means an install without the C++ tools answers $null rather than
+# looking fine.
+function Get-MsvcPath {
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+    if (-not (Test-Path $vswhere)) { return $null }
+
+    $found = & $vswhere -products '*' `
+        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+        -property installationPath -latest 2>$null
+
+    if ($found) { return ($found | Select-Object -First 1) }
+    return $null
+}
+
 function Install-Package {
     param([hashtable]$Package)
 
     $id   = $Package.Id
     $name = $Package.Name
 
+    # A package can be registered with winget and still not be usable -- an
+    # interrupted Visual Studio install leaves exactly that. Where an entry
+    # carries a Verify block, it, and not winget's list, decides whether there
+    # is anything to do.
     if (Test-PackageInstalled -Id $id) {
-        Write-Step "$name is already installed, skipping"
-        if ($Package.ContainsKey('Extra')) {
-            Write-Note "to change its components, re-run winget by hand:"
-            Write-Note "  winget install --exact --id $id --source winget $($Package.Extra -join ' ')"
+        if ((-not $Package.ContainsKey('Verify')) -or (& $Package.Verify)) {
+            Write-Step "$name is already installed, skipping"
+            if ($Package.ContainsKey('Extra')) {
+                Write-Note "to change its components, re-run winget by hand:"
+                Write-Note "  winget install --exact --id $id --source winget $($Package.Extra -join ' ')"
+            }
+            return $true
         }
-        return $true
+        Write-Step "$name is registered but incomplete, installing it again"
     }
 
     Write-Step "installing $name ($id)"
@@ -199,6 +238,17 @@ foreach ($package in $Packages) {
 }
 
 Update-SessionPath
+
+# Everything below assumes the compiler exists, and winget's success for Build
+# Tools has already been seen to mean "the installer started". --wait in the
+# override should make it mean "the installer finished"; this asks the machine
+# rather than trusting that, and stops here instead of failing in rustup.
+if (-not (Get-MsvcPath)) {
+    Write-Fail "the MSVC toolset is not there, so there is no point going on."
+    Write-Note "if Visual Studio Installer is still running, let it finish and"
+    Write-Note "run this script again -- it skips what is already installed."
+    exit 1
+}
 
 # ---------------------------------------------------------------------------
 # vcpkg
@@ -295,21 +345,13 @@ Write-Step "installed versions"
 # printing its version must not abort the script the way 'Stop' would make it.
 $ErrorActionPreference = 'Continue'
 
-# cl.exe is not on PATH until vcvars64.bat has run, so Build Tools is verified
-# through vswhere instead, asking specifically for the C++ compiler component:
-# a Visual Studio that is present but has no MSVC would otherwise look fine.
-$vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-if (Test-Path $vswhere) {
-    $vsPath = & $vswhere -products '*' `
-        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-        -property installationPath -latest
-    if ($vsPath) {
-        Write-Note "MSVC toolset: $vsPath"
-    } else {
-        Write-Note "MSVC toolset: NOT FOUND (no install carries the x86.x64 C++ tools)"
-    }
+# cl.exe is not on PATH until vcvars64.bat has run, so Build Tools is reported
+# through vswhere rather than by calling the compiler.
+$msvc = Get-MsvcPath
+if ($msvc) {
+    Write-Note "MSVC toolset: $msvc"
 } else {
-    Write-Note "MSVC toolset: NOT FOUND (no vswhere.exe, so no Visual Studio at all)"
+    Write-Note "MSVC toolset: NOT FOUND"
 }
 
 # vcpkg is checked by path, not through PATH: bootstrap-vcpkg.bat leaves
