@@ -71,6 +71,13 @@ instead of one bet the roadmap is a ladder. Try plan A; if it fails in a way
 that is not worth fighting, drop to the next plan. Python comes from vcpkg in
 plans A and B; only plan C compromises on the MSVC build wheels need.
 
+**Settled, in step 3: the split is A for everything except GTK, B for GTK.**
+vcpkg builds CBC, Python and pkgconf, and does it well — that half is proven by
+a real build, see step 3. The GTK stack comes from **gvsbuild**. Plan C was
+never reached. The reasoning is under plan A below; the rest of this section is
+kept because the alternatives are what we would fall back to, and because the
+next person to touch this will want to know what was already ruled out.
+
 **Plan A — vcpkg + MSVC for everything.** VS Build Tools (MSVC compiler +
 Windows SDK; no Visual Studio IDE), rustup's default
 `x86_64-pc-windows-msvc` toolchain, and vcpkg as the single C/C++ package
@@ -80,6 +87,26 @@ official Python. Known costs: vcpkg builds from source (first GTK build takes
 an hour or two in the VM, cached afterwards), and gtk4-rs against vcpkg-built
 GTK is less traveled than the gtk-rs book's recommended path — which is why
 there is a plan B.
+
+**What happened to the GTK half of plan A.** It does not work, and the reason is
+not ours to fix. vcpkg cannot build `libadwaita` for an MSVC triplet at all:
+libadwaita requires `appstream`, appstream requires `libxmlb`, and vcpkg's
+`libxmlb` port declares `"supports": "!windows | mingw"`, so vcpkg refuses the
+whole graph while still planning. That is not a vcpkg invention either —
+upstream libadwaita's `meson.build` calls `dependency('appstream')` with no
+`required: false`, so there is no switch to turn it off.
+
+Looking into it turned up the better reason to stop. gtk.org's own Windows page
+names only MSYS2 and gvsbuild and never mentions vcpkg, and a gtk-rs maintainer
+states it plainly in gtk-rs/gtk4-rs#1963: *"vcpkg's GTK is not very useful and
+misses various files. It's not recommended to be used by the GTK project."*
+A vcpkg `gtk` port exists and is kept version-current, which makes this
+impossible to see from the catalogue — worth remembering before trusting a
+vcpkg port in a stack that is Linux-first.
+
+`--allow-unsupported` would have forced the `libxmlb` refusal into an attempt,
+and was not tried. It answers the wrong question: even a successful build lands
+on a GTK its own project disowns.
 
 **Plan B — each project's blessed way.** GTK stack through **gvsbuild** (the
 gtk-rs book's recommended Windows route, so the exact combination the gtk-rs
@@ -92,6 +119,18 @@ More moving parts than plan A (several build systems), but maximum upstream
 blessing per component. Pin the gvsbuild version (and the coinbrew/CBC
 versions) in the build script so a rebuild next year uses the same recipe;
 bumping a pin is a deliberate act, like bumping the flatpak runtime.
+
+Only the gvsbuild half of this is taken. coinbrew is not: vcpkg's CBC built
+cleanly on the first working run, so the second build system would buy nothing.
+gvsbuild builds with MSVC — that is its whole purpose — and currently ships
+libadwaita 1.9.2, past the 1.7 the crates ask for. It has no `appstream` or
+`libxmlb` project of its own, so meson resolves those as source subprojects,
+which is presumably why the chain that stops vcpkg does not stop it.
+
+The cost to count honestly: gvsbuild needs MSYS2 as a build shell and a Python
+to run itself, so the five-tool list in step 2 grows. Both are genuinely tools
+rather than dependencies, so the rule that everything C/C++ comes from vcpkg is
+not what bends here — the tool count is.
 
 **Plan C — MSYS2.** Everything prebuilt as mingw binaries via pacman (gtk4,
 libadwaita, coin-or-cbc, Python), Rust windows-gnu, one `pacman -S` line and
@@ -164,9 +203,11 @@ this but in the way of item 5.
 
 ### Step 2 — VM bootstrap
 
-`pkgs/windows/bootstrap.ps1`, run elevated in the Windows 11 VM. Five tools and
-no more: VS Build Tools 2022, git, vcpkg, rustup, Inno Setup 7. Written as a
-script rather than a list of manual installs because the VM is disposable — the
+`pkgs/windows/bootstrap.ps1`, run elevated in the Windows 11 VM. Five tools:
+VS Build Tools 2022, git, vcpkg, rustup, Inno Setup 7. That list will have to
+grow when gvsbuild arrives — it needs MSYS2 as a build shell and a Python to run
+itself. Written as a script rather than a list of manual installs because the
+VM is disposable — the
 point is to roll back to a clean snapshot, run one command, and be back at a
 build environment. Take a snapshot afterwards: that snapshot, not the script, is
 the reproducible artifact.
@@ -194,53 +235,93 @@ Three things the VM taught, all recorded in the script:
 
 Python is deliberately not on the list. See the next step.
 
-### Step 3 — `build.ps1`, first part: the vcpkg dependencies
+### Step 3 — `build.ps1`, first part: the C and C++ dependencies
 
 The build script is grown in pieces, one per step, rather than written at the
-end: vcpkg here, the cargo build in step 4, bundling in step 7, the installer in
-step 8. Each piece is exercised on its own before the next is added.
+end: dependencies here, the cargo build in step 4, bundling in step 7, the
+installer in step 8. Each piece is exercised on its own before the next is
+added.
 
-There is no hello-world spike. The earlier plan proved the GTK-through-vcpkg
-wiring on a throwaway project first; that is a second build to set up and keep
-working, and the workspace build reaches the same answer.
+There is no hello-world spike. The earlier plan proved the GTK wiring on a
+throwaway project first; that is a second build to set up and keep working, and
+the workspace build reaches the same answer.
 
-1. A `vcpkg.json` manifest committed in `pkgs/windows/`, naming `gtk`,
-   `libadwaita`, `coin-or-cbc` and `python3`, with a `builtin-baseline`. That
-   baseline is the real version pin for the whole C/C++ side, including Python;
-   bumping it is a deliberate act, like bumping the flatpak runtime.
-2. `build.ps1` runs `vcpkg install` from that manifest. First build of the GTK
-   stack from source is long — hours, not minutes.
-3. Two things to settle by doing, because neither is known yet:
-   - **Triplets.** GTK and libadwaita want the dynamic `x64-windows`; CBC wants
-     static libs with the dynamic CRT (`x64-windows-static-md`) so that the
-     `cbcPreProcessPointer` data symbol resolves under MSVC. How those coexist
-     in one manifest run is an open question.
-   - **Is vcpkg's `python3` shippable?** It exists to be linked against, so it
-     may not carry a complete stdlib or `pip`. Teachers need `pip install
-     --user` to work. Check `python.exe -m pip --version` and the `Lib/` tree
-     once it is built. If it falls short, that is the moment to reconsider — and
-     only then.
+**Done for the vcpkg half**: `98d18c01`, then `8f87c147` and `910f0e8a`, each
+fixing what the previous run surfaced. `pkgs/windows/vcpkg.json` names
+`coin-or-cbc`, `python3` and `pkgconf` with a `builtin-baseline`;
+`pkgs/windows/triplets/x64-collomatique.cmake` is the triplet;
+`pkgs/windows/build.ps1` runs `vcpkg install` and reports what landed.
 
-Acceptance: the libraries and their `.pc` files exist under
-`installed\<triplet>\`, and `glib-compile-resources` runs from
-`installed\<triplet>\tools\glib\`.
+The baseline is the version pin for the whole C/C++ side, including Python.
+vcpkg resolves it by checking port files out of git history by tree hash, so the
+`ports/` directory on disk is never consulted and a stale clone fails loudly
+rather than building something else. Per-port `overrides` exist if the baseline
+alone ever proves too coarse; it has not yet.
+
+**One triplet, mixed linkage — it works.** The open question was how a static CBC
+coexists with everything else dynamic. The answer is per-port customisation
+inside one triplet file, which is a documented vcpkg feature: `VCPKG_BUILD_TYPE
+release` and dynamic linkage throughout, with `VCPKG_LIBRARY_LINKAGE static` for
+the COIN-OR ports and the linear algebra under them. The result is
+`Cbc/Cgl/Clp/Osi/CoinUtils/lapack/openblas` as `.lib` with no matching DLLs,
+beside a dynamic `python312.dll` and its import library, all in one installed
+tree. The two-triplet fallback was not needed.
+
+`lapack` has to be in that static list, for a reason that has nothing to do with
+symbols. vcpkg's `lapack` is a metapackage that picks `clapack` on
+`(static & windows & !mingw)` and `lapack-reference` otherwise, where `static`
+reads `VCPKG_LIBRARY_LINKAGE`. Left dynamic it chose `lapack-reference`, which
+pulls in `vcpkg-gfortran` and fails to build (microsoft/vcpkg#49688, open and
+stale). Static, it chooses `clapack`, whose chain is `blas` then `openblas`,
+neither needing Fortran. That is vcpkg's own escape hatch, not a workaround.
+
+**There is no `CbcSolver.lib`, and that is fine.** vcpkg folds libCbcSolver into
+`Cbc.lib`, and `cbc.pc` correctly does not name a separate one. `Cbc.lib`
+contains both `cbcPreProcessPointer` and `CbcMain1`, which is what
+`collo_cbc.cpp` needs — it includes `<CbcSolver.hpp>` and calls
+`CbcMain0`/`CbcMain1`/`CbcSolverUsefulData`. Checking this needs no developer
+prompt: COFF archives store symbol names as ASCII, so `findstr /m /c:` finds
+them.
+
+**`cbc.pc` carries the whole static chain in `Libs:`**, not in `Libs.private:`
+— `-lCbc -lCgl -lOsiClp -lClp -lOsi -lCoinUtils -lbz2 -lz -llapack -llibf2c
+-lopenblas`. So `collo-cbc/build.rs` gets the complete link line without asking
+pkg-config for static metadata. Those are Unix-style `-l` names against a
+library set that MSVC names differently (`-lz` versus `zlib.lib`); whether they
+all resolve is a step 4 problem, noted here so it is not a surprise there.
+
+**vcpkg's Python is shippable.** This was the other open question and the answer
+is yes, with one step. `pip` is not installed, but `ensurepip` is, carrying a
+bundled pip 25.0.1; after `python -m ensurepip --upgrade`, `pip install --user
+xlsxwriter` downloaded from PyPI and installed cleanly, and `ssl`, `sqlite3`,
+`zlib` and `ctypes` all import. So the bundle step runs `ensurepip` once rather
+than shipping a second interpreter. See step 7 for where `--user` puts things.
+
+**Not done: the GTK stack**, which comes from gvsbuild and is not written yet.
+Acceptance for that half is unchanged in spirit — the libraries and their `.pc`
+files exist, and `glib-compile-resources` runs — but it will be in gvsbuild's
+prefix, not vcpkg's, so step 4 has two prefixes to point pkg-config at.
 
 ### Step 4 — `build.ps1`, second part: first compile of the workspace
 
 `cargo build --release -p collomatique-gtk4`, driven by the script.
 
 The `-sys` crates find GTK through `system-deps`/pkg-config, so the script
-points `PKG_CONFIG` at vcpkg's pkgconf and `PKG_CONFIG_PATH` at
-`installed\<triplet>\lib\pkgconfig`, and `PYO3_PYTHON` at vcpkg's interpreter —
-the same one that will be shipped, which is the whole reason Python comes from
-vcpkg. Verify the static CBC link line arrives through pkg-config's `--static`
-metadata. Fix whatever the compiler surfaces (expected to be little, after
-step 1).
+points `PKG_CONFIG` at vcpkg's pkgconf and `PKG_CONFIG_PATH` at **two**
+directories — vcpkg's `<install-root>\<triplet>\lib\pkgconfig` for CBC, and
+gvsbuild's own prefix for the GTK stack. `PYO3_PYTHON` goes at vcpkg's
+interpreter, the same one that will be shipped, which is the whole reason Python
+comes from vcpkg. Fix whatever the compiler surfaces (expected to be little,
+after step 1).
 
-**This is the gate for the toolchain ladder.** gtk4-rs against vcpkg-built GTK
-is the least-travelled part of plan A. If it works, plan A stands. If it does
-not, and not for a reason worth fighting, redo steps 3 and 4 under plan B
-(gvsbuild for the GTK stack, vcpkg kept for CBC and Python), then plan C.
+The CBC link line needs no `--static` handling: step 3 established that
+`cbc.pc` already carries the full chain in plain `Libs:`. What to watch instead
+is whether its Unix-style `-l` names resolve to the filenames MSVC expects —
+`-lz` against `zlib.lib` is the obvious one.
+
+The toolchain gate that used to live here is gone: step 3 answered it, earlier
+and more clearly than a compile would have. gvsbuild for GTK, vcpkg for the
+rest.
 
 ### Step 5 — First run: native-stack verification
 
@@ -289,12 +370,25 @@ Collomatique/
 
 Python bundling: take the interpreter and stdlib out of the vcpkg tree, the
 same build the exe was linked against, so there is no version to detect and
-nothing to match. Ship `xlsxwriter` with it, version-pinned like the flatpak,
-and make sure `pip install --user` lands somewhere under `%APPDATA%` and
-survives an update of the application — the flatpak's equivalent is
-`PYTHONUSERBASE` pointing into the app's private data directory. How the
-paths are arranged (a `python3XX._pth`, `PYTHONHOME`, or nothing at all)
-depends on what step 3 finds in the vcpkg port, so it is decided there.
+nothing to match. Run `python -m ensurepip --upgrade` once while staging, since
+the vcpkg port carries `ensurepip` but no installed `pip`. Ship `xlsxwriter`
+with it, version-pinned like the flatpak.
+
+Where a teacher's own packages land is a real decision, and step 3 measured the
+default: `pip install --user` puts them in
+`%APPDATA%\Python\Python312\site-packages`. That is outside the application, so
+it already survives an update — but it is the machine-wide user site, shared
+with any other Python 3.12 on the machine, and it is keyed to the minor version,
+so bumping the baseline to a Python 3.13 would silently orphan everything a
+teacher installed.
+
+**The inclination is to set `PYTHONUSERBASE` into Collomatique's own private
+data directory instead**, which is what the flatpak does. Not yet decided, and
+tangled with a separate idea the user is weighing — adding a Python command line
+to the application itself — which is deferred. Decide both together.
+
+How the interpreter's own paths are arranged (a `python3XX._pth`, `PYTHONHOME`,
+or nothing at all) is still open and belongs to this step.
 
 Acceptance for this step: the staged tree runs on a Windows machine without
 vcpkg, Build Tools or Python installed.
@@ -333,10 +427,13 @@ That is the definition of done.
 
 - Rust API floors: already pinned by the crates (`gtk4` 0.9/`v4_10`,
   `libadwaita` 0.7/`v1_7`).
-- C libraries **and Python**: the vcpkg manifest's `builtin-baseline` (plan
-  A/C-for-CBC); gvsbuild version pin in the build script if plan B is reached.
-  This is the pin that matters most, since these are the parts that actually
-  break across versions.
+- CBC **and Python**: the vcpkg manifest's `builtin-baseline`. This is the pin
+  that matters most, since these are the parts that actually break across
+  versions. Python's *minor* version deserves treating as a pin in its own
+  right, beyond the baseline: teachers' installed packages live in a directory
+  named after it (step 7), so a 3.12 to 3.13 move is not a silent bump.
+- The GTK stack: the gvsbuild version, pinned in the build script, on the same
+  terms — bumping it is a deliberate act, like bumping the flatpak runtime.
 - Bundled xlsxwriter: version-pinned, same as the flatpak.
 - The Windows SDK: pinned by the component name in `bootstrap.ps1`
   (`Windows11SDK.22621`).
