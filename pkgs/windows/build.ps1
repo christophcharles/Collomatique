@@ -6,14 +6,20 @@
 # so that VCPKG_ROOT is in the environment.
 #
 # What it does today is the first piece only: it builds the C and C++
-# dependencies -- GTK, libadwaita, CBC, Python -- with vcpkg, from the manifest
-# next to this file, and then reports what landed. It does not compile
-# Collomatique itself yet. The rest of the build is added one piece at a time as
-# the roadmap advances: the cargo build, the bundle layout, then the installer.
+# dependencies it can -- CBC and Python -- with vcpkg, from the manifest next to
+# this file, and then reports what landed. It does not compile Collomatique
+# itself yet. The rest of the build is added one piece at a time as the roadmap
+# advances: the cargo build, the bundle layout, then the installer.
 #
-# The first run compiles the whole GTK stack from source and takes hours, not
-# minutes. Interrupting it is safe and re-running resumes: vcpkg keeps what it
-# has already built.
+# GTK and libadwaita are not in that manifest. vcpkg cannot build them for MSVC:
+# libadwaita requires appstream, appstream requires libxmlb, and vcpkg's libxmlb
+# port declares "supports": "!windows | mingw". The GTK project does not
+# recommend vcpkg for GTK either -- gtk.org names MSYS2 and gvsbuild, and
+# gvsbuild is the one that produces MSVC libraries. So the GTK stack will come
+# from gvsbuild, added here later, and vcpkg keeps the rest.
+#
+# Interrupting the build is safe and re-running resumes: vcpkg keeps every
+# package it has already built.
 #
 # Nothing is written inside the repository. Everything goes under -OutRoot,
 # which is also where the staged application and the installer will be put later.
@@ -99,7 +105,7 @@ if (-not (Test-Path $OutRoot)) {
 # process behind hangs the script forever. It also gives back vcpkg's real
 # progress output, which matters a lot across a build this long.
 
-Write-Step "building the dependencies with vcpkg (hours on a first run)"
+Write-Step "building the dependencies with vcpkg (from source, on a first run)"
 Write-Host
 
 Push-Location $ManifestDir
@@ -117,6 +123,8 @@ if ($LASTEXITCODE -ne 0) {
     Write-Fail "vcpkg install failed (exit code $LASTEXITCODE)."
     Write-Note "the failing port prints the path of its build log; read that first."
     Write-Note "re-running is cheap: vcpkg keeps every package it already built."
+    Write-Note "if a port is refused for the triplet rather than failing to compile,"
+    Write-Note "--allow-unsupported turns that refusal into a warning and tries anyway."
     exit 1
 }
 
@@ -136,11 +144,13 @@ Write-Step "installed into $Prefix"
 # version must not abort the script the way 'Stop' would make it.
 $ErrorActionPreference = 'Continue'
 
-# The .pc files the -sys crates read. python3 is deliberately not among them:
-# pyo3 finds Python through an interpreter, not through pkg-config, so whether
-# the port ships a .pc file says nothing either way.
+# cbc.pc is what collo-cbc/build.rs probes for. gtk4.pc and libadwaita-1.pc are
+# not looked for here: they will come from gvsbuild, in its own prefix, not this
+# one. python3 is not looked for either -- pyo3 finds Python through an
+# interpreter rather than pkg-config, so whether the port ships a .pc file says
+# nothing either way.
 $PkgConfigDir = Join-Path $Prefix 'lib\pkgconfig'
-foreach ($pc in @('gtk4.pc', 'libadwaita-1.pc', 'cbc.pc')) {
+foreach ($pc in @('cbc.pc')) {
     $path = Join-Path $PkgConfigDir $pc
     if (Test-Path $path) {
         Write-Note "$($pc): $path"
@@ -166,10 +176,9 @@ function Show-Tool {
     }
 }
 
-# gtk4/build.rs needs this on PATH when the cargo build runs.
-Show-Tool -Label 'glib-compile-resources' `
-    -Path (Join-Path $Prefix 'tools\glib\glib-compile-resources.exe') `
-    -Arguments @('--version')
+# glib-compile-resources, which gtk4/build.rs needs, is not reported here: it
+# comes with glib, and nothing left in the manifest pulls glib in. It arrives
+# with the GTK stack.
 
 # The pkg-config implementation the cargo build will be pointed at.
 Show-Tool -Label 'pkgconf' `
