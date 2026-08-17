@@ -60,8 +60,10 @@
 # no GTK. gvsbuild is the one thing here that is pinned to a version rather than
 # taken as it comes, because it is a tool that decides what the GTK stack is;
 # the rest of the pinning lives in the build script, next to what it pins.
-# The one lasting mark this script leaves on the machine, beyond the tools
-# themselves, is the VCPKG_ROOT environment variable.
+#
+# Beyond the tools themselves it leaves two lasting marks on the machine: the
+# VCPKG_ROOT environment variable, and one root certificate fetched into the
+# Windows certificate store -- see the last section for why that is needed.
 
 #Requires -Version 5.1
 
@@ -485,6 +487,55 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
     Write-Note "  uv tool install gvsbuild==$GvsbuildVersion"
     Write-Note "  uv tool update-shell"
     $failed += 'gvsbuild'
+}
+Write-Host
+
+# ---------------------------------------------------------------------------
+# Certificate store
+# ---------------------------------------------------------------------------
+
+# gvsbuild builds librsvg, which is a dependency of gtk4 and is written in Rust,
+# so it downloads its own cargo from win.rustup.rs. On a fresh Windows install
+# that download fails:
+#
+#     CERTIFICATE_VERIFY_FAILED: unable to get local issuer certificate
+#
+# Windows seeds its root certificate store lazily -- a root arrives only once
+# something has asked for it. Python does not trigger that; it reads whatever is
+# already there. And gvsbuild fails hard rather than falling back, because the
+# rustup installer has no published hash and gvsbuild will not fetch an
+# unverifiable file over an unverified connection. That refusal is correct.
+#
+# One request through a Windows HTTP client is enough. curl.exe goes through
+# schannel, which does trigger the root update, and the root stays in the store
+# afterwards. The response is discarded; only the side effect is wanted.
+#
+# Written as fetch-and-discard rather than check-then-fetch: asking whether a
+# particular root is present is far more work than downloading a few hundred
+# kilobytes, and repeating it costs nothing.
+#
+# curl, not curl.exe, would be PowerShell 5.1's alias for Invoke-WebRequest.
+
+$CertWarmUrl = 'https://win.rustup.rs/x86_64'
+
+Write-Step "warming the certificate store for $CertWarmUrl"
+if (Get-Command curl.exe -ErrorAction SilentlyContinue) {
+    & curl.exe --silent --show-error --location --output NUL $CertWarmUrl
+    if ($LASTEXITCODE -eq 0) {
+        Write-Note "done. gvsbuild can verify that host now."
+    } else {
+        # Deliberately not counted as a failed install: a network blip here would
+        # otherwise make this script exit reporting a missing tool. It bites in
+        # build.ps1, and that is where it will be understood.
+        Write-Fail "curl.exe could not reach $CertWarmUrl (exit code $LASTEXITCODE)."
+        Write-Note "gvsbuild's cargo download will fail until this succeeds once."
+    }
+} else {
+    Write-Fail "curl.exe is not in PATH."
+    Write-Note "it ships with Windows 10 1803 and later. Without it, fetch"
+    Write-Note "$CertWarmUrl once with any Windows HTTP client before building."
+    Write-Note "a browser will not do: Edge and Chrome carry their own root"
+    Write-Note "stores, so succeeding there says nothing about the Windows one."
 }
 Write-Host
 
