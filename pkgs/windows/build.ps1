@@ -23,25 +23,20 @@
 # vcpkg keeps every package it has already built, and gvsbuild is asked to skip
 # projects it has already built.
 #
-# Nothing is written inside the repository. Output goes under -OutRoot and
-# -GtkBuildRoot; -OutRoot is also where the staged application and the installer
-# will be put later.
+# Nothing is written inside the repository. Everything goes under -OutRoot, which
+# is also where the staged application and the installer will be put later.
 
 #Requires -Version 5.1
 
 param(
     # Outside the working tree, like pkgs/flatpak/build.sh does with its own
-    # output. Short, and on C:, because vcpkg's build trees nest deeply against
-    # a 260-character path limit.
-    [string]$OutRoot = 'C:\collomatique-build',
-
-    # gvsbuild's own default, and not nested under -OutRoot on purpose. It nests
-    # deeply too -- <root>\build\x64\release\<project>\... and then the project's
-    # own tree below that -- and gvsbuild chose a two-segment path at the root of
-    # C: to stay clear of the same 260-character limit. Twenty more characters of
-    # prefix would be spent for tidiness and paid for by a build that fails hours
-    # in. It also means the paths in gvsbuild's own logs and documentation match.
-    [string]$GtkBuildRoot = 'C:\gtk-build',
+    # output, and everything this script produces goes under here.
+    #
+    # Short, and at the root of C:, because both halves of the build nest deeply
+    # against a 260-character path limit -- vcpkg's trees and gvsbuild's alike.
+    # "collo-build" rather than "collomatique-build" for the seven characters:
+    # every source tree underneath inherits them.
+    [string]$OutRoot = 'C:\collo-build',
 
     # See triplets\x64-collomatique.cmake for what this one changes.
     [string]$Triplet = 'x64-collomatique'
@@ -67,13 +62,18 @@ $TripletDir    = Join-Path $ManifestDir 'triplets'
 $InstalledRoot = Join-Path $OutRoot 'vcpkg_installed'
 $Prefix        = Join-Path $InstalledRoot $Triplet
 
-# Where gvsbuild puts what it installs. Not a choice: it builds the path as
-# <build-dir>\gtk\<platform>\<configuration>, and the platform and configuration
-# below are the ones passed on its command line.
-$GtkPrefix = Join-Path $GtkBuildRoot 'gtk\x64\release'
+# What gvsbuild gets as its --build-dir, and where it installs to. gvsbuild's own
+# default is C:\gtk-build; putting it here instead keeps everything this script
+# produces under one root.
+#
+# The prefix below is not a choice: gvsbuild builds the path as
+# <build-dir>\gtk\<platform>\<configuration>, and those last two segments are the
+# ones passed on its command line further down.
+$GtkBuildRoot = Join-Path $OutRoot 'gtk-build'
+$GtkPrefix    = Join-Path $GtkBuildRoot 'gtk\x64\release'
 
-# The virtual environment gvsbuild itself is installed into. Under -OutRoot
-# rather than -GtkBuildRoot: it is a tool we install, not something gvsbuild
+# The virtual environment gvsbuild itself is installed into. Beside the build
+# root rather than inside it: it is a tool we install, not something gvsbuild
 # produces, and gvsbuild deletes inside its own build root on --from-scratch.
 $VenvDir = Join-Path $OutRoot 'gvsbuild-venv'
 
@@ -108,7 +108,7 @@ if (-not (Test-Path $OutRoot)) {
     } catch {
         Write-Fail "could not create $OutRoot."
         Write-Note "Windows reserves the root of C: for administrators. Run this elevated,"
-        Write-Note "or pass a path you own: -OutRoot C:\Users\you\collomatique-build"
+        Write-Note "or pass a path you own: -OutRoot C:\Users\you\collo-build"
         exit 1
     }
 }
