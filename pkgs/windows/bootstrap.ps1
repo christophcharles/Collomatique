@@ -466,10 +466,24 @@ if (Get-Command uv -ErrorAction SilentlyContinue) {
         Write-Fail "uv could not install gvsbuild==$GvsbuildVersion (exit code $LASTEXITCODE)."
         Write-Note "gvsbuild needs Python 3.10 or newer and refuses exactly 3.13.4."
         $failed += 'gvsbuild'
+    } else {
+        # uv puts tool executables in %USERPROFILE%\.local\bin, which Windows does
+        # not have on PATH. Until this has run, `uv run gvsbuild` reports gvsbuild
+        # not found even though `uv tool list` shows it installed. A no-op once the
+        # directory is there.
+        Write-Step "putting uv's tool directory on PATH"
+        & uv tool update-shell
+        if ($LASTEXITCODE -ne 0) {
+            Write-Fail "uv tool update-shell failed (exit code $LASTEXITCODE)."
+            Write-Note "without it, build.ps1 will not find gvsbuild. Run it by hand."
+            $failed += 'gvsbuild'
+        }
     }
 } else {
     Write-Fail "uv is not in PATH even after installing it."
-    Write-Note "open a new terminal and run: uv tool install gvsbuild==$GvsbuildVersion"
+    Write-Note "open a new terminal and run:"
+    Write-Note "  uv tool install gvsbuild==$GvsbuildVersion"
+    Write-Note "  uv tool update-shell"
     $failed += 'gvsbuild'
 }
 Write-Host
