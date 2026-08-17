@@ -72,11 +72,6 @@ $Prefix        = Join-Path $InstalledRoot $Triplet
 $GtkBuildRoot = Join-Path $OutRoot 'gtk-build'
 $GtkPrefix    = Join-Path $GtkBuildRoot 'gtk\x64\release'
 
-# The virtual environment gvsbuild itself is installed into. Beside the build
-# root rather than inside it: it is a tool we install, not something gvsbuild
-# produces, and gvsbuild deletes inside its own build root on --from-scratch.
-$VenvDir = Join-Path $OutRoot 'gvsbuild-venv'
-
 Write-Step "Collomatique Windows build"
 Write-Note "manifest: $ManifestDir"
 Write-Note "triplet:  $Triplet"
@@ -156,22 +151,10 @@ Write-Host
 # GTK and libadwaita, from gvsbuild
 # ---------------------------------------------------------------------------
 
-# gvsbuild is a Python program that builds the GTK stack with MSVC. It is
-# installed here rather than in bootstrap.ps1 because it is pinned, and pins
-# belong with the build -- the same reason vcpkg's baseline is in vcpkg.json and
-# not in bootstrap.ps1.
+# gvsbuild is a Python program that builds the GTK stack with MSVC.
+# bootstrap.ps1 installs it, pinned, with uv; this runs it with uv, which is what
+# gvsbuild's documentation does for both of the install routes it offers.
 #
-# It goes into a virtual environment of its own. That gives an exact path to
-# gvsbuild.exe, where pip's console scripts otherwise land in a Scripts
-# directory whose place depends on how Python was installed, and it leaves the
-# machine Python untouched.
-#
-# gvsbuild's own documentation installs it with uv. pip into a venv needs no
-# eighth tool in bootstrap.ps1 and pins the version in one line, which is worth
-# more to us here.
-
-$GvsbuildVersion = '2026.8.0'
-
 # What gvsbuild is asked for. Their dependencies come automatically, and that is
 # most of the stack: glib, cairo, pango, gdk-pixbuf, graphene, harfbuzz, and so
 # on down.
@@ -197,52 +180,13 @@ $GtkProjects = @(
     'adwaita-icon-theme'
 )
 
-# The tool Python from bootstrap.ps1, found on PATH. Not the vcpkg one built
-# above: that is the interpreter the application embeds, and it has no pip.
-$ToolPython = Get-Command python -ErrorAction SilentlyContinue
-if (-not $ToolPython) {
-    Write-Fail "python is not in PATH, so gvsbuild cannot be installed."
-    Write-Note "bootstrap.ps1 installs it. If that has already run, open a new"
-    Write-Note "terminal -- PATH is only picked up by processes started afterwards."
+$Uv = Get-Command uv -ErrorAction SilentlyContinue
+if (-not $Uv) {
+    Write-Fail "uv is not in PATH, so gvsbuild cannot be run."
+    Write-Note "bootstrap.ps1 installs uv and gvsbuild. If it has already run, open"
+    Write-Note "a new terminal -- PATH is only picked up by processes started after."
     exit 1
 }
-
-$VenvPython  = Join-Path $VenvDir 'Scripts\python.exe'
-$GvsbuildExe = Join-Path $VenvDir 'Scripts\gvsbuild.exe'
-
-if (-not (Test-Path $VenvPython)) {
-    Write-Step "creating a virtual environment for gvsbuild in $VenvDir"
-    & $ToolPython.Source -m venv $VenvDir
-    if (($LASTEXITCODE -ne 0) -or (-not (Test-Path $VenvPython))) {
-        Write-Fail "could not create a virtual environment with $($ToolPython.Source)."
-        Write-Note "if that path is under WindowsApps, PATH is finding Windows' Store"
-        Write-Note "stub instead of a real interpreter. bootstrap.ps1 installs Python"
-        Write-Note "3.12 machine-wide; call that python.exe by its full path to check."
-        exit 1
-    }
-}
-
-# Run every time rather than guarded by a stamp: pip does nothing, and reaches no
-# network, when the exact version asked for is already installed.
-# --disable-pip-version-check stops it contacting PyPI just to say pip itself is
-# out of date.
-Write-Step "installing gvsbuild $GvsbuildVersion"
-& $VenvPython -m pip install --disable-pip-version-check "gvsbuild==$GvsbuildVersion"
-if ($LASTEXITCODE -ne 0) {
-    Write-Host
-    Write-Fail "pip could not install gvsbuild==$GvsbuildVersion (exit code $LASTEXITCODE)."
-    Write-Note "gvsbuild wants Python 3.10 or newer and refuses exactly 3.13.4. If the"
-    Write-Note "version above no longer exists on PyPI, this line is what to change."
-    exit 1
-}
-
-if (-not (Test-Path $GvsbuildExe)) {
-    Write-Fail "gvsbuild installed, but $GvsbuildExe is not there."
-    Write-Note "delete $VenvDir and run this again."
-    exit 1
-}
-
-Write-Host
 
 # --configuration release rather than gvsbuild's default of debug-optimized. The
 # install prefix is <build-dir>\gtk\<platform>\<configuration>, so passing both
@@ -262,8 +206,8 @@ Write-Host
 #
 # Called bare, no pipeline and no redirection, for the reason spelled out above
 # the vcpkg call.
-$GvsbuildArgs = @(
-    'build'
+$UvArgs = @(
+    'run', 'gvsbuild', 'build'
     '--build-dir', $GtkBuildRoot
     '--platform', 'x64'
     '--configuration', 'release'
@@ -276,7 +220,7 @@ Write-Note "projects: $($GtkProjects -join ' ')"
 Write-Note "into:     $GtkPrefix"
 Write-Host
 
-& $GvsbuildExe @GvsbuildArgs
+& uv @UvArgs
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host

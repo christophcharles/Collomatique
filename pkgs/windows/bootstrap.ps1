@@ -7,7 +7,7 @@
 # Running it again on a machine that already has the tools is safe; it skips
 # what is already installed and reports what it found.
 #
-# Seven tools, and that is the whole list:
+# Eight tools, and that is the whole list:
 #
 #   VS Build Tools   the MSVC compiler and the Windows SDK. No IDE. Using it
 #                    requires a valid Visual Studio licence; Visual Studio
@@ -21,9 +21,14 @@
 #                    winget has no vcpkg package, so this one is cloned and
 #                    bootstrapped instead. See the clone section below.
 #   Python 3.12      a second Python, and this one *is* a tool: gvsbuild is
-#                    written in Python, and the build script installs it here
-#                    with pip. Nothing links against this one and nothing
-#                    ships it.
+#                    written in Python. Nothing links against this one and
+#                    nothing ships it.
+#   uv               how gvsbuild's documentation installs gvsbuild, and how it
+#                    runs it. Nothing else here uses it. It is on the list
+#                    because we took gvsbuild for being the route GTK blesses,
+#                    and the install and run instructions are part of that
+#                    route: doing it our own way with pip would put us back on
+#                    a path nobody upstream tests.
 #   MSYS2            a build shell, not a compiler. Parts of the GTK stack are
 #                    driven by shell scripts, and gvsbuild runs them through
 #                    MSYS2's bash. What comes out is still MSVC's code: a
@@ -52,10 +57,11 @@
 # back.
 #
 # This script installs tools. It does not build anything: no vcpkg package and
-# no GTK. The build script does both, from the manifest beside it and from a
-# pinned gvsbuild, which is where version pinning belongs. The one lasting mark
-# this script leaves on the machine, beyond the tools themselves, is the
-# VCPKG_ROOT environment variable.
+# no GTK. gvsbuild is the one thing here that is pinned to a version rather than
+# taken as it comes, because it is a tool that decides what the GTK stack is;
+# the rest of the pinning lives in the build script, next to what it pins.
+# The one lasting mark this script leaves on the machine, beyond the tools
+# themselves, is the VCPKG_ROOT environment variable.
 
 #Requires -Version 5.1
 
@@ -130,6 +136,15 @@ $Packages = @(
         Extra = @('--scope', 'machine')
     }
     @{
+        # gvsbuild's documentation installs uv with exactly this, and no scope:
+        #     winget install --id=astral-sh.uv -e
+        # No --scope machine here, unlike the others. uv keeps the tools it
+        # installs under the profile of whoever runs it, so a machine-wide uv
+        # would not make a machine-wide gvsbuild anyway.
+        Id   = 'astral-sh.uv'
+        Name = 'uv'
+    }
+    @{
         # The build shell gvsbuild drives the GTK stack through. Its manifest
         # installs into C:\msys64 either way -- --scope machine only adds
         # AllUsers=true, which is what a build tool wants.
@@ -176,6 +191,11 @@ $MsysRoot = 'C:\msys64'
 # C and C++ library the app links, vcpkg's and gvsbuild's alike, is built with
 # the Build Tools above.
 $RustToolchain = 'stable-x86_64-pc-windows-msvc'
+
+# The tool that builds GTK and libadwaita. Pinned, unlike the bare command in
+# gvsbuild's documentation: everything else in this build is pinned, and a tool
+# that decides what the whole GTK stack is has no business moving on its own.
+$GvsbuildVersion = '2026.8.0'
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -424,6 +444,37 @@ if (Get-Command rustup -ErrorAction SilentlyContinue) {
 Write-Host
 
 # ---------------------------------------------------------------------------
+# gvsbuild
+# ---------------------------------------------------------------------------
+
+# Installed the way gvsbuild's own documentation installs it, with uv rather than
+# pip. gvsbuild was chosen for being the route GTK blesses, and the install
+# instructions are part of that route.
+#
+# uv puts its tools under the profile of whoever runs it; there is no scope
+# switch. Elevating a terminal keeps the same profile, so running this script as
+# administrator still installs gvsbuild into your own account -- unless you
+# elevate into a *different* administrator account, in which case build.ps1 will
+# not find it.
+#
+# `uv tool install` is a no-op when the version asked for is already installed,
+# so re-running this script costs nothing here.
+if (Get-Command uv -ErrorAction SilentlyContinue) {
+    Write-Step "installing gvsbuild $GvsbuildVersion with uv"
+    & uv tool install "gvsbuild==$GvsbuildVersion"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Fail "uv could not install gvsbuild==$GvsbuildVersion (exit code $LASTEXITCODE)."
+        Write-Note "gvsbuild needs Python 3.10 or newer and refuses exactly 3.13.4."
+        $failed += 'gvsbuild'
+    }
+} else {
+    Write-Fail "uv is not in PATH even after installing it."
+    Write-Note "open a new terminal and run: uv tool install gvsbuild==$GvsbuildVersion"
+    $failed += 'gvsbuild'
+}
+Write-Host
+
+# ---------------------------------------------------------------------------
 # What actually landed
 # ---------------------------------------------------------------------------
 #
@@ -467,6 +518,7 @@ if (Test-Path $MsysBash) {
 foreach ($probe in @(
     @{ Label = 'git';    Command = 'git';    Arguments = @('--version') }
     @{ Label = 'python'; Command = 'python'; Arguments = @('--version') }
+    @{ Label = 'uv';     Command = 'uv';     Arguments = @('--version') }
     @{ Label = 'rustup'; Command = 'rustup'; Arguments = @('--version') }
     @{ Label = 'rustc';  Command = 'rustc';  Arguments = @('--version') }
 )) {
