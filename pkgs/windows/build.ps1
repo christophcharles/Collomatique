@@ -180,10 +180,14 @@ $GvsbuildVersion = '2026.8.0'
 # application with no icon theme shows no icons, and it does not arrive as a
 # dependency -- gvsbuild's own CI lists it separately for the same reason.
 #
-# Not here, and the first thing to add if icons come out missing: librsvg, the
-# SVG loader. adwaita-icon-theme ships SVG only, so something has to render it.
-# Left out of the first build to keep the failure surface smaller -- it is a Rust
-# project, so it brings cargo into the GTK build too.
+# librsvg is not listed and does not need to be. gvsbuild makes it a dependency
+# of gtk4 itself, and adwaita-icon-theme depends on it as well, so it is built
+# either way -- which settles the "will symbolic icons render" question before it
+# was asked.
+#
+# It is also why a run downloads rustup. librsvg is written in Rust, and gvsbuild
+# installs its own pinned cargo as one of its tools rather than using the rustup
+# that bootstrap.ps1 installed.
 #
 # gtksourceview5, gtkmm, protobuf-c and the PyGObject wheels are in gvsbuild's CI
 # build and deliberately not here. We use none of them.
