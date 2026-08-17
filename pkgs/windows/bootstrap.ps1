@@ -13,15 +13,12 @@
 #                    requires a valid Visual Studio licence; Visual Studio
 #                    Community grants one, free, to an individual developer.
 #   git              needed to get vcpkg, which is a git checkout.
-#   vcpkg            CBC and Python come from here, built from source. Python
-#                    is not a separate tool: the app links against libpython, so
-#                    it is a build dependency like the others, and taking it
-#                    from vcpkg means the interpreter we link and the
-#                    interpreter we ship are the same one.
-#                    GTK and libadwaita do not come from vcpkg, which cannot
-#                    build them for MSVC. They are downloaded ready-built from
-#                    a gvsbuild release, which needs no tool beyond the ones
-#                    here -- see the GTK section of build.ps1.
+#   vcpkg            every C/C++ dependency of the app comes from here: GTK,
+#                    libadwaita, CBC, and Python too. Python is not a separate
+#                    tool: the app links against libpython, so it is a build
+#                    dependency like the others, and taking it from vcpkg means
+#                    the interpreter we link and the interpreter we ship are
+#                    the same one.
 #                    winget has no vcpkg package, so this one is cloned and
 #                    bootstrapped instead. See the clone section below.
 #   rustup           the Rust toolchain, tracking stable. Deliberately not
@@ -33,9 +30,8 @@
 #
 # This script installs tools. It does not build anything and it installs no
 # vcpkg package -- the build script does that from a manifest in the repository,
-# which is where the pinning of the CBC and Python versions belongs, alongside
-# the pinned gvsbuild release the GTK stack is taken from. The one lasting mark
-# this script leaves on the machine, beyond the tools themselves, is the
+# which is where the pinning of GTK, CBC and Python versions belongs. The one
+# lasting mark it leaves on the machine, beyond the tools themselves, is the
 # VCPKG_ROOT environment variable.
 
 #Requires -Version 5.1
