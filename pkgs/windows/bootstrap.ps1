@@ -7,20 +7,28 @@
 # Running it again on a machine that already has the tools is safe; it skips
 # what is already installed and reports what it found.
 #
-# Five tools, and that is the whole list:
+# Seven tools, and that is the whole list:
 #
 #   VS Build Tools   the MSVC compiler and the Windows SDK. No IDE. Using it
 #                    requires a valid Visual Studio licence; Visual Studio
 #                    Community grants one, free, to an individual developer.
 #   git              needed to get vcpkg, which is a git checkout.
-#   vcpkg            every C/C++ dependency of the app comes from here: GTK,
-#                    libadwaita, CBC, and Python too. Python is not a separate
-#                    tool: the app links against libpython, so it is a build
-#                    dependency like the others, and taking it from vcpkg means
-#                    the interpreter we link and the interpreter we ship are
-#                    the same one.
+#   vcpkg            CBC and the Python the application embeds come from here,
+#                    built from source. That Python is not a tool: the app
+#                    links against libpython, so it is a build dependency like
+#                    the others, and taking it from vcpkg means the interpreter
+#                    we link and the interpreter we ship are the same one.
 #                    winget has no vcpkg package, so this one is cloned and
 #                    bootstrapped instead. See the clone section below.
+#   Python 3.12      a second Python, and this one *is* a tool: gvsbuild is
+#                    written in Python, and the build script installs it here
+#                    with pip. Nothing links against this one and nothing
+#                    ships it.
+#   MSYS2            a build shell, not a compiler. Parts of the GTK stack are
+#                    driven by shell scripts, and gvsbuild runs them through
+#                    MSYS2's bash. What comes out is still MSVC's code: a
+#                    mingw toolchain would be a mingw-w64-* package, and none
+#                    is installed here.
 #   rustup           the Rust toolchain, tracking stable. Deliberately not
 #                    pinned to a version: Cargo.lock already pins every
 #                    dependency, and the flatpak tracks rust-stable the same
@@ -28,10 +36,25 @@
 #   Inno Setup 7     compiles the installer at the end of the build. The current
 #                    line, rather than the 6 that winget also still offers.
 #
-# This script installs tools. It does not build anything and it installs no
-# vcpkg package -- the build script does that from a manifest in the repository,
-# which is where the pinning of GTK, CBC and Python versions belongs. The one
-# lasting mark it leaves on the machine, beyond the tools themselves, is the
+# GTK and libadwaita are the reason the list grew to seven. vcpkg cannot build
+# them for MSVC -- libadwaita needs appstream, appstream needs libxmlb, and
+# vcpkg's libxmlb port declares "supports": "!windows | mingw", so it is refused
+# before anything compiles. gtk.org names MSYS2 and gvsbuild for Windows and
+# never vcpkg, so gvsbuild is the path taken, and Python and MSYS2 are what it
+# needs to run.
+#
+# gvsbuild also publishes prebuilt zips, which would have kept the list at five.
+# Its own README argues against them for anything distributed: they are the raw
+# output of a CI run, and the project cannot promise timely updates even for
+# security issues. We ship an installer to teachers, and that zip carries zlib,
+# libpng, freetype and harfbuzz -- so a CVE in any of them would be ours to fix
+# and we would have no way to. Building the stack ourselves is what buys that
+# back.
+#
+# This script installs tools. It does not build anything: no vcpkg package and
+# no GTK. The build script does both, from the manifest beside it and from a
+# pinned gvsbuild, which is where version pinning belongs. The one lasting mark
+# this script leaves on the machine, beyond the tools themselves, is the
 # VCPKG_ROOT environment variable.
 
 #Requires -Version 5.1
@@ -91,6 +114,35 @@ $Packages = @(
         Name = 'git'
     }
     @{
+        # The Python that runs gvsbuild, not the one the application embeds --
+        # that one is a vcpkg port and this script does not install it.
+        #
+        # gvsbuild asks for 3.10 or newer and excludes exactly 3.13.4. 3.12 sits
+        # inside that with nothing to think about. winget's ids carry the minor
+        # version, so moving to 3.13 later is an edit here; any version in range
+        # would do, because nothing links against this one.
+        #
+        # --scope machine picks the manifest's machine installer, which passes
+        # InstallAllUsers=1 PrependPath=1, so python lands on the machine PATH
+        # instead of in one account.
+        Id    = 'Python.Python.3.12'
+        Name  = 'Python 3.12 (for gvsbuild)'
+        Extra = @('--scope', 'machine')
+    }
+    @{
+        # The build shell gvsbuild drives the GTK stack through. Its manifest
+        # installs into C:\msys64 either way -- --scope machine only adds
+        # AllUsers=true, which is what a build tool wants.
+        #
+        # No pacman packages are installed. gvsbuild's documentation names msys2
+        # as a prerequisite with no package list, and says it downloads the other
+        # tools it needs itself. If a project turns out to want more, the error
+        # names the missing command and it is a pacman line here.
+        Id    = 'MSYS2.MSYS2'
+        Name  = 'MSYS2'
+        Extra = @('--scope', 'machine')
+    }
+    @{
         Id   = 'Rustlang.Rustup'
         Name = 'rustup'
     }
@@ -114,9 +166,15 @@ $Packages = @(
 $VcpkgRoot = 'C:\vcpkg'
 $VcpkgRepository = 'https://github.com/microsoft/vcpkg.git'
 
+# Where the MSYS2 manifest puts it, for the report at the end. Nothing is
+# installed here; gvsbuild finds MSYS2 by searching the usual locations, of
+# which this is the first.
+$MsysRoot = 'C:\msys64'
+
 # The host triple is named rather than left to rustup's autodetection, so the
-# script says out loud which toolchain the build expects. msvc, not gnu: the
-# whole C/C++ side comes from vcpkg built with the Build Tools above.
+# script says out loud which toolchain the build expects. msvc, not gnu: every
+# C and C++ library the app links, vcpkg's and gvsbuild's alike, is built with
+# the Build Tools above.
 $RustToolchain = 'stable-x86_64-pc-windows-msvc'
 
 # ---------------------------------------------------------------------------
@@ -251,8 +309,9 @@ $identity  = [Security.Principal.WindowsIdentity]::GetCurrent()
 $principal = New-Object Security.Principal.WindowsPrincipal($identity)
 if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
     Write-Note "not running as administrator. Build Tools will raise a UAC prompt,"
-    Write-Note "and cloning vcpkg into $VcpkgRoot will fail outright, because Windows"
-    Write-Note "reserves the root of C: for administrators. Re-run this elevated."
+    Write-Note "the --scope machine installs below will be refused, and cloning vcpkg"
+    Write-Note "into $VcpkgRoot will fail outright, because Windows reserves the root"
+    Write-Note "of C: for administrators. Re-run this elevated."
     Write-Host
 }
 
@@ -396,8 +455,18 @@ if (Test-Path $vcpkgExe) {
     Write-Note "vcpkg: NOT FOUND at $vcpkgExe"
 }
 
+# MSYS2 puts nothing on PATH, and that is deliberate on its part: its bash
+# belongs to gvsbuild, not to this shell. Checked by path, like vcpkg above.
+$MsysBash = Join-Path $MsysRoot 'usr\bin\bash.exe'
+if (Test-Path $MsysBash) {
+    Write-Note "MSYS2: $MsysRoot"
+} else {
+    Write-Note "MSYS2: NOT FOUND at $MsysBash"
+}
+
 foreach ($probe in @(
     @{ Label = 'git';    Command = 'git';    Arguments = @('--version') }
+    @{ Label = 'python'; Command = 'python'; Arguments = @('--version') }
     @{ Label = 'rustup'; Command = 'rustup'; Arguments = @('--version') }
     @{ Label = 'rustc';  Command = 'rustc';  Arguments = @('--version') }
 )) {
