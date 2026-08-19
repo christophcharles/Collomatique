@@ -546,6 +546,32 @@ answered in a message box instead (`254a2a22`, `gtk4/src/windows_cli.rs`),
 showing clap's own text for help, version and usage errors, and a sentence of
 its own for `--debug`. Unix keeps its command line exactly as it was.
 
+**Done for the icon** (`2239ad51`), with one detail different from the bullet
+above. `resources/icons/generate-sizes.sh` grew a second job: it writes
+`collomatique.ico` next to the scaled PNGs, from the same 1024×1024 master
+rather than from those copies — one downscale instead of two. The sizes are
+Pillow's seven defaults, 16 through 256, stored PNG-compressed inside the
+`.ico`; Windows has read that form since Vista, and if some corner of the shell
+ever draws one of them wrong, `bitmap_format="bmp"` is the one keyword to change.
+It is generated on Linux and committed for the same reason the scaled PNGs are,
+one step further: the Windows machine has no image tooling on it at all. The
+pre-commit hook lists it beside them, so it cannot go stale on its own.
+
+`gtk4/build.rs` compiles it into the executable with `winresource` — dependency
+and code both under `cfg(windows)` — and sets `ProductName` and
+`FileDescription` while it is there. Without those, the file's properties and
+the row Task Manager shows read `collomatique-gtk4` and an empty description.
+
+Everything else inherits that one resource rather than naming the icon again:
+the Start-menu shortcut points at the executable, and the file type's
+`DefaultIcon` is `...exe,0`. The only other place that needs the `.ico` itself
+is Inno Setup's `SetupIconFile`, because setup.exe runs before anything is
+installed. Version info comes along with the same resource, so that half of the
+bullet is done too.
+
+What is left in this step is the DPI manifest, and the Python path setup if it
+turns out to be needed.
+
 ### Step 7 — Bundle layout
 
 Stage an install tree that runs on a machine with no dev tooling at all:
@@ -614,6 +640,54 @@ step 1), so all OS packaging lives under `pkgs/`.
 The exe already takes a file argument (the flatpak desktop file uses
 `Exec=collomatique-gtk4 %f`), so double-clicked files ride the same path —
 verify the clap parsing accepts a bare Windows path.
+
+**Done** (`dfefa936`, then `0711bd97` and `2239ad51`), with one deliberate
+change from the plan above.
+
+`build.ps1` reads the version out of the workspace `Cargo.toml` the way
+`pkgs/flatpak/build.sh` does, finds `ISCC.exe` in the two machine-wide places
+`bootstrap.ps1` reports, and passes every path and version into the `.iss` with
+`/D`. The `.iss` refuses to compile without them, so it has nowhere to go stale.
+`build.ps1` is now the whole build in one command. It also checks the committed
+`.ico` exists at startup rather than hours later, because `gtk4/build.rs` fails
+without it.
+
+**The privilege default came out the other way round.** The plan above was
+`lowest` with an all-users option; the first build shipped exactly that, and the
+install landed in `%LOCALAPPDATA%\Programs\Collomatique` — inside a hidden
+folder, which will trip a teacher up the first time they go looking for it. The
+awkward part is that there is no way out by choosing a better directory: every
+visible location needs administrator rights. So the choice is about UAC, not
+about the path.
+
+What ships is `PrivilegesRequired=admin` plus
+`PrivilegesRequiredOverridesAllowed=dialog`: Setup opens on a page asking for all
+users or this user only, *before* it elevates. All users is the default answer,
+so the common case is one extra click and `C:\Program Files\Collomatique`; the
+other answer keeps the old per-user behaviour and is what still installs where a
+teacher has no administrator rights. An upgrade does not ask again —
+`UsePreviousPrivileges` defaults to yes and finds the mode the first install
+used. Every registry entry is written under `HKA` to match, so the association
+follows the same fork.
+
+Two smaller things worth knowing. `ArchitecturesInstallIn64BitMode` is
+load-bearing rather than merely correct: without it Setup runs 32-bit and the
+all-users path becomes `Program Files (x86)`. And `ArchitecturesAllowed` is
+`x64compatible` rather than `x64`, which lets the x86_64 build run under Windows
+on ARM's emulation — that is not the ARM64 port listed as out of scope, only a
+refusal we had no reason to make.
+
+The association is five entries: the extension naming the ProgID, the same
+ProgID again under `OpenWithProgids` so Collomatique is offered in "Open with"
+even where a previous choice is recorded, then the ProgID's type name
+("Colloscope Collomatique"), its `DefaultIcon` and its `shell\open\command`.
+Uninstalling removes the ProgID subtree, and removes the extension key only if
+nothing else is left in it.
+
+What has actually been run: the first installer, `dfefa936`, built and installed
+on the VM. The mode dialog, the icon and the association came after it and have
+not been. The clap check above is the one a double-click exercises, so it is the
+thing to try first — from a folder whose name contains a space.
 
 ### Step 9 — End-to-end acceptance (clean VM snapshot)
 
