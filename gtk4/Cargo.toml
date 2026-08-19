@@ -45,3 +45,6 @@ windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_System_Console",
 ] }
+# For the other half of the same job: _open_osfhandle and _dup2, which are the
+# C runtime's descriptor table rather than Win32.
+libc = "0.2"
