@@ -36,15 +36,11 @@ anyhow.workspace = true
 non-empty-string.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-# Only for reconnecting the standard streams to a terminal, in
-# src/windows_console.rs. Same version as the one `subprocesses` pulls in, so
-# the lock keeps a single copy. The console devices are opened through
-# std::fs::OpenOptions rather than CreateFileW, which is what keeps the feature
-# list down to these two.
+# Only for the three calls in src/windows_stdio.rs. Same version as the one
+# `subprocesses` pulls in, so the lock keeps a single copy. `NUL` is opened
+# through std::fs::OpenOptions rather than CreateFileW, which is what keeps the
+# feature list down to these two.
 windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_System_Console",
 ] }
-# For the other half of the same job: _open_osfhandle and _dup2, which are the
-# C runtime's descriptor table rather than Win32.
-libc = "0.2"

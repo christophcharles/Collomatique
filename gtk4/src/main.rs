@@ -12,9 +12,10 @@
 // too. That costs it nothing: its standard streams are pipes the parent
 // creates and hands over, which need no console at either end.
 //
-// The cost is that nothing has a console to print to any more -- `--help`,
-// `--version`, `--debug` output, a clap parse error. `windows_console::attach`
-// gives those a destination again. Unix is unaffected throughout.
+// The cost is the command line: with no console, `--help`, `--version` and
+// `--debug` have nowhere to print. On Windows they simply print nothing, and
+// `windows_stdio` is there to stop that from being fatal. Unix is unaffected
+// throughout, command line included.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use clap::Parser;
@@ -24,7 +25,7 @@ use std::path::PathBuf;
 
 mod debug;
 #[cfg(windows)]
-mod windows_console;
+mod windows_stdio;
 
 const WORKER_THREAD_COUNT: usize = 4;
 
@@ -53,10 +54,10 @@ struct Args {
 }
 
 fn main() -> Result<(), anyhow::Error> {
-    // Before the parse, because a parse error is one of the things this makes
-    // visible again.
+    // Before the parse, because clap reports a bad argument by printing, and
+    // printing is what has to be made harmless.
     #[cfg(windows)]
-    windows_console::attach();
+    windows_stdio::discard_output();
 
     let args = Args::parse();
 
