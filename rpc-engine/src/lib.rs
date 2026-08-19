@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use collomatique_rpc::InternalDataStream;
 use collomatique_rpc::{
-    CmdMsg, CompleteCmdMsg, EncodedMsg, InitMsg, ResultMsg, RpcDecodeError, SerializedIlpProblem,
-    SerializedStrategyRequest, SolverIncumbentInfo, SolverMsg, SolverProgressData,
-    SolverResultData, SolverStatus, StrategyMsg, StrategyResultData, StrategyStatus,
+    CmdMsg, InitMsg, ResultMsg, SerializedIlpProblem, SerializedStrategyRequest,
+    SolverIncumbentInfo, SolverMsg, SolverProgressData, SolverResultData, SolverStatus,
+    StrategyMsg, StrategyResultData, StrategyStatus, send_command,
 };
 
 #[cfg(test)]
@@ -48,24 +48,22 @@ impl ProgressThrottle {
 }
 
 pub fn wait_for_init_msg() -> Result<InitMsg, String> {
-    let encoded_msg = EncodedMsg::receive().map_err(|e| e.to_string())?;
-    encoded_msg
-        .try_into()
-        .map_err(|e: RpcDecodeError| e.to_string())
+    collomatique_rpc::receive_init().map_err(|e| e.to_string())
 }
 
 pub fn send_exit() {
-    let msg = CompleteCmdMsg::GracefulExit;
-    let encoded_msg = EncodedMsg::from(msg);
-    encoded_msg.send();
+    // The last thing this process does, so there is nothing left to abandon if
+    // it fails; the host learns the same thing from the channel closing.
+    if let Err(e) = collomatique_rpc::send_graceful_exit() {
+        eprintln!("Erreur à l'envoi du message de sortie : {e}");
+    }
 }
 
 fn try_solve() -> Result<(), anyhow::Error> {
     use anyhow::anyhow;
     use std::time::Instant;
 
-    let data_msg =
-        EncodedMsg::send_rpc(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
+    let data_msg = send_command(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
     let inner_data = match data_msg {
         ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data).into_inner_data(),
         _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
@@ -115,8 +113,7 @@ fn try_solve() -> Result<(), anyhow::Error> {
     let new_data = collomatique_state_colloscopes::Data::from_inner_data(new_inner_data)
         .map_err(|e| anyhow!("Solver produced invalid data: {}", e))?;
     let data_stream = InternalDataStream::from(&new_data);
-    EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
-        .map_err(|e| anyhow!("Error on SetData: {}", e))?;
+    send_command(CmdMsg::SetData(data_stream)).map_err(|e| anyhow!("Error on SetData: {}", e))?;
 
     eprintln!("Done.");
 
@@ -192,7 +189,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
                 }),
             };
 
-            let response = EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
+            let response = send_command(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
             last_control = matches!(response, Ok(ResultMsg::SolverControl(true)));
             last_control
         },
@@ -228,7 +225,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     };
 
     eprintln!("Sending result...");
-    EncodedMsg::send_rpc(CmdMsg::Solver(SolverMsg::Result(result_data)))
+    send_command(CmdMsg::Solver(SolverMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending SolverResult: {}", e))?;
 
     Ok(())
@@ -267,6 +264,10 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     // Nested workers spawned from inside the engine process: `Current` is right even when
     // this engine was itself launched by explicit path, since `current_exe()` here is the
     // very binary that was named.
+    //
+    // Each one binds its own listener and sets COLLOMATIQUE_RPC_CHANNEL for the child it
+    // spawns, overriding the value this process inherited. So a nested worker talks to this
+    // engine, not past it to the GUI.
     let backend = Arc::new(SubprocessSolveBackend::new(EngineExe::Current));
     let strategy_name = request.strategy.name();
     let on_echo: Arc<dyn Fn(String) + Send + Sync> = Arc::new(move |line: String| {
@@ -283,7 +284,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         let progress_raw = StrategyProgressRaw {
             progress: SerializedStrategyProgress::from(serialized_progress),
         };
-        let response = EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
+        let response = send_command(CmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
         match response {
             Ok(ResultMsg::StrategyControl(cont)) => cont,
             _ => false,
@@ -326,7 +327,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     };
 
     eprintln!("Sending strategy result...");
-    EncodedMsg::send_rpc(CmdMsg::Strategy(StrategyMsg::Result(result_data)))
+    send_command(CmdMsg::Strategy(StrategyMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending StrategyResult: {e}"))?;
 
     Ok(())
@@ -355,7 +356,7 @@ impl collomatique_python_runner::Host for RpcHost {
 
     fn send(&self, data: &collomatique_state_colloscopes::Data) -> Result<(), String> {
         let data_stream = InternalDataStream::from(data);
-        EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
+        send_command(CmdMsg::SetData(data_stream))
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
@@ -363,7 +364,7 @@ impl collomatique_python_runner::Host for RpcHost {
 
 /// Main RPC Engine function
 ///
-/// Runs the RPC engine through stdin/stdout
+/// Runs the RPC engine on the channel named in the environment by whoever spawned it.
 pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
     // Insurance for the Unix subprocess-teardown mechanism: children die when their
     // parent dies because closing the parent-held pty master hangs up the child's
@@ -375,6 +376,12 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
         libc::signal(libc::SIGHUP, libc::SIG_DFL);
     }
 
+    // Before anything else: the protocol lives on its own channel, and nothing
+    // below can say a word until this process has joined it. stdout and stderr
+    // stay what they look like — output for whoever is watching.
+    collomatique_rpc::connect_channel()
+        .map_err(|e| anyhow!("Impossible de rejoindre le canal RPC : {e}"))?;
+
     eprintln!("Waiting for initial payload...");
     let init_msg = match wait_for_init_msg() {
         Ok(x) => x,
@@ -385,8 +392,8 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
     match init_msg {
         InitMsg::RunPythonScript(script) => {
             eprintln!("Receiving file data...");
-            let data_msg = EncodedMsg::send_rpc(CmdMsg::GetData)
-                .map_err(|e| anyhow!("Error on GetData: {}", e))?;
+            let data_msg =
+                send_command(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
             let data = match data_msg {
                 ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data),
                 _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
@@ -416,7 +423,7 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
                 if state.can_undo() {
                     eprintln!("Sending final file data...");
                     let data_stream = InternalDataStream::from(state.get_data());
-                    EncodedMsg::send_rpc(CmdMsg::SetData(data_stream))
+                    send_command(CmdMsg::SetData(data_stream))
                         .map_err(|e| anyhow!("Error on SetData: {}", e))?;
                 }
             }

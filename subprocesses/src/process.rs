@@ -21,6 +21,20 @@ pub enum OutputData {
     Raw(Vec<u8>),
 }
 
+impl OutputData {
+    /// The data as text, with any byte that is not valid UTF-8 replaced by U+FFFD.
+    ///
+    /// This is program output on its way to a log view, so there is nothing to be
+    /// gained by refusing it: a Windows console under a legacy code page, or a C++
+    /// library writing a raw byte, should still be readable.
+    pub fn into_lossy_string(self) -> String {
+        match self {
+            OutputData::Utf8(s) => s,
+            OutputData::Raw(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessEvent {
     Stdout(OutputData),
@@ -175,6 +189,7 @@ impl Process {
     pub fn spawn_pty<F>(
         command: &std::ffi::OsStr,
         args: &[&str],
+        envs: &[(&str, &std::ffi::OsStr)],
         callback: F,
     ) -> Result<Self, SpawnError>
     where
@@ -209,6 +224,12 @@ impl Process {
         let mut cmd = CommandBuilder::new(command);
         for arg in args {
             cmd.arg(*arg);
+        }
+        // Added, not substituted: nothing here clears the environment, so the child
+        // still inherits everything this process has — PATH, and on Windows the GTK
+        // and Python prefixes it is started from.
+        for (key, value) in envs {
+            cmd.env(key, value);
         }
         // portable_pty otherwise starts the child in `$HOME` (a default meant for terminal
         // emulators opening a shell). The engine should inherit our working directory like
