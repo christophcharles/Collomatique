@@ -414,11 +414,12 @@ Run the exe from the build environment and verify, in order of risk:
 5. General GTK/adwaita behaviour: rendering, HiDPI, keyboard input, whether
    dark mode follows the Windows setting (observe and note; no promise).
 
-**In progress.** Items 1, 3 and 4 are confirmed on the VM as written: a solve
-streams mid-solve incumbents, so `cbcPreProcessPointer` works through the
-static COIN-OR archives; the embedded interpreter starts and finds its stdlib,
-and a script using xlsxwriter runs once xlsxwriter is installed into that
-interpreter; and rfd opens native Win32 dialogs. Item 5 has not been reported.
+**Done.** Items 1, 3 and 4 are confirmed on the VM as written: a solve streams
+mid-solve incumbents, so `cbcPreProcessPointer` works through the static
+COIN-OR archives; the embedded interpreter starts and finds its stdlib, and a
+script using xlsxwriter runs once xlsxwriter is installed into that interpreter;
+and rfd opens native Win32 dialogs. Item 2 was rebuilt rather than verified and
+item 5 found one real problem, both below.
 
 Item 3's condition is worth spelling out, because step 7 depends on it: it was
 tested against an interpreter that had been through `ensurepip` and a pinned
@@ -461,6 +462,37 @@ Linux is untouched by all this: it still spawns on a pty, because there the pty
 is load-bearing — closing the master hangs the child up, and that SIGHUP
 cascade is how a subtree dies with its parent.
 
+**Item 5 found one real problem: fractional display scaling.** The VM runs at
+Windows' 150% setting, and there the text grows while the widgets do not. The
+window comes out cramped, with buttons too small for the labels inside them.
+Nothing else under item 5 came back as a problem.
+
+This is not a packaging fault, and not something to fix in our code. GTK has two
+scaling knobs and on Win32 they disagree. `scale-factor` is an **integer**, and
+it is what scales widgets, spacing and icons; the Win32 backend can only report
+1 or 2, so at 150% it reports 1 and the whole layout is built at 100%. The font
+DPI is a separate setting, it does follow the system, and at 150% that is 144
+dpi. Text at 1.5 inside a layout at 1.0 is exactly the symptom.
+
+Upstream this is [GNOME/gtk#1036, "Support fractional scaling on
+windows"](https://gitlab.gnome.org/GNOME/gtk/-/issues/1036) — open since GTK
+3.93 and never closed. Wayland gained fractional scaling in GTK 4.14; the Win32
+backend did not. The two environment variables do not add up to a fix either:
+`GDK_SCALE` takes integers only and moves the UI alone, `GDK_DPI_SCALE` moves
+text alone, and `GDK_SCALE=2` at a 150% display is simply too big.
+
+The way out is to stop GTK from seeing the real DPI, and let Windows scale the
+finished window as a bitmap. Confirmed by hand on the VM, with no build:
+Properties → Compatibility → *override high DPI scaling behaviour* → **System**.
+Everything is proportionate again. It is slightly soft at 150% and exact at
+200%, where the stretch is a whole number.
+
+**So the permanent form is an application manifest declaring the process
+DPI-unaware**, which is a step 6 item — it belongs in the same resource as the
+icon. A manifest works where an API call would not: manifest awareness is fixed
+before any code runs, which is what lets it win over the
+`SetProcessDpiAwarenessContext` call GTK makes for itself.
+
 ### Step 6 — Windows polish (small code changes)
 
 - `#![cfg_attr(windows, windows_subsystem = "windows")]` on
@@ -472,8 +504,47 @@ cascade is how a subtree dies with its parent.
   from an `.ico` generated once out of
   `resources/icons/collomatique-{128,256,512}.png` and committed (same
   reasoning as the pre-scaled flatpak PNGs).
+- **An application manifest declaring the process DPI-unaware**, in that same
+  resource. This is the fractional-scaling answer from step 5: Windows then
+  scales the finished window itself, instead of GTK scaling the text and not
+  the widgets. Already confirmed by hand through the Compatibility tab, so what
+  is left is only to make it permanent.
 - Python path setup only if step 5.3 required it (see step 7 for the layout
   that should make it unnecessary).
+
+**Done for the console half**: `add53b8c`, then `e20a8c39`, `9bc6d175`,
+`06e2215b` and `254a2a22`. The window no longer opens, and — the reason it was
+annoying — no longer takes the focus the GUI should have had.
+
+**There is no command line on Windows, and that is a decision rather than a
+gap.** `--help`, `--version` and `--debug` produce no terminal output there. It
+is worth writing down why, because the obvious objection ("just attach a
+console") was tried and abandoned:
+
+Windows decides console-or-GUI from a single flag in the executable, chosen at
+build time. A program cannot be both. `AttachConsole(ATTACH_PARENT_PROCESS)`
+plus `SetStdHandle` did bring back everything **Rust** prints, because
+`std::io` re-reads the standard handles on every write. It never brought back
+CBC's log, because the C runtime builds its own descriptor table once at
+startup, from handles that were still null at that point, and nothing done
+afterwards revives it. Repairing that too — `_open_osfhandle` and `_dup2` onto
+descriptors 1 and 2 — still did not produce a usable command line, and shell
+redirection stayed unpredictable: PowerShell does not hand a
+`windows`-subsystem program a real handle at all, so `>` captured nothing.
+
+What is kept is only the part that stops printing from being fatal
+(`gtk4/src/windows_stdio.rs`). A null standard handle is not a silent sink on
+Windows: `std::io` reports `ERROR_INVALID_HANDLE`, `println!` panics on a failed
+write, and with no console that panic is invisible too — the application would
+simply vanish. So stdout and stderr are pointed at `NUL`. The guard that leaves
+an **already set** handle alone matters more than the rest of the file: the
+`--rpc-engine` worker is this same executable, and its whole log travels on a
+pipe the parent hands it at creation time.
+
+Silence is not the same as doing nothing, so terminal-only arguments are
+answered in a message box instead (`254a2a22`, `gtk4/src/windows_cli.rs`),
+showing clap's own text for help, version and usage errors, and a sentence of
+its own for `--debug`. Unix keeps its command line exactly as it was.
 
 ### Step 7 — Bundle layout
 
