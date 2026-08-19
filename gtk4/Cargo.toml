@@ -7,6 +7,13 @@ authors.workspace = true
 [build-dependencies]
 glib-build-tools = "0.20"
 
+[target.'cfg(windows)'.build-dependencies]
+# Compiles the application icon into the executable. It shells out to rc.exe from
+# the Windows SDK, which pkgs\windows\bootstrap.ps1 installs, and finds it the
+# same way the rest of the build finds MSVC -- through the registry, with no
+# developer prompt needed. See build.rs.
+winresource = "0.1"
+
 [dependencies]
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }

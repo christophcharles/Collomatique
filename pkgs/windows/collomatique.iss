@@ -4,13 +4,13 @@
 ; every path and version it needs, so nothing here is written down twice:
 ;
 ;     ISCC.exe /DAppVersion=... /DVersionInfo=... /DStageDir=... /DOutputDir=...
-;              pkgs\windows\collomatique.iss
+;              /DIconFile=... pkgs\windows\collomatique.iss
 ;
-; What it does is deliberately the smallest thing that installs: copy the staged
-; directory, put an entry in the Start menu, and register an uninstaller. It does
-; not associate .collomatique files, does not write anything under
-; Software\Classes, and does not touch the bundled Python. Those come later, one
-; at a time, so that when one of them misbehaves it is obvious which one.
+; What it does: copy the staged directory, put an entry in the Start menu,
+; register an uninstaller, and make Explorer open .collomatique files with
+; Collomatique. It does not touch the bundled Python -- how a teacher's own
+; packages get installed is not settled yet, and it is not the installer's
+; business until it is.
 
 #ifndef AppVersion
   #error AppVersion is not defined -- compile this through pkgs\windows\build.ps1
@@ -24,6 +24,17 @@
 #ifndef OutputDir
   #error OutputDir is not defined -- compile this through pkgs\windows\build.ps1
 #endif
+#ifndef IconFile
+  #error IconFile is not defined -- compile this through pkgs\windows\build.ps1
+#endif
+
+; The extension, its ProgID, and the name Explorer shows in its "Type" column.
+; Written once here because they are spread over the registry entries at the
+; bottom, and getting two of them to disagree is the classic way to register an
+; association that quietly does nothing.
+#define ExtName  ".collomatique"
+#define ProgId   "Collomatique.Document"
+#define TypeName "Colloscope Collomatique"
 
 [Setup]
 ; A fixed identity. Inno recognises an existing installation by this GUID and
@@ -88,9 +99,21 @@ SolidCompression=yes
 WizardStyle=modern
 ; The Start-menu folder is not worth a page of the wizard for a single entry.
 DisableProgramGroupPage=yes
-; The icon shown beside Collomatique in "Installed apps". The exe carries no icon
-; resource of its own yet, so for now this is Windows' default application icon.
+
+; The only two places the icon has to be named. Everywhere else it is inherited:
+; the Start-menu shortcut and the file association both point at the executable,
+; and the executable carries the same icon compiled in by gtk4/build.rs.
+;
+;   SetupIconFile         -- setup.exe itself, before anything is installed, so
+;                            it is the one place that cannot read it off the
+;                            executable and needs the .ico directly.
+;   UninstallDisplayIcon  -- beside Collomatique in Windows' "Installed apps".
+SetupIconFile={#IconFile}
 UninstallDisplayIcon={app}\collomatique-gtk4.exe
+
+; Tell Explorer its association cache is stale. Without it the new file type
+; keeps its blank page icon until the next sign-in.
+ChangesAssociations=yes
 
 OutputDir={#OutputDir}
 OutputBaseFilename=Collomatique-Setup-{#AppVersion}
@@ -112,6 +135,52 @@ Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: recursesubdirs createallsubdir
 
 [Icons]
 Name: "{group}\Collomatique"; Filename: "{app}\collomatique-gtk4.exe"
+
+[Registry]
+; Double-clicking a .collomatique file opens it in Collomatique.
+;
+; Root HKA is the counterpart of the install-mode dialog: HKLM after an all-users
+; install, HKCU after a per-user one. Writing HKLM unconditionally is what makes
+; an association fail silently for a teacher without administrator rights.
+;
+; Windows wants two halves. The extension key names a ProgID, and the ProgID
+; carries what to do with the file. Neither is any use without the other, which
+; is why both spellings come from the same #define above.
+
+; The extension -> the ProgID. Its own key is removed on uninstall only if
+; nothing else is left in it, so an association some other program added later
+; is not taken down with ours.
+Root: HKA; Subkey: "Software\Classes\{#ExtName}"; \
+    ValueType: string; ValueName: ""; ValueData: "{#ProgId}"; \
+    Flags: uninsdeletevalue uninsdeletekeyifempty
+
+; The same thing again, in the list Windows reads to build the "Open with" menu.
+; The default value above decides what a double-click does; this decides whether
+; Collomatique is offered at all when a teacher goes looking.
+Root: HKA; Subkey: "Software\Classes\{#ExtName}\OpenWithProgids"; \
+    ValueType: string; ValueName: "{#ProgId}"; ValueData: ""; \
+    Flags: uninsdeletevalue
+
+; The ProgID: the name Explorer shows in its "Type" column, the icon it draws on
+; the file, and the command a double-click runs. This subtree is ours alone, so
+; uninstalling removes all of it.
+Root: HKA; Subkey: "Software\Classes\{#ProgId}"; \
+    ValueType: string; ValueName: ""; ValueData: "{#TypeName}"; \
+    Flags: uninsdeletekey
+
+; ",0" is the first icon resource in the executable, which is the one and only
+; one gtk4/build.rs puts there. Files get the application's icon because there is
+; no separate document artwork -- the same choice the flatpak makes in its
+; mime.xml.
+Root: HKA; Subkey: "Software\Classes\{#ProgId}\DefaultIcon"; \
+    ValueType: string; ValueName: ""; ValueData: "{app}\collomatique-gtk4.exe,0"
+
+; The quoting is not decoration. Without the inner quotes any path containing a
+; space -- "C:\Program Files\Collomatique", for one, and every teacher's
+; "Mes documents" for another -- arrives at the application split into pieces.
+Root: HKA; Subkey: "Software\Classes\{#ProgId}\shell\open\command"; \
+    ValueType: string; ValueName: ""; \
+    ValueData: """{app}\collomatique-gtk4.exe"" ""%1"""
 
 [Run]
 ; A "run Collomatique now" checkbox on the last page, ticked to start with.

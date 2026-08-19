@@ -86,12 +86,16 @@ if [ -n "$foreign" ]; then
     exit 1
 fi
 
-# Keep the scaled icons in sync with the master they are scaled from.
+# Keep everything derived from the master icon in sync with it. The .ico is in
+# the same list as the scaled copies because it comes out of the same script and
+# from the same master -- it is the Windows executable's icon, and the one
+# Explorer draws on .collomatique files.
 if staged resources/icons/collomatique.png; then
-    for size in 128 256 512; do
-        if ! staged "resources/icons/collomatique-$size.png"; then
+    for derived in collomatique-128.png collomatique-256.png collomatique-512.png \
+                   collomatique.ico; do
+        if ! staged "resources/icons/$derived"; then
             echo "pre-commit: the master icon is staged but" >&2
-            echo "  resources/icons/collomatique-$size.png is not." >&2
+            echo "  resources/icons/$derived is not." >&2
             echo "  Run ./resources/icons/generate-sizes.sh and stage the result." >&2
             exit 1
         fi

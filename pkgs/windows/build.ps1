@@ -83,6 +83,13 @@ $CargoTarget = Join-Path $OutRoot 'target'
 $GtkBuildRoot = Join-Path $OutRoot 'gtk-build'
 $GtkPrefix    = Join-Path $GtkBuildRoot 'gtk\x64\release'
 
+# The application icon, in the one format Windows understands. Two things read
+# it: gtk4/build.rs compiles it into the executable, and Inno Setup puts it on
+# setup.exe. It is generated from the master PNG and committed by
+# resources/icons/generate-sizes.sh, which needs image tooling this machine does
+# not have -- so it is checked for here rather than produced.
+$IconFile = Join-Path $RepoRoot 'resources\icons\collomatique.ico'
+
 # CBC is downloaded rather than built, so its version is a pin like any other and
 # lives here with the paths. See the section that fetches it for why it does not
 # come from vcpkg.
@@ -126,6 +133,18 @@ if (-not (Test-Path $OutRoot)) {
         Write-Note "or pass a path you own: -OutRoot C:\Users\you\collo-build"
         exit 1
     }
+}
+
+# Checked here rather than where it is used, which is hours later: the cargo
+# build fails without it, and finding that out after gvsbuild has finished is a
+# bad way to learn that a file was never committed.
+if (-not (Test-Path $IconFile)) {
+    Write-Fail "the application icon is missing: $IconFile"
+    Write-Note "it is generated from resources/icons/collomatique.png by"
+    Write-Note "resources/icons/generate-sizes.sh, and committed. That script needs"
+    Write-Note "image tooling that is not installed here, so run it where the rest of"
+    Write-Note "the development happens and bring the result over."
+    exit 1
 }
 
 # ---------------------------------------------------------------------------
@@ -675,10 +694,9 @@ Write-Host
 # ---------------------------------------------------------------------------
 
 # Inno Setup compiles the staged directory above into a single setup.exe. The
-# script is collomatique.iss, next to this one, and it is kept deliberately small:
-# copy the directory, add a Start-menu entry, register an uninstaller. No file
-# association and nothing written under Software\Classes yet -- see the comments
-# in the .iss for why those are held back.
+# script is collomatique.iss, next to this one: it copies the directory, adds a
+# Start-menu entry, registers an uninstaller, and associates .collomatique files
+# with the application.
 #
 # Every path and version the .iss needs is passed in with /D rather than written
 # down there, so this script stays the one place that knows where things are.
@@ -748,6 +766,7 @@ Write-Host
     "/DVersionInfo=$VersionInfo" `
     "/DStageDir=$StageRoot" `
     "/DOutputDir=$OutRoot" `
+    "/DIconFile=$IconFile" `
     $IssScript
 
 if ($LASTEXITCODE -ne 0) {
