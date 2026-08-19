@@ -86,6 +86,33 @@ if [ -n "$foreign" ]; then
     exit 1
 fi
 
+# The Windows application manifest is the one file in the tree that Windows
+# refuses to start the program over. The activation context is built before the
+# process runs, so a manifest that does not parse is fatal rather than ignored:
+# the exe never starts, and the message box says "the side-by-side configuration
+# is incorrect" without naming a file. It is easy to break by accident too, an
+# XML comment being unable to contain two dashes in a row while this project
+# writes that dash everywhere else. Read the staged bytes, not the working tree,
+# so a fix that has not been staged does not pass. Checked on every commit for
+# the same reason as the json above: a broken one that slipped through earlier
+# is worth catching. Empty means it is not in the index at all, which is what a
+# commit deleting it looks like.
+manifest=gtk4/collomatique-gtk4.exe.manifest
+manifest_xml=$(staged_content "$manifest")
+
+if [ -n "$manifest_xml" ] && ! printf '%s\n' "$manifest_xml" | python3 -c '
+import sys, xml.etree.ElementTree as ET
+
+try:
+    ET.fromstring(sys.stdin.buffer.read())
+except ET.ParseError as error:
+    sys.exit(f"  {error}")
+'; then
+    echo "pre-commit: $manifest is not well-formed XML." >&2
+    echo "  Windows would refuse to start the program with it." >&2
+    exit 1
+fi
+
 # Keep everything derived from the master icon in sync with it. The .ico is in
 # the same list as the scaled copies because it comes out of the same script and
 # from the same master -- it is the Windows executable's icon, and the one

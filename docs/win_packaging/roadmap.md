@@ -593,6 +593,27 @@ manifest should say it; it is what the application already did.
 There was no manifest to collide with: rustc puts one in its own binary, not in
 the programs it compiles.
 
+**The first one did not start** (`98d83c32` fixes it), and the failure is worth
+keeping because nothing about it points at the cause. The installed
+Collomatique answered a double-click with a box: *CreateProcess a échoué ; code
+14001. L'application n'a pas pu démarrer car sa configuration côte-à-côte est
+incorrecte.* No file is named, and the build had been silent.
+
+The manifest's comments contained `--`, which an XML comment may not, so the
+file did not parse. That is not a warning: Windows builds the activation
+context before the process starts, so a manifest it cannot read means the
+program never runs at all. The elements were right the whole time; only the
+prose around them was wrong. This is a trap of our own making, since `--` is
+the dash the rest of the tree writes freely, and the file now carries a note
+saying so.
+
+The pre-commit hook parses the **staged** manifest with `python3` and refuses
+the commit if it does not read, which is what would have caught this before it
+reached the VM. `xml.etree` is in the standard library, so this asks nothing new
+of the shell. Every other file here can be wrong in a way that shows up as a
+test failure or a compile error; this one can only be found by running the
+program on Windows, which is exactly the slowest place to find anything.
+
 What is left in this step is the Python path setup, if it turns out to be
 needed.
 
