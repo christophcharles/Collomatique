@@ -1,0 +1,5 @@
+# Read by site.py at every start of this interpreter. A line beginning with
+# "import" is executed as Python code, which is the only way a path can be
+# computed rather than written down. Everything it does is in the module beside
+# this file.
+import collomatique_site

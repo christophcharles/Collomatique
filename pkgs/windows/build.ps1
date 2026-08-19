@@ -623,6 +623,18 @@ Copy-Staged 'the Python runtime DLLs' (Join-Path $Prefix 'bin\*.dll') $StageRoot
 Copy-Staged 'the Python interpreter and standard library' `
     (Join-Path $Prefix 'tools\python3\*') $StageRoot
 
+# What makes %APPDATA%\collomatique\python searched by this interpreter,
+# whoever started it -- the application, python.exe or pip. The module's own
+# docstring says what that directory is and why it carries the Python version.
+$SitePackages = Join-Path $StageRoot 'Lib\site-packages'
+Copy-Staged 'the private site directory hook' `
+    (Join-Path $ManifestDir 'site\*') $SitePackages
+
+# The one command that installs into it, so that nobody has to type it out. It
+# goes at the top of the installation folder, beside the python.exe it runs.
+Copy-Item -Path (Join-Path $ManifestDir 'collomatique-pip.cmd') -Destination $StageRoot -Force
+Write-Note "collomatique-pip.cmd"
+
 # The image loaders. GTK4 has its own PNG and JPEG loading, but icon themes are
 # SVG and that goes through librsvg's gdk-pixbuf loader -- and the whole UI is
 # built out of Adwaita's *-symbolic icons, so without this there are no icons.
