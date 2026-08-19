@@ -5,11 +5,12 @@
 # Run it from a terminal opened after pkgs\windows\bootstrap.ps1 has finished,
 # so that VCPKG_ROOT is in the environment.
 #
-# What it does today is the dependencies, in two halves. CBC and the Python the
-# application embeds are built by vcpkg, from the manifest next to this file.
-# GTK and libadwaita are built by gvsbuild. Then it reports what landed. It does
-# not compile Collomatique itself yet; the rest is added one piece at a time as
-# the roadmap advances: the cargo build, the bundle layout, then the installer.
+# What it does today is the dependencies, then Collomatique. The dependencies
+# come in two halves: CBC and the Python the application embeds are built by
+# vcpkg, from the manifest next to this file, and GTK and libadwaita are built by
+# gvsbuild. It reports what landed, then builds the application against both. The
+# rest is added one piece at a time as the roadmap advances: the bundle layout,
+# then the installer.
 #
 # The halves are separate because GTK cannot come from vcpkg. libadwaita needs
 # appstream, appstream needs libxmlb, and vcpkg's libxmlb port declares
@@ -61,6 +62,14 @@ $ManifestDir   = $PSScriptRoot
 $TripletDir    = Join-Path $ManifestDir 'triplets'
 $InstalledRoot = Join-Path $OutRoot 'vcpkg_installed'
 $Prefix        = Join-Path $InstalledRoot $Triplet
+
+# This script lives in pkgs\windows\, so the workspace is two levels up.
+$RepoRoot = (Resolve-Path (Join-Path $ManifestDir '..\..')).Path
+
+# cargo would put this in <repo>\target. It goes under -OutRoot instead, for the
+# same reason everything else does: the working tree stays clean, and everything
+# the build produces sits in one place for the bundle step to harvest from.
+$CargoTarget = Join-Path $OutRoot 'target'
 
 # What gvsbuild gets as its --build-dir, and where it installs to. gvsbuild's own
 # default is C:\gtk-build; putting it here instead keeps everything this script
@@ -319,4 +328,89 @@ if (Test-Path $pythonLib) {
 }
 
 Write-Host
-Write-Step "dependencies done. Compiling Collomatique itself is the next step."
+
+# ---------------------------------------------------------------------------
+# Collomatique itself
+# ---------------------------------------------------------------------------
+
+# $ErrorActionPreference stays 'Continue' from the report above rather than going
+# back to 'Stop'. cargo writes its whole progress display to stderr, and the
+# combination of 'Stop' and a chatty native command is a well-known way to have a
+# script die on a line that was only ever a status message. Success is decided by
+# $LASTEXITCODE below, which is what cargo actually promises.
+
+# One binary: collomatique-gtk4 is a multiplexed exe. The GUI re-executes itself
+# with --rpc-engine for the solver and Python workers, so this single build
+# already contains everything -- there is no second binary to produce.
+$CargoPackage = 'collomatique-gtk4'
+
+# Four environment variables are what connect the workspace to the two prefixes
+# above. They are set here rather than expected from the machine, so that a build
+# depends on this script and not on how a terminal happens to be configured, and
+# they are set on this process only -- nothing is written back to the machine.
+
+# The -sys crates find their C libraries through pkg-config. Rust's pkg_config
+# crate runs whatever $PKG_CONFIG names, so this points it at the pkgconf vcpkg
+# built rather than requiring one on PATH.
+$env:PKG_CONFIG = Join-Path $Prefix 'tools\pkgconf\pkgconf.exe'
+
+# Two directories, because there are two prefixes: CBC is vcpkg's, the whole GTK
+# stack is gvsbuild's. The separator is a semicolon -- this is a native Windows
+# pkgconf, and it splits the variable the way Windows splits PATH, not the way
+# Unix does.
+$env:PKG_CONFIG_PATH = @(
+    (Join-Path $Prefix    'lib\pkgconfig')
+    (Join-Path $GtkPrefix 'lib\pkgconfig')
+) -join ';'
+
+# gtk4/build.rs compiles the .gresource bundle through glib-build-tools, which
+# spawns glib-compile-resources by name and therefore needs it on PATH. It comes
+# with glib, so it is in the gvsbuild prefix.
+$env:PATH = (Join-Path $GtkPrefix 'bin') + ';' + $env:PATH
+
+# pyo3 has no interpreter to guess between here, and must not be allowed to guess
+# anyway: the interpreter the application links against has to be the one it will
+# ship, or the DLL in the bundle will not match the one it was built for.
+$env:PYO3_PYTHON = $VcpkgPython
+
+if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+    Write-Fail "cargo is not in PATH."
+    Write-Note "bootstrap.ps1 installs rustup. If it has already run, open a new"
+    Write-Note "terminal -- PATH is only picked up by processes started afterwards."
+    exit 1
+}
+
+Write-Step "building $CargoPackage (release)"
+Write-Note "PKG_CONFIG_PATH: $env:PKG_CONFIG_PATH"
+Write-Note "PYO3_PYTHON:     $env:PYO3_PYTHON"
+Write-Note "target dir:      $CargoTarget"
+Write-Host
+
+# Bare, no pipeline and no redirection, for the reason given above the vcpkg call.
+Push-Location $RepoRoot
+try {
+    & cargo build --release --package $CargoPackage --target-dir $CargoTarget
+} finally {
+    Pop-Location
+}
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host
+    Write-Fail "cargo build failed (exit code $LASTEXITCODE)."
+    Write-Note "if a -sys crate could not find its library, the error names the .pc"
+    Write-Note "file it wanted; check it is in one of the two directories above."
+    exit 1
+}
+
+Write-Host
+
+$Exe = Join-Path $CargoTarget "release\$CargoPackage.exe"
+if (Test-Path $Exe) {
+    Write-Step "built: $Exe"
+} else {
+    Write-Fail "cargo reported success but $Exe is not there."
+    exit 1
+}
+
+Write-Note "it will not run outside this build environment yet -- the GTK DLLs are"
+Write-Note "in the gvsbuild prefix, not beside it. Bundling is the next step."
