@@ -98,6 +98,20 @@ $CbcUrl     = "https://github.com/coin-or/Cbc/releases/download/releases/$CbcVer
 $CbcSha256  = 'b9702ad7501b4249a9721984ce3c6dc8fb9b6cfb995f42d493a5bd54b8f42a74'
 $CbcPrefix  = Join-Path $OutRoot "cbc-$CbcVersion"
 
+# XlsxWriter, which the example export scripts import. Downloaded rather than
+# pip-installed, so it is a pin like CBC's and lives here with it. Pure Python:
+# the wheel is a zip of the finished package, and unpacking it into the stage is
+# the whole install.
+#
+# The URL is the file's own address on PyPI rather than the /simple/ page,
+# because that address contains the hash of the file and cannot be made to point
+# at a different one later.
+$XlsxwriterVersion = '3.2.9'
+$XlsxwriterWheel   = "xlsxwriter-$XlsxwriterVersion-py3-none-any.whl"
+$XlsxwriterUrl     = "https://files.pythonhosted.org/packages/3a/0c/3662f4a66880196a590b202f0db82d919dd2f89e99a27fadef91c4a33d41/$XlsxwriterWheel"
+$XlsxwriterSha256  = '9a5db42bc5dff014806c58a20b9eae7322a134abb6fce3c92c181bfb275ec5b3'
+$XlsxwriterPath    = Join-Path $OutRoot $XlsxwriterWheel
+
 Write-Step "Collomatique Windows build"
 Write-Note "manifest: $ManifestDir"
 Write-Note "triplet:  $Triplet"
@@ -243,6 +257,46 @@ if (-not (Test-Path (Join-Path $CbcLibDir 'Cbc.lib'))) {
         $CbcCopied++
     }
     Write-Note "$CbcCopied libraries, libFoo.lib -> Foo.lib"
+}
+
+Write-Host
+
+# ---------------------------------------------------------------------------
+# The XlsxWriter wheel
+# ---------------------------------------------------------------------------
+
+# Fetched here, unpacked into the stage much further down. Downloading early is
+# the point: this is the only other thing on the network besides CBC, and
+# finding out that it is unreachable after a day of compiling would be a poor
+# way to learn it.
+
+if (Test-Path $XlsxwriterPath) {
+    Write-Step "XlsxWriter $XlsxwriterVersion is already downloaded"
+    Write-Note "at: $XlsxwriterPath"
+} else {
+    Write-Step "downloading XlsxWriter $XlsxwriterVersion"
+    Write-Note $XlsxwriterUrl
+
+    # curl.exe with the extension, and --fail, for the reasons given at CBC's
+    # download above: plain "curl" is an alias for Invoke-WebRequest, and
+    # without --fail an HTTP error page is written to the file with exit code 0.
+    & curl.exe --fail --location --output $XlsxwriterPath $XlsxwriterUrl
+
+    if ($LASTEXITCODE -ne 0) {
+        Remove-Item $XlsxwriterPath -Force -ErrorAction SilentlyContinue
+        Write-Fail "could not download XlsxWriter (curl exit code $LASTEXITCODE)."
+        Write-Note "the URL above is the file's own address on PyPI; check it is reachable."
+        exit 1
+    }
+}
+
+$XlsxwriterActualSha = (Get-FileHash -Path $XlsxwriterPath -Algorithm SHA256).Hash
+if ($XlsxwriterActualSha -ne $XlsxwriterSha256) {
+    Write-Fail "the XlsxWriter download does not match its expected checksum."
+    Write-Note "expected: $XlsxwriterSha256"
+    Write-Note "got:      $XlsxwriterActualSha"
+    Write-Note "delete $XlsxwriterPath and run again."
+    exit 1
 }
 
 Write-Host
@@ -618,15 +672,45 @@ Copy-Staged 'GTK, libadwaita and their stack' (Join-Path $GtkPrefix 'bin\*.dll')
 Copy-Staged 'the Python runtime DLLs' (Join-Path $Prefix 'bin\*.dll') $StageRoot
 
 # python.exe comes along on purpose: it is how a teacher installs a package into
-# this interpreter later. Nothing is installed into it here -- pip and xlsxwriter
-# belong to whatever ships the application, not to this staging directory.
+# this interpreter later, and it is what collomatique-pip.cmd runs.
 Copy-Staged 'the Python interpreter and standard library' `
     (Join-Path $Prefix 'tools\python3\*') $StageRoot
+
+# pip and XlsxWriter, unpacked rather than installed. A wheel is a zip, and a
+# pure-Python one holds the finished package plus its .dist-info -- exactly what
+# pip would have written. So there is nothing to run here, nothing to run on the
+# teacher's machine that could fail, and every file is one Inno Setup records and
+# can remove again.
+#
+# pip comes from the interpreter's own bundled copy, which is what ensurepip
+# would have installed, so it needs no pin and no download: it follows whatever
+# Python vcpkg gives us. What is skipped by not calling ensurepip is
+# Scripts\pip.exe, and nothing here wants it -- every call goes through
+# "python.exe -m pip".
+#
+# Expand-Archive refuses anything not named .zip, so this goes through .NET
+# directly. Add-Type is for Windows PowerShell 5.1, where that assembly is not
+# loaded by default; on 7 it is already there and the call is harmless.
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+$SitePackages = Join-Path $StageRoot 'Lib\site-packages'
+
+$PipWheel = @(Get-Item -Path (Join-Path $StageRoot 'Lib\ensurepip\_bundled\pip-*.whl') `
+    -ErrorAction SilentlyContinue)
+if ($PipWheel.Count -eq 0) {
+    Write-Fail "the staged interpreter has no bundled pip wheel."
+    Write-Note "expected: $StageRoot\Lib\ensurepip\_bundled\pip-*.whl"
+    Write-Note "it is where pip comes from, and there is no other source here."
+    exit 1
+}
+[System.IO.Compression.ZipFile]::ExtractToDirectory($PipWheel[0].FullName, $SitePackages)
+Write-Note "pip, unpacked from $($PipWheel[0].Name)"
+
+[System.IO.Compression.ZipFile]::ExtractToDirectory($XlsxwriterPath, $SitePackages)
+Write-Note "XlsxWriter $XlsxwriterVersion, unpacked"
 
 # What makes %APPDATA%\collomatique\python searched by this interpreter,
 # whoever started it -- the application, python.exe or pip. The module's own
 # docstring says what that directory is and why it carries the Python version.
-$SitePackages = Join-Path $StageRoot 'Lib\site-packages'
 Copy-Staged 'the private site directory hook' `
     (Join-Path $ManifestDir 'site\*') $SitePackages
 

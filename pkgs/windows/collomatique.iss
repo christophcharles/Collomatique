@@ -8,9 +8,16 @@
 ;
 ; What it does: copy the staged directory, put an entry in the Start menu,
 ; register an uninstaller, and make Explorer open .collomatique files with
-; Collomatique. It does not touch the bundled Python -- how a teacher's own
-; packages get installed is not settled yet, and it is not the installer's
-; business until it is.
+; Collomatique.
+;
+; Nothing here touches the bundled Python, and that is now a finished answer
+; rather than a postponed one. pip and XlsxWriter are already unpacked inside
+; the staged directory, so they arrive as ordinary files with everything else --
+; nothing to download here, nothing to run, nothing that can fail on a teacher's
+; machine. A module a teacher installs later goes to their own
+; %APPDATA%\collomatique\python, which build.ps1 stages the hook for; see
+; pkgs\windows\site\collomatique_site.py. The only trace of any of it below is
+; the [UninstallDelete] section at the bottom.
 
 #ifndef AppVersion
   #error AppVersion is not defined -- compile this through pkgs\windows\build.ps1
@@ -195,3 +202,21 @@ Root: HKA; Subkey: "Software\Classes\{#ProgId}\shell\open\command"; \
 Filename: "{app}\collomatique-gtk4.exe"; \
     Description: "{cm:LaunchProgram,Collomatique}"; \
     Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; Everything shipped here is recorded by [Files] above and removed with it. This
+; is for what pip may write afterwards: a module installed without --prefix
+; lands in the application's own directories, and Setup has no record of it.
+; That is possible after a "me only" install, where {app} is writable without
+; administrator rights.
+;
+; Named precisely rather than sweeping {app}\Lib. Windows filenames are
+; case-insensitive, so Python's Lib\ and glib's lib\ are one directory there,
+; and taking it whole would take the GTK stack with it.
+Type: filesandordirs; Name: "{app}\Lib\site-packages"
+Type: filesandordirs; Name: "{app}\Scripts"
+
+; Deliberately not listed: %APPDATA%\collomatique\python. Those are the
+; teacher's own modules, and surviving is the whole point of putting them there.
+; An update is an uninstall followed by an install, so removing them here would
+; undo the thing that directory exists for.
