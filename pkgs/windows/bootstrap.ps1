@@ -84,8 +84,10 @@ $global:LASTEXITCODE = 0
 #
 # The Rust documentation's version of this command also adds
 # Microsoft.VisualStudio.Component.VC.Tools.ARM64. Collomatique targets x86_64
-# only (roadmap, "Out of scope"), so the ARM64 cross compiler is a couple of
-# gigabytes bought for nothing. Add it back here if that ever changes.
+# only, so the ARM64 cross compiler is a couple of gigabytes bought for nothing.
+# Add it back here if that ever changes. (ARM64, code signing, a CI build and
+# distribution channels are the four things the retired roadmap put out of
+# scope; see the pointer at the top of build.ps1.)
 #
 # The SDK component carries its version, so it is a real pin: a rebuild next
 # year uses the SDK this line names, not whatever is current then.
