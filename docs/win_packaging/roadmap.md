@@ -569,8 +569,32 @@ is Inno Setup's `SetupIconFile`, because setup.exe runs before anything is
 installed. Version info comes along with the same resource, so that half of the
 bullet is done too.
 
-What is left in this step is the DPI manifest, and the Python path setup if it
-turns out to be needed.
+**Done for the DPI manifest** (`e81998f7`), in that same resource as planned.
+`gtk4/collomatique-gtk4.exe.manifest` declares the process DPI-unaware, and
+`build.rs` compiles it in beside the icon — one `set_manifest_file` line, one
+more `rerun-if-changed`. GTK is then told 96 dpi and lays the window out at
+100%, and Windows stretches the finished result: the Compatibility-tab override
+from step 5, made permanent.
+
+The declaration also **locks** the setting, and that is the load-bearing half.
+GTK calls `SetProcessDpiAwarenessContext` for itself at startup; with the
+manifest that call fails with `ERROR_ACCESS_DENIED`, and
+`_gdk_win32_enable_hidpi` reads back what was set instead of insisting. Plain
+absence of these elements is unaware too, but a *changeable* unaware, and GTK's
+call would win. Two elements say the same thing to two generations of Windows:
+`dpiAwareness=unaware` for Windows 10 1607 and later, which ignores the second,
+and `dpiAware=false` for anything older.
+
+Nothing else is declared, on purpose. UTF-8 as the process code page, long path
+support and a supported-OS list are all real manifest settings with real
+effects, and none of them is about scaling. `asInvoker` is there because a
+manifest should say it; it is what the application already did.
+
+There was no manifest to collide with: rustc puts one in its own binary, not in
+the programs it compiles.
+
+What is left in this step is the Python path setup, if it turns out to be
+needed.
 
 ### Step 7 — Bundle layout
 
