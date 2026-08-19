@@ -7,6 +7,8 @@ use std::io::Write;
 
 use serde::{Deserialize, Serialize};
 
+pub mod channel;
+
 pub mod cmd_msg;
 pub use cmd_msg::CmdMsg;
 

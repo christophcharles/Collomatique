@@ -10,6 +10,7 @@ serde_json = { workspace = true }
 ordered-float = { workspace = true, features = ["serde"] }
 anyhow.workspace = true
 thiserror.workspace = true
+interprocess = "2.4"
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
 collomatique-ilp = { path = "../ilp", features = ["serde"] }
