@@ -203,19 +203,37 @@ this but in the way of item 5.
 
 ### Step 2 — VM bootstrap
 
-`pkgs/windows/bootstrap.ps1`, run elevated in the Windows 11 VM. Five tools:
-VS Build Tools 2022, git, vcpkg, rustup, Inno Setup 7. That list will have to
-grow when gvsbuild arrives — it needs MSYS2 as a build shell and a Python to run
-itself. Written as a script rather than a list of manual installs because the
-VM is disposable — the
+`pkgs/windows/bootstrap.ps1`, run elevated in the Windows 11 VM. It started at
+five tools — VS Build Tools 2022, git, vcpkg, rustup, Inno Setup 7 — and step 3
+grew it to eight: Python 3.12, uv and MSYS2, all three there only so that
+gvsbuild can run. Written as a script rather than a list of manual installs
+because the VM is disposable — the
 point is to roll back to a clean snapshot, run one command, and be back at a
 build environment. Take a snapshot afterwards: that snapshot, not the script, is
 the reproducible artifact.
 
 **Done**: `d935b4c0`, then `2b7ff721`, `f1f81dd7`, `bb2bd6a9` and `624420a3`,
-each fixing something the previous run surfaced. Everything installs and is
+each fixing something the previous run surfaced, then `645aa5df`, `ec547ee6`,
+`b4aecd0d` and `e5545cba` for the gvsbuild tools. Everything installs and is
 found. The last full run was against a machine that already had Build Tools; a
 run from a blank snapshot is still owed.
+
+gvsbuild itself is installed here rather than in `build.ps1`, because it is a
+tool and this is where tools go. It is pinned, and installed the way its own
+documentation does it: `uv tool install gvsbuild==<version>`, followed by
+`uv tool update-shell`. That second line is not optional — uv puts tool
+executables in `%USERPROFILE%\.local\bin`, which Windows does not have on PATH,
+and until it has run `uv run gvsbuild` reports gvsbuild as not found while
+`uv tool list` cheerfully shows it installed.
+
+The script also fetches one URL with `curl.exe` and throws the result away. The
+Windows certificate store is filled in lazily: a root certificate only arrives
+once something has asked for it. gvsbuild downloads its own cargo from
+`win.rustup.rs`, and on a fresh machine that download fails with an SSL error,
+because CPython reads the store but does not trigger the update the way a
+schannel client does. Fetching the URL once with `curl.exe` fills the gap. A
+browser is not a valid test of this — Edge and Chrome carry their own root
+stores, so succeeding there says nothing about the Windows one.
 
 Three things the VM taught, all recorded in the script:
 
@@ -297,10 +315,41 @@ xlsxwriter` downloaded from PyPI and installed cleanly, and `ssl`, `sqlite3`,
 `zlib` and `ctypes` all import. So the bundle step runs `ensurepip` once rather
 than shipping a second interpreter. See step 7 for where `--user` puts things.
 
-**Not done: the GTK stack**, which comes from gvsbuild and is not written yet.
-Acceptance for that half is unchanged in spirit — the libraries and their `.pc`
-files exist, and `glib-compile-resources` runs — but it will be in gvsbuild's
-prefix, not vcpkg's, so step 4 has two prefixes to point pkg-config at.
+**Done for the GTK half too**: `4b764ce5`, then `bcd2d020` and `a6f9a98a`.
+`build.ps1` runs `uv run gvsbuild build` for `gtk4`, `libadwaita` and
+`adwaita-icon-theme`, and everything else in the stack arrives as a dependency of
+those three. The install prefix is not a choice: gvsbuild builds it as
+`<build-dir>\gtk\<platform>\<configuration>`, so passing `--configuration
+release` explicitly is what makes the path the script reports afterwards a fact
+rather than a guess.
+
+`adwaita-icon-theme` is asked for by name because it is not a library and does
+not arrive as a dependency, and a libadwaita application without it simply shows
+no icons. `librsvg` is *not* asked for and does not need to be — gvsbuild makes
+it a dependency of `gtk4` itself, which settles the symbolic-icon question before
+it was raised. It is also why a run downloads rustup: librsvg is written in Rust,
+and gvsbuild installs its own pinned cargo rather than using the rustup that
+`bootstrap.ps1` put there.
+
+**Both halves are accepted.** A full run of `build.ps1` finished on 19 Aug 2026
+and its closing report found `cbc.pc` in the vcpkg prefix, `gtk4.pc` and
+`libadwaita-1.pc` in the gvsbuild one, `glib-compile-resources` 2.88.3, `pkgconf`
+3.0.3, and Python 3.12.13 with a 163-module stdlib. `libadwaita-1.pc` existing at
+all is the whole point of the detour — it is the file vcpkg could not produce.
+
+Two things a fresh machine will hit again, only one of them fixed:
+
+- **The certificate store needs warming.** Reproducible, and now done by
+  `bootstrap.ps1`; see step 2.
+- **gvsbuild pins gperf 3.1 to a single hard-coded mirror**,
+  `mirrors.ibiblio.org`, in both the pinned version and its `main` branch. That
+  server was serving nothing at all during our build, so the download 404s.
+  Nothing to report upstream — it is an outage, not a dead URL. The way out is to
+  fetch the tarball by hand from `https://ftp.gnu.org/pub/gnu/gperf/` into
+  `<build-dir>\src\` and re-run; gvsbuild checks the hash, so a wrong file is
+  caught rather than built. Deliberately not automated: a recovery path in the
+  build script for a mirror that is usually up is more code to maintain than it
+  is worth.
 
 ### Step 4 — `build.ps1`, second part: first compile of the workspace
 
@@ -432,8 +481,11 @@ That is the definition of done.
   versions. Python's *minor* version deserves treating as a pin in its own
   right, beyond the baseline: teachers' installed packages live in a directory
   named after it (step 7), so a 3.12 to 3.13 move is not a silent bump.
-- The GTK stack: the gvsbuild version, pinned in the build script, on the same
-  terms — bumping it is a deliberate act, like bumping the flatpak runtime.
+- The GTK stack: the gvsbuild version, pinned in `bootstrap.ps1` (which is where
+  gvsbuild is installed), on the same terms — bumping it is a deliberate act,
+  like bumping the flatpak runtime. Note this pins the recipe, not the
+  ingredients: which GTK version a given gvsbuild builds is decided inside
+  gvsbuild, so reading the pin does not tell you the GTK version.
 - Bundled xlsxwriter: version-pinned, same as the flatpak.
 - The Windows SDK: pinned by the component name in `bootstrap.ps1`
   (`Windows11SDK.22621`).
