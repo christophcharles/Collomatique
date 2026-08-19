@@ -1,5 +1,5 @@
 #!/bin/sh
-# Regenerate the scaled copies of the application icon.
+# Regenerate everything derived from the application icon.
 #
 # collomatique.png is the master, 1024x1024. Icon themes want the usual smaller
 # sizes, and those cannot be produced during the flatpak build: gdk-pixbuf now
@@ -7,6 +7,11 @@
 # and a build sandbox has nothing to spawn through. So the scaled copies are
 # generated here and committed next to the master. Run this after replacing
 # collomatique.png.
+#
+# collomatique.ico is the same picture in the one format Windows understands,
+# and it is generated here for the same reason twice over: the Windows build
+# machine has no image tooling on it at all, and gtk4/build.rs embeds this file
+# into the executable without looking at what is inside it.
 #
 # Needs python3 with Pillow. If the python3 in PATH does not have it, the
 # script fetches one that does with nix-shell and re-runs itself inside it.
@@ -22,6 +27,7 @@ from PIL import Image
 
 MASTER = "collomatique.png"
 SIZES = (128, 256, 512)
+ICO = "collomatique.ico"
 
 master = Image.open(MASTER)
 if master.size[0] != master.size[1]:
@@ -31,6 +37,18 @@ for size in SIZES:
     path = f"collomatique-{size}.png"
     master.resize((size, size), Image.LANCZOS).save(path, "PNG", optimize=True)
     print("wrote", path)
+
+# One .ico holds every size at once, and Windows picks between them by itself:
+# 16 in a title bar, 32 on the taskbar, 48 in a folder, 256 for large icons.
+# Pillow's defaults are those seven sizes, downscaled with LANCZOS like the
+# copies above, so no size list is written down here.
+#
+# The entries are stored PNG-compressed rather than as bitmaps, which is also
+# Pillow's default. Windows has read that since Vista, and the file is a fifth
+# of the size. If some corner of Windows ever draws one of them wrong, the flag
+# to try is bitmap_format="bmp".
+master.save(ICO)
+print("wrote", ICO)
 PY
     exit 0
 fi

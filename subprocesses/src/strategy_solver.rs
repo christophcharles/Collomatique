@@ -1,18 +1,16 @@
-use std::io::Write;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_ilp_modeler::{InternalVar, Model};
-use collomatique_rpc::{EncodedMsg, InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
+use collomatique_rpc::{InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
 use collomatique_strategies::{
     RawSolveOutcome, SolveStatus, SpawnableStrategy, StrategyKind, StrategyOutcome,
     StrategyPayloadData, StrategyProgressData, StrategyRequest,
 };
 
-use crate::process::StdinWriter;
-use crate::worker::{EngineExe, Worker, WorkerEvent, WorkerSpawnError};
+use crate::worker::{EngineExe, RpcWriter, Worker, WorkerEvent, WorkerSpawnError, send_via_rpc};
 
 #[derive(Debug, Clone)]
 pub struct StrategyResult {
@@ -140,11 +138,11 @@ impl StrategySubprocess {
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let last_progress: Arc<Mutex<Option<StrategyProgressData>>> = Arc::new(Mutex::new(None));
-        let stdin_slot: Arc<Mutex<Option<StdinWriter>>> = Arc::new(Mutex::new(None));
+        let rpc_slot: Arc<Mutex<Option<RpcWriter>>> = Arc::new(Mutex::new(None));
 
         let stop_flag_cb = stop_flag.clone();
         let last_progress_cb = last_progress.clone();
-        let stdin_slot_cb = stdin_slot.clone();
+        let rpc_slot_cb = rpc_slot.clone();
 
         let callback = move |event: WorkerEvent| match event {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
@@ -162,9 +160,9 @@ impl StrategySubprocess {
                     let stopped = stop_flag_cb.load(Ordering::Relaxed);
                     let response = ResultMsg::StrategyControl(!stopped);
 
-                    let guard = stdin_slot_cb.lock().unwrap();
-                    if let Some(stdin) = guard.as_ref() {
-                        send_via_stdin(stdin, response);
+                    let guard = rpc_slot_cb.lock().unwrap();
+                    if let Some(rpc) = guard.as_ref() {
+                        let _ = send_via_rpc(rpc, response);
                     }
                 }
                 collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Result(data)) => {
@@ -186,9 +184,9 @@ impl StrategySubprocess {
                             .map(|s| s.into_iter().map(|v| v.into_inner()).collect()),
                     };
 
-                    let guard = stdin_slot_cb.lock().unwrap();
-                    if let Some(stdin) = guard.as_ref() {
-                        send_via_stdin(stdin, ResultMsg::Ack(None));
+                    let guard = rpc_slot_cb.lock().unwrap();
+                    if let Some(rpc) = guard.as_ref() {
+                        let _ = send_via_rpc(rpc, ResultMsg::Ack(None));
                     }
                     drop(guard);
 
@@ -203,21 +201,12 @@ impl StrategySubprocess {
         };
 
         let worker = Worker::spawn(engine, init_msg, callback)?;
-        *stdin_slot.lock().unwrap() = Some(worker.get_stdin_writer());
+        *rpc_slot.lock().unwrap() = Some(worker.get_rpc_writer());
 
         Ok(StrategySubprocess {
             _worker: worker,
             stop_flag,
             last_progress,
         })
-    }
-}
-
-fn send_via_stdin(stdin: &StdinWriter, msg: ResultMsg) {
-    let encoded = EncodedMsg::from(msg).encode();
-    let mut guard = stdin.lock().unwrap();
-    if let Some(writer) = guard.as_mut() {
-        let _ = writer.write_all(encoded.as_bytes());
-        let _ = writer.flush();
     }
 }

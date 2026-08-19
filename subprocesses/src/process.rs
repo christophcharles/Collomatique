@@ -21,6 +21,20 @@ pub enum OutputData {
     Raw(Vec<u8>),
 }
 
+impl OutputData {
+    /// The data as text, with any byte that is not valid UTF-8 replaced by U+FFFD.
+    ///
+    /// This is program output on its way to a log view, so there is nothing to be
+    /// gained by refusing it: a Windows console under a legacy code page, or a C++
+    /// library writing a raw byte, should still be readable.
+    pub fn into_lossy_string(self) -> String {
+        match self {
+            OutputData::Utf8(s) => s,
+            OutputData::Raw(bytes) => String::from_utf8_lossy(&bytes).into_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProcessEvent {
     Stdout(OutputData),
@@ -175,6 +189,7 @@ impl Process {
     pub fn spawn_pty<F>(
         command: &std::ffi::OsStr,
         args: &[&str],
+        envs: &[(&str, &std::ffi::OsStr)],
         callback: F,
     ) -> Result<Self, SpawnError>
     where
@@ -210,6 +225,12 @@ impl Process {
         for arg in args {
             cmd.arg(*arg);
         }
+        // Added, not substituted: nothing here clears the environment, so the child
+        // still inherits everything this process has — PATH, and on Windows the GTK
+        // and Python prefixes it is started from.
+        for (key, value) in envs {
+            cmd.env(key, value);
+        }
         // portable_pty otherwise starts the child in `$HOME` (a default meant for terminal
         // emulators opening a shell). The engine should inherit our working directory like
         // any other subprocess, as `spawn_pipes` already does. If our own cwd is gone,
@@ -225,7 +246,7 @@ impl Process {
 
         // Bind the child to a kill-on-close job so its subtree dies when this process does.
         // Safe against the spawn/assign race here: the child (`--rpc-engine`) spawns nothing
-        // until it has received its init payload over stdin, long after assignment.
+        // until it has received its init message on the RPC channel, long after assignment.
         #[cfg(windows)]
         let job = {
             let pid = child.process_id().ok_or(SpawnError::NoPid)?;
@@ -273,17 +294,28 @@ impl Process {
         })
     }
 
-    pub fn spawn_pipes<F>(command: &str, args: &[&str], callback: F) -> Result<Self, SpawnError>
+    pub fn spawn_pipes<F>(
+        command: &std::ffi::OsStr,
+        args: &[&str],
+        envs: &[(&str, &std::ffi::OsStr)],
+        callback: F,
+    ) -> Result<Self, SpawnError>
     where
         F: Fn(ProcessEvent) + Send + Clone + 'static,
     {
-        let mut child = Command::new(command)
+        let mut command = Command::new(command);
+        command
             .args(args)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .stdin(Stdio::piped())
-            .spawn()
-            .map_err(SpawnError::PipeSpawn)?;
+            .stdin(Stdio::piped());
+        // Added, not substituted: `Command` inherits our whole environment unless
+        // asked to clear it, and nothing here asks.
+        for (key, value) in envs {
+            command.env(key, value);
+        }
+
+        let mut child = command.spawn().map_err(SpawnError::PipeSpawn)?;
 
         let stdout = child
             .stdout
@@ -299,6 +331,9 @@ impl Process {
             .ok_or(SpawnError::StreamUnavailable(StdStream::Stdin))?;
 
         // Bind the child to a kill-on-close job so its subtree dies when this process does.
+        // This is the windows teardown mechanism, and `Worker` spawns through here on that
+        // platform. Same race note as in `spawn_pty`: an `--rpc-engine` child spawns nothing
+        // of its own until it has received its init message, long after assignment.
         #[cfg(windows)]
         let job = job::Job::kill_on_close_with(child.id()).map_err(SpawnError::JobObject)?;
 
@@ -541,6 +576,7 @@ mod job {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+    use std::ffi::OsStr;
     use std::sync::mpsc;
     use std::time::Duration;
 
@@ -548,7 +584,7 @@ mod tests {
     /// `ProcessExited` only after it has nulled stdin and flipped `terminated`).
     fn spawn_and_wait_for_exit(command: &str, args: &[&str]) -> Process {
         let (tx, rx) = mpsc::channel();
-        let process = Process::spawn_pipes(command, args, move |event| {
+        let process = Process::spawn_pipes(OsStr::new(command), args, &[], move |event| {
             if let ProcessEvent::ProcessExited(_) = event {
                 let _ = tx.send(());
             }
@@ -608,7 +644,8 @@ mod tests {
 
     #[test]
     fn kill_is_idempotent_on_a_running_child() {
-        let process = Process::spawn_pipes("sleep", &["10"], |_| {}).expect("spawn");
+        let process =
+            Process::spawn_pipes(OsStr::new("sleep"), &["10"], &[], |_| {}).expect("spawn");
         assert!(process.kill().is_ok());
         // A second explicit kill on an already-killed process is a clean no-op.
         assert!(process.kill().is_ok());
@@ -635,7 +672,8 @@ mod tests {
 
     #[test]
     fn send_after_kill_reports_finished() {
-        let process = Process::spawn_pipes("sleep", &["10"], |_| {}).expect("spawn");
+        let process =
+            Process::spawn_pipes(OsStr::new("sleep"), &["10"], &[], |_| {}).expect("spawn");
         assert!(process.kill().is_ok());
         match process.send_stdin(b"hello\n") {
             Err(SendError::Finished) => {}

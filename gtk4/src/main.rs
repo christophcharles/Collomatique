@@ -3,12 +3,31 @@
 //! At this date, the goal of this code is to be a gtk4 GUI
 //! for the collomatique-state crate.
 
+// Windows decides whether to give a process a console from a flag in the
+// executable itself, not from how it is started. Without this, launching the
+// GUI opens a console window beside it, and that window is what takes the
+// focus.
+//
+// The `--rpc-engine` child is this same executable, so it loses its console
+// too. That costs it nothing: its standard streams are pipes the parent
+// creates and hands over, which need no console at either end.
+//
+// The cost is the command line: with no console, `--help`, `--version` and
+// `--debug` have nowhere to print. `windows_stdio` stops that from being fatal,
+// and `windows_cli` answers in a dialog instead of in silence. Unix is
+// unaffected throughout, command line included.
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 use clap::Parser;
 use collomatique_gtk4::AppModel;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
 mod debug;
+#[cfg(windows)]
+mod windows_cli;
+#[cfg(windows)]
+mod windows_stdio;
 
 const WORKER_THREAD_COUNT: usize = 4;
 
@@ -37,6 +56,17 @@ struct Args {
 }
 
 fn main() -> Result<(), anyhow::Error> {
+    // Before the parse, because clap reports a bad argument by printing, and
+    // printing is what has to be made harmless.
+    #[cfg(windows)]
+    windows_stdio::discard_output();
+
+    // On windows the parse can end in a dialog rather than in a return: the
+    // arguments that only make sense at a terminal are refused there, `--debug`
+    // among them, so the block below is unix-only in practice.
+    #[cfg(windows)]
+    let args = windows_cli::parse();
+    #[cfg(not(windows))]
     let args = Args::parse();
 
     if args.rpc_engine {

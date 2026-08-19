@@ -3,9 +3,11 @@
 //! This module contains the code to run an rpc server
 //! as well as the necessary RCP messages
 
-use std::io::Write;
+use std::sync::{Mutex, OnceLock};
 
 use serde::{Deserialize, Serialize};
+
+pub mod channel;
 
 pub mod cmd_msg;
 pub use cmd_msg::CmdMsg;
@@ -27,13 +29,11 @@ pub use strategy_msg::{
 
 /// Failure to decode an RPC message from its wire form.
 ///
-/// Both variants carry the raw payload that could not be decoded (the framing markers stripped),
-/// matching the historical behaviour where the undecodable data was itself surfaced as the error.
+/// A frame either arrives whole or does not arrive at all ([`channel`] guarantees that much),
+/// so the only thing left to go wrong is the body itself. It is carried in the error, matching
+/// the historical behaviour where the undecodable data was surfaced as the error.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum RpcDecodeError {
-    /// The RPC frame markers were malformed; carries the data with markers stripped.
-    #[error("Trame RPC mal formée : {0}")]
-    MalformedFrame(String),
     /// The message body was not valid JSON for the target type; carries the raw body.
     #[error("Message RPC indécodable : {0}")]
     InvalidJson(String),
@@ -43,7 +43,7 @@ impl RpcDecodeError {
     /// The raw payload, for callers that need to suppress empty/no-detail errors.
     pub fn payload(&self) -> &str {
         match self {
-            Self::MalformedFrame(s) | Self::InvalidJson(s) => s,
+            Self::InvalidJson(s) => s,
         }
     }
 }
@@ -122,237 +122,117 @@ pub enum CompleteCmdMsg {
     GracefulExit,
 }
 
+// The three message bodies, in the form they travel in. Compact JSON throughout:
+// the pretty form only ever existed because the old transport chopped a message
+// into lines and needed them short enough for a terminal not to wrap.
+
 impl InitMsg {
-    fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
+    pub fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
             Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
         }
     }
 
-    fn to_text_msg(&self) -> String {
-        serde_json::to_string_pretty(self).expect("Serializing to JSON should not fail")
-    }
-}
-
-impl ResultMsg {
-    fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
-        match serde_json::from_str::<Self>(data) {
-            Ok(cmd) => Ok(cmd),
-            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
-        }
-    }
-
-    fn to_text_msg(&self) -> String {
-        serde_json::to_string_pretty(self).expect("Serializing to JSON should not fail")
-    }
-}
-
-impl CompleteCmdMsg {
-    fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
-        match serde_json::from_str::<Self>(data) {
-            Ok(cmd) => Ok(cmd),
-            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
-        }
-    }
-
-    fn to_text_msg(&self) -> String {
+    pub fn to_text_msg(&self) -> String {
         serde_json::to_string(self).expect("Serializing to JSON should not fail")
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct EncodedMsg {
-    msg: String,
-}
-
-const RPC_MSG_MARKER: &str = "%%COLLOMATIQUE-RPC-MSG%%";
-const RPC_CONTINUE_MARKER: &str = "%%COLLOMATIQUE-RPC-CON%%";
-const RPC_END_MARKER: &str = "%%COLLOMATIQUE-RPC-END%%";
-const NEW_LINE: &str = "\n";
-const MAX_LINE_LEN: usize = 80;
-
-impl EncodedMsg {
-    pub fn check_if_msg(data: &str) -> bool {
-        data.starts_with(RPC_MSG_MARKER)
-            || data.starts_with(RPC_CONTINUE_MARKER)
-            || data.starts_with(RPC_END_MARKER)
-    }
-
-    pub fn check_if_end(data: &str) -> bool {
-        data.starts_with(RPC_END_MARKER)
-    }
-
-    pub fn receive() -> Result<Self, RpcDecodeError> {
-        Self::from_raw_string(Self::wait_for_raw_msg())
-    }
-
-    pub fn encode(self) -> String {
-        Self::bundle_msg(self.msg)
-    }
-
-    pub fn from_raw_string(raw: String) -> Result<Self, RpcDecodeError> {
-        let msg = Self::strip_msg(raw)?;
-        Ok(Self { msg })
-    }
-
-    pub fn send_and_get_response(self) -> Result<Self, RpcDecodeError> {
-        self.send();
-        Self::receive()
-    }
-
-    pub fn send(self) {
-        let bundled = Self::bundle_msg(self.msg);
-        Self::send_raw_msg(&bundled);
-    }
-
-    pub fn send_rpc(cmd: CmdMsg) -> Result<ResultMsg, RpcDecodeError> {
-        let msg: Self = CompleteCmdMsg::CmdMsg(cmd).into();
-        let answer = msg.send_and_get_response()?;
-        answer.try_into()
-    }
-}
-
-impl From<InitMsg> for EncodedMsg {
-    fn from(value: InitMsg) -> Self {
-        EncodedMsg {
-            msg: value.to_text_msg(),
+impl ResultMsg {
+    pub fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
+        match serde_json::from_str::<Self>(data) {
+            Ok(cmd) => Ok(cmd),
+            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
         }
     }
-}
 
-impl TryFrom<EncodedMsg> for InitMsg {
-    type Error = RpcDecodeError;
-    fn try_from(value: EncodedMsg) -> Result<Self, Self::Error> {
-        InitMsg::from_text_msg(&value.msg)
+    pub fn to_text_msg(&self) -> String {
+        serde_json::to_string(self).expect("Serializing to JSON should not fail")
     }
 }
 
-impl From<CmdMsg> for EncodedMsg {
-    fn from(value: CmdMsg) -> Self {
-        Self::from(CompleteCmdMsg::CmdMsg(value))
-    }
-}
-
-impl From<CompleteCmdMsg> for EncodedMsg {
-    fn from(value: CompleteCmdMsg) -> Self {
-        EncodedMsg {
-            msg: value.to_text_msg(),
+impl CompleteCmdMsg {
+    pub fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
+        match serde_json::from_str::<Self>(data) {
+            Ok(cmd) => Ok(cmd),
+            Err(_) => Err(RpcDecodeError::InvalidJson(data.to_string())),
         }
     }
-}
 
-impl TryFrom<EncodedMsg> for CompleteCmdMsg {
-    type Error = RpcDecodeError;
-    fn try_from(value: EncodedMsg) -> Result<Self, Self::Error> {
-        CompleteCmdMsg::from_text_msg(&value.msg)
+    pub fn to_text_msg(&self) -> String {
+        serde_json::to_string(self).expect("Serializing to JSON should not fail")
     }
 }
 
-impl From<ResultMsg> for EncodedMsg {
-    fn from(value: ResultMsg) -> Self {
-        EncodedMsg {
-            msg: value.to_text_msg(),
-        }
-    }
+/// Failure of an RPC call made by a worker on its channel.
+#[derive(Debug, thiserror::Error)]
+pub enum RpcError {
+    #[error(transparent)]
+    Channel(#[from] channel::ChannelError),
+    #[error(transparent)]
+    Decode(#[from] RpcDecodeError),
+    #[error("Le canal RPC n'a pas été ouvert")]
+    NotConnected,
+    #[error("Le canal RPC est déjà ouvert")]
+    AlreadyConnected,
+    #[error("L'hôte a fermé le canal RPC")]
+    Closed,
 }
 
-impl TryFrom<EncodedMsg> for ResultMsg {
-    type Error = RpcDecodeError;
-    fn try_from(value: EncodedMsg) -> Result<Self, RpcDecodeError> {
-        ResultMsg::from_text_msg(&value.msg)
-    }
+/// The worker's end of the channel, connected once and used from anywhere afterwards.
+///
+/// The two halves live behind one lock, so a round trip is atomic: a request and
+/// its answer cannot be interleaved with another thread's. The old transport gave
+/// no such guarantee — it was a bare `print!` followed by a bare `read_line` on the
+/// process's own stdio — and a hosted Python script can perfectly well call into
+/// the RPC from two threads at once.
+static CHANNEL: OnceLock<Mutex<Connection>> = OnceLock::new();
+
+struct Connection {
+    reader: channel::FrameReader,
+    writer: channel::FrameWriter,
 }
 
-impl EncodedMsg {
-    fn bundle_msg(data: String) -> String {
-        let mut output = String::new();
-        for line in data.lines() {
-            output += RPC_MSG_MARKER;
+/// Join the channel named in the environment. Call once, before anything else.
+pub fn connect_channel() -> Result<(), RpcError> {
+    let (reader, writer) = channel::Endpoint::connect_from_env()?.split();
+    CHANNEL
+        .set(Mutex::new(Connection { reader, writer }))
+        .map_err(|_| RpcError::AlreadyConnected)
+}
 
-            let mut remaining_line_opt = Some(line);
-            while let Some(mut remaining_line) = remaining_line_opt.take() {
-                if remaining_line.len() > MAX_LINE_LEN {
-                    let target_len = remaining_line.floor_char_boundary(MAX_LINE_LEN);
-                    let (start, end) = remaining_line.split_at(target_len);
-                    remaining_line = start;
-                    remaining_line_opt = Some(end);
-                }
-                output += remaining_line;
-                if remaining_line_opt.is_some() {
-                    output += NEW_LINE;
-                    output += RPC_CONTINUE_MARKER;
-                }
-            }
+fn with_channel<T>(f: impl FnOnce(&mut Connection) -> Result<T, RpcError>) -> Result<T, RpcError> {
+    let mutex = CHANNEL.get().ok_or(RpcError::NotConnected)?;
+    let mut connection = mutex.lock().unwrap();
+    f(&mut connection)
+}
 
-            output += NEW_LINE;
-        }
-        output += RPC_END_MARKER;
-        output += NEW_LINE;
-        output
-    }
+/// Wait for the host's opening message, which says what this worker is for.
+pub fn receive_init() -> Result<InitMsg, RpcError> {
+    with_channel(|connection| {
+        let body = connection.reader.recv()?.ok_or(RpcError::Closed)?;
+        Ok(InitMsg::from_text_msg(&body)?)
+    })
+}
 
-    fn strip_msg(data: String) -> Result<String, RpcDecodeError> {
-        let naked_data = data
-            .replace(RPC_MSG_MARKER, "")
-            .replace(RPC_CONTINUE_MARKER, "")
-            .replace(RPC_END_MARKER, "");
-        let malformed = || RpcDecodeError::MalformedFrame(naked_data.clone());
-        let mut stripped = String::new();
-        let mut reached_last = false;
-        let mut first_run = true;
-        for line in data.lines() {
-            if reached_last {
-                return Err(malformed());
-            }
-            if line.starts_with(RPC_END_MARKER) {
-                if line != RPC_END_MARKER {
-                    return Err(malformed());
-                }
-                reached_last = true;
-                continue;
-            }
-            if line.starts_with(RPC_MSG_MARKER) {
-                if !first_run {
-                    stripped += NEW_LINE;
-                }
-                stripped += match line.strip_prefix(RPC_MSG_MARKER) {
-                    Some(d) => d,
-                    None => return Err(malformed()),
-                };
-            } else if line.starts_with(RPC_CONTINUE_MARKER) {
-                if first_run {
-                    return Err(malformed());
-                }
-                stripped += match line.strip_prefix(RPC_CONTINUE_MARKER) {
-                    Some(d) => d,
-                    None => return Err(malformed()),
-                };
-            } else {
-                return Err(malformed());
-            }
-            first_run = false;
-        }
-        Ok(stripped)
-    }
+/// One round trip: send a command, block until its answer comes back.
+pub fn send_command(cmd: CmdMsg) -> Result<ResultMsg, RpcError> {
+    with_channel(|connection| {
+        connection
+            .writer
+            .send(&CompleteCmdMsg::CmdMsg(cmd).to_text_msg())?;
+        let body = connection.reader.recv()?.ok_or(RpcError::Closed)?;
+        Ok(ResultMsg::from_text_msg(&body)?)
+    })
+}
 
-    fn wait_for_raw_msg() -> String {
-        let mut output = String::new();
-        let mut buffer = String::new();
-        let stdin = std::io::stdin();
-        loop {
-            buffer.clear();
-            stdin.read_line(&mut buffer).expect("no error on reading");
-            output += &buffer;
-            if buffer.starts_with(RPC_END_MARKER) {
-                break;
-            }
-        }
-        output
-    }
-
-    fn send_raw_msg(msg: &str) {
-        print!("{}", msg);
-        std::io::stdout().flush().expect("no error on flush");
-    }
+/// Announce a clean end of work. The only message with no answer.
+pub fn send_graceful_exit() -> Result<(), RpcError> {
+    with_channel(|connection| {
+        connection
+            .writer
+            .send(&CompleteCmdMsg::GracefulExit.to_text_msg())?;
+        Ok(())
+    })
 }

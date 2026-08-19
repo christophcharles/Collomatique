@@ -53,6 +53,8 @@ pub type ColloCbcCallback = Option<
 >;
 
 unsafe extern "C" {
+    pub fn collo_cbc_unbuffer_output();
+
     pub fn collo_cbc_new() -> *mut ColloCbcModel;
     pub fn collo_cbc_free(model: *mut ColloCbcModel);
 

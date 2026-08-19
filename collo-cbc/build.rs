@@ -27,5 +27,4 @@ fn main() {
     for lib in &cbc.libs {
         println!("cargo:rustc-link-lib={}", lib);
     }
-    println!("cargo:rustc-link-lib=stdc++");
 }

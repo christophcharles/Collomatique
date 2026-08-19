@@ -16,6 +16,7 @@
 #include <CglPreProcess.hpp>
 
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <set>
@@ -495,6 +496,17 @@ struct ColloCbcModel {
 };
 
 extern "C" {
+
+void collo_cbc_unbuffer_output(void) {
+    // Both paths CBC's log can take. CoinMessageHandler prints through C stdout,
+    // and this file's own debug output goes through std::cout, which shares that
+    // buffer only while iostreams are synced with stdio. `unitbuf` covers it
+    // whatever the sync state.
+    setvbuf(stdout, NULL, _IONBF, 0);
+    setvbuf(stderr, NULL, _IONBF, 0);
+    std::cout << std::unitbuf;
+    std::cerr << std::unitbuf;
+}
 
 ColloCbcModel* collo_cbc_new(void) {
     auto* model = new ColloCbcModel();

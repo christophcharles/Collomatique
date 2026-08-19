@@ -13,4 +13,4 @@ pub use process::{
 };
 pub use strategy_solver::{StrategyResult, StrategyStatus, StrategySubprocess};
 pub use subprocess_solve_backend::SubprocessSolveBackend;
-pub use worker::{EngineExe, Worker, WorkerError, WorkerEvent, WorkerSpawnError};
+pub use worker::{EngineExe, RpcWriter, Worker, WorkerError, WorkerEvent, WorkerSpawnError};

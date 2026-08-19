@@ -189,6 +189,17 @@ pub struct Model {
 // thread-local state or thread-affine resources.
 unsafe impl Send for Model {}
 
+/// Stop the C runtime from holding CBC's log in a buffer.
+///
+/// CBC prints through C stdout. Behind a pipe that is block-buffered, so a log
+/// meant to be watched live arrives in lumps of several kilobytes — or only when
+/// the solve ends. This makes it unbuffered, at the cost of one write per line.
+///
+/// Process-wide, so call it once at startup, before any solve.
+pub fn unbuffer_output() {
+    unsafe { sys::collo_cbc_unbuffer_output() }
+}
+
 impl Drop for Model {
     fn drop(&mut self) {
         lock(|| unsafe {
