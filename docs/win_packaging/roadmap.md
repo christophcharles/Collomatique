@@ -313,8 +313,9 @@ is yes, with one step. `pip` is not installed, but `ensurepip` is, carrying a
 bundled pip 25.0.1; after `python -m ensurepip --upgrade`, `pip install --user
 xlsxwriter` downloaded from PyPI and installed cleanly, and `ssl`, `sqlite3`,
 `zlib` and `ctypes` all import. So one interpreter is enough; who runs
-`ensurepip`, and when, is a step 7/8 question. See step 7 for where `--user`
-puts things.
+`ensurepip`, and when, was a step 7/8 question. Step 7 answers it: nobody does.
+The wheel it carries is unpacked into the stage instead, and a teacher's own
+packages go somewhere other than `--user`.
 
 **Done for the GTK half too**: `4b764ce5`, then `bcd2d020` and `a6f9a98a`.
 `build.ps1` runs `uv run gvsbuild build` for `gtk4`, `libadwaita` and
@@ -423,8 +424,9 @@ item 5 found one real problem, both below.
 
 Item 3's condition is worth spelling out, because step 7 depends on it: it was
 tested against an interpreter that had been through `ensurepip` and a pinned
-`pip install xlsxwriter`. So the requirement is real and measured. What is open
-is only who performs that install, now that the staging step does not.
+`pip install xlsxwriter`. So the requirement is real and measured. Step 7 now
+says who performs that install: nobody, the wheels are unpacked into the stage
+at build time.
 
 **Item 2 was not verified, it was rebuilt.** ConPTY is gone on Windows;
 `3266731d`, `ddf4da59`, `0eb05c5f` and `b05b06b8` are the story, and the
@@ -614,8 +616,9 @@ of the shell. Every other file here can be wrong in a way that shows up as a
 test failure or a compile error; this one can only be found by running the
 program on Windows, which is exactly the slowest place to find anything.
 
-What is left in this step is the Python path setup, if it turns out to be
-needed.
+Nothing is left in this step. The Python path setup it kept open turned out to
+need no Rust at all — it is two files staged into the interpreter, and step 7
+says what they are.
 
 ### Step 7 — Bundle layout
 
@@ -646,21 +649,84 @@ and an install there buys nothing that survives. It belongs to whatever ships
 the application — the installer, most likely (step 8) — and which of the two it
 is has not been settled.
 
-Where a teacher's own packages land is a real decision, and step 3 measured the
-default: `pip install --user` puts them in
+**Settled** (`2b4dc6af`), and neither of the two: both ship *unpacked into the
+stage*, so they reach a teacher as ordinary files that the installer records and
+the uninstaller removes. A wheel is a zip of the finished package plus its
+`.dist-info` — exactly what pip would have written — so nothing runs at build
+time and nothing runs during setup. There is no network access and nothing that
+can fail on a teacher's machine, which is also why the installer never asks
+about it.
+
+pip needs no pin and no download: its wheel is already inside the staged
+standard library, at `Lib\ensurepip\_bundled\pip-*.whl`, so it follows whatever
+Python vcpkg gives us. What is skipped by not calling `ensurepip` is
+`Scripts\pip.exe`, and nothing wants it — every call goes through
+`python.exe -m pip`. `xlsxwriter` is pinned by version and sha256 beside CBC in
+`build.ps1` and fetched the same way.
+
+#### Where a teacher's own packages land
+
+`ce5c1eb5`. Step 3 measured the default: `pip install --user` puts them in
 `%APPDATA%\Python\Python312\site-packages`. That is outside the application, so
-it already survives an update — but it is the machine-wide user site, shared
-with any other Python 3.12 on the machine, and it is keyed to the minor version,
-so bumping the baseline to a Python 3.13 would silently orphan everything a
-teacher installed.
+it survives an update — but it is the machine-wide user site, shared with any
+other Python 3.12 on the machine. The other candidate,
+`{app}\Lib\site-packages`, is read-only after an all-users install, since
+`C:\Program Files\Collomatique` needs administrator rights. So Collomatique has
+its own:
 
-**The inclination is to set `PYTHONUSERBASE` into Collomatique's own private
-data directory instead**, which is what the flatpak does. Not yet decided, and
-tangled with a separate idea the user is weighing — adding a Python command line
-to the application itself — which is deferred. Decide both together.
+```
+%APPDATA%\collomatique\python\3.12\Lib\site-packages
+```
 
-How the interpreter's own paths are arranged (a `python3XX._pth`, `PYTHONHOME`,
-or nothing at all) is still open and belongs to this step.
+Lowercase, beside the `config` directory `settings/src/lib.rs` already creates
+there. `Lib\site-packages` under the version because that is what
+`pip install --prefix` produces on Windows, and matching pip's own scheme is
+what keeps `pip list` and `pip uninstall` working instead of leaving a directory
+only deletion can manage. `collomatique-pip.cmd`, at the top of the installation
+folder, is that command with the prefix filled in — it asks
+`collomatique_site.py` for the path rather than repeating it.
+
+**The version segment is Python's convention, not ours.** A module compiled for
+3.12 holds files like `lib.cp312-win_amd64.pyd`, which 3.13 will not load.
+Python versions every package directory for that reason, so a new interpreter
+starts clean rather than inheriting files it cannot use, and it offers no
+migration between them: the convention is `pip freeze` under the old one and
+reinstall under the new. Ours does the same, so a baseline bump gives an empty
+directory and nothing is ever half-broken. The old one stays on disk, and its
+`*.dist-info` folders name everything that was in it — a readable list, which is
+what an automatic reinstall would read one day. **Building that is left to a
+later version**; the layout only has to keep it possible, and it does. Nothing
+reads it yet, and the application does not notice a bump.
+
+It is made searchable by a `.pth` file in `{app}\Lib\site-packages`, not by an
+environment variable. Three programs start this interpreter — the worker behind
+`--rpc-engine`, `python.exe` by hand, and pip — and they all have to agree about
+what is installed. `PYTHONPATH` set in `worker.rs` would reach only the first,
+and pip would install where the application never looks. A `.pth` is read by
+`site.py` at every start, whoever started it. Its lines are normally literal
+paths with no variable expansion, which is not enough for a path holding
+`%APPDATA%` and a version number; a line beginning with `import` is executed
+instead, and that is the hook. Since such a line has to be one line, the logic
+sits in `pkgs\windows\site\collomatique_site.py` beside it, which computes the
+version from `sys.version_info` rather than writing it down.
+
+CPython's own user site stays enabled. Turning it off would make a plain
+`pip install --user` silently do nothing, which is worse than having it work
+somewhere we did not choose.
+
+This closes the question, and it no longer waits on the separate idea of a
+Python command line inside the application. That stays deferred, and it is where
+telling a teacher that `collomatique-pip.cmd` exists belongs — the installer
+says nothing about Python, so today the file is found by looking.
+
+How the interpreter's own paths are arranged: **nothing at all**, and
+deliberately. CPython searches for `Lib\os.py` beside the running executable, so
+the install directory is a Python prefix for both `collomatique-gtk4.exe` and
+`python.exe` with no configuration. A `python312._pth` would have been tidier —
+it could have moved the stdlib into a `python\` subdirectory instead of merging
+it with glib's `lib\` — and it was turned down because such a file also switches
+the interpreter to isolated mode, where `site.py` never runs. That would take
+the `.pth` above with it.
 
 Acceptance for this step: the staged tree runs on a Windows machine without
 vcpkg, Build Tools or Python installed.
@@ -729,6 +795,17 @@ even where a previous choice is recorded, then the ProgID's type name
 Uninstalling removes the ProgID subtree, and removes the extension key only if
 nothing else is left in it.
 
+`2b4dc6af` added an `[UninstallDelete]` section, and it is a net rather than an
+inventory: everything shipped is recorded by `[Files]` and removed with it. What
+it catches is what pip may write afterwards — a module installed without
+`--prefix` lands in `{app}\Lib\site-packages` or `{app}\Scripts`, which Setup
+has no record of, and which is possible after a "me only" install where `{app}`
+is writable. Both are named precisely rather than sweeping `{app}\Lib`, because
+Windows filenames are case-insensitive and that directory is also glib's `lib\`.
+`%APPDATA%\collomatique\python` is deliberately left alone: an update is an
+uninstall followed by an install, and taking a teacher's own modules out there
+would undo the reason they are kept out of `{app}` in the first place.
+
 What has actually been run: the first installer, `dfefa936`, built and installed
 on the VM. The mode dialog, the icon and the association came after it and have
 not been. The clap check above is the one a double-click exercises, so it is the
@@ -751,14 +828,20 @@ That is the definition of done.
   that matters most, since these are the parts that actually break across
   versions. Python's *minor* version deserves treating as a pin in its own
   right, beyond the baseline: teachers' installed packages live in a directory
-  named after it (step 7), so a 3.12 to 3.13 move is not a silent bump.
+  named after it (step 7), so a 3.12 to 3.13 move is not a silent bump. What it
+  costs is concrete — every teacher who installed a module gets an empty
+  directory and has to install it again, with nothing in the application to help
+  them, until the reinstall path in step 7 is built.
 - The GTK stack: the gvsbuild version, pinned in `bootstrap.ps1` (which is where
   gvsbuild is installed), on the same terms — bumping it is a deliberate act,
   like bumping the flatpak runtime. Note this pins the recipe, not the
   ingredients: which GTK version a given gvsbuild builds is decided inside
   gvsbuild, so reading the pin does not tell you the GTK version.
-- Bundled xlsxwriter: version-pinned, same as the flatpak. No pin in the tree
-  yet — it goes wherever the install of it ends up living (step 7).
+- Bundled xlsxwriter: version and sha256, at the top of `build.ps1` beside CBC's
+  (`$XlsxwriterVersion`), since it is fetched there the same way.
+- Bundled pip: **deliberately not pinned**. It is unpacked from the wheel inside
+  the staged standard library, so it follows whatever Python the vcpkg baseline
+  gives us, and pinning it separately would only let the two disagree.
 - The Windows SDK: pinned by the component name in `bootstrap.ps1`
   (`Windows11SDK.22621`).
 - Rust itself: **deliberately not pinned**, tracking stable, the same policy as
