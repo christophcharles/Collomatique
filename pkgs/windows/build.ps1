@@ -558,9 +558,6 @@ if (Test-Path $Exe) {
 
 $StageRoot = Join-Path $OutRoot 'stage'
 
-# Pinned, and to the same version the flatpak pins.
-$XlsxwriterVersion = '3.2.9'
-
 # Copies the contents of $From into $To, creating $To. $From is a wildcard or a
 # single file; a bare directory name would copy the directory itself instead of
 # its contents, so call sites always end in \*.
@@ -601,8 +598,9 @@ Copy-Staged 'GTK, libadwaita and their stack' (Join-Path $GtkPrefix 'bin\*.dll')
 # startup, it fails the first time a teacher's script imports something.
 Copy-Staged 'the Python runtime DLLs' (Join-Path $Prefix 'bin\*.dll') $StageRoot
 
-# python.exe comes along on purpose. It is how a teacher installs a package into
-# this interpreter later, and it is what runs ensurepip below.
+# python.exe comes along on purpose: it is how a teacher installs a package into
+# this interpreter later. Nothing is installed into it here -- pip and xlsxwriter
+# belong to whatever ships the application, not to this staging directory.
 Copy-Staged 'the Python interpreter and standard library' `
     (Join-Path $Prefix 'tools\python3\*') $StageRoot
 
@@ -661,25 +659,6 @@ if ($LASTEXITCODE -ne 0 -or -not $LoaderCache) {
 }
 Set-Content -Path (Join-Path $PixbufAbiDir 'loaders.cache') -Value $LoaderCache -Encoding ASCII
 Write-Note "$($LoaderNames.Count) loaders"
-
-# vcpkg's python3 port ships pip as a bundled wheel rather than installed, so
-# this is the one step that turns the staged tree into an interpreter a teacher
-# can add packages to. Then xlsxwriter, which the application expects to be
-# there, exactly as the flatpak ships it.
-$StagePython = Join-Path $StageRoot 'python.exe'
-
-Write-Step "installing pip and xlsxwriter into the staged interpreter"
-& $StagePython -m ensurepip --upgrade
-if ($LASTEXITCODE -ne 0) {
-    Write-Fail "ensurepip failed (exit code $LASTEXITCODE)."
-    exit 1
-}
-
-& $StagePython -m pip install --no-warn-script-location "xlsxwriter==$XlsxwriterVersion"
-if ($LASTEXITCODE -ne 0) {
-    Write-Fail "could not install xlsxwriter==$XlsxwriterVersion (exit code $LASTEXITCODE)."
-    exit 1
-}
 
 Write-Host
 

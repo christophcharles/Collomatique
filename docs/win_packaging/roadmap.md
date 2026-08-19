@@ -312,8 +312,9 @@ all resolve is a step 4 problem, noted here so it is not a surprise there.
 is yes, with one step. `pip` is not installed, but `ensurepip` is, carrying a
 bundled pip 25.0.1; after `python -m ensurepip --upgrade`, `pip install --user
 xlsxwriter` downloaded from PyPI and installed cleanly, and `ssl`, `sqlite3`,
-`zlib` and `ctypes` all import. So the bundle step runs `ensurepip` once rather
-than shipping a second interpreter. See step 7 for where `--user` puts things.
+`zlib` and `ctypes` all import. So one interpreter is enough; who runs
+`ensurepip`, and when, is a step 7/8 question. See step 7 for where `--user`
+puts things.
 
 **Done for the GTK half too**: `4b764ce5`, then `bcd2d020` and `a6f9a98a`.
 `build.ps1` runs `uv run gvsbuild build` for `gtk4`, `libadwaita` and
@@ -419,9 +420,16 @@ Collomatique/
 
 Python bundling: take the interpreter and stdlib out of the vcpkg tree, the
 same build the exe was linked against, so there is no version to detect and
-nothing to match. Run `python -m ensurepip --upgrade` once while staging, since
-the vcpkg port carries `ensurepip` but no installed `pip`. Ship `xlsxwriter`
-with it, version-pinned like the flatpak.
+nothing to match. The vcpkg port carries `ensurepip` but no installed `pip`, so
+something has to run `python -m ensurepip --upgrade` once before a teacher can
+add a package — and `xlsxwriter` has to arrive the same way, version-pinned like
+the flatpak.
+
+Not while staging, though. `build.ps1` used to do both and no longer does: the
+staging directory is rebuilt from nothing on every run, so paying for a download
+and an install there buys nothing that survives. It belongs to whatever ships
+the application — the installer, most likely (step 8) — and which of the two it
+is has not been settled.
 
 Where a teacher's own packages land is a real decision, and step 3 measured the
 default: `pip install --user` puts them in
@@ -486,7 +494,8 @@ That is the definition of done.
   like bumping the flatpak runtime. Note this pins the recipe, not the
   ingredients: which GTK version a given gvsbuild builds is decided inside
   gvsbuild, so reading the pin does not tell you the GTK version.
-- Bundled xlsxwriter: version-pinned, same as the flatpak.
+- Bundled xlsxwriter: version-pinned, same as the flatpak. No pin in the tree
+  yet — it goes wherever the install of it ends up living (step 7).
 - The Windows SDK: pinned by the component name in `bootstrap.ps1`
   (`Windows11SDK.22621`).
 - Rust itself: **deliberately not pinned**, tracking stable, the same policy as
