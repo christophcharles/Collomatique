@@ -13,9 +13,9 @@
 // creates and hands over, which need no console at either end.
 //
 // The cost is the command line: with no console, `--help`, `--version` and
-// `--debug` have nowhere to print. On Windows they simply print nothing, and
-// `windows_stdio` is there to stop that from being fatal. Unix is unaffected
-// throughout, command line included.
+// `--debug` have nowhere to print. `windows_stdio` stops that from being fatal,
+// and `windows_cli` answers in a dialog instead of in silence. Unix is
+// unaffected throughout, command line included.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use clap::Parser;
@@ -24,6 +24,8 @@ use relm4::RelmApp;
 use std::path::PathBuf;
 
 mod debug;
+#[cfg(windows)]
+mod windows_cli;
 #[cfg(windows)]
 mod windows_stdio;
 
@@ -59,6 +61,12 @@ fn main() -> Result<(), anyhow::Error> {
     #[cfg(windows)]
     windows_stdio::discard_output();
 
+    // On windows the parse can end in a dialog rather than in a return: the
+    // arguments that only make sense at a terminal are refused there, `--debug`
+    // among them, so the block below is unix-only in practice.
+    #[cfg(windows)]
+    let args = windows_cli::parse();
+    #[cfg(not(windows))]
     let args = Args::parse();
 
     if args.rpc_engine {
