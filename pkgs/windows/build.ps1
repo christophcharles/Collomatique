@@ -9,9 +9,9 @@
 # come from three places, and each one is the place its own upstream blesses:
 # CBC from COIN-OR's own release binaries, GTK and libadwaita built by gvsbuild,
 # and the Python the application embeds built by vcpkg from the manifest next to
-# this file. It reports what landed, then builds the application against all
-# three. The rest is added one piece at a time as the roadmap advances: the
-# bundle layout, then the installer.
+# this file. It reports what landed, builds the application against all three,
+# then stages a directory that runs on a machine with no build tools on it. The
+# installer is what remains.
 #
 # It is three rather than one because vcpkg cannot serve either of the first two.
 # For GTK: libadwaita needs appstream, appstream needs libxmlb, and vcpkg's
@@ -532,5 +532,159 @@ if (Test-Path $Exe) {
     exit 1
 }
 
-Write-Note "it will not run outside this build environment yet -- the GTK DLLs are"
-Write-Note "in the gvsbuild prefix, not beside it. Bundling is the next step."
+# ---------------------------------------------------------------------------
+# The staged application
+# ---------------------------------------------------------------------------
+
+# Everything a machine with no build tools needs, arranged the way it will be
+# installed. The installer step will point Inno Setup at this directory and copy
+# it verbatim, so anything wrong here is wrong in the installer too.
+#
+# No configuration file, no environment variable and no code in the application
+# makes this work. Both halves relocate themselves:
+#
+#   - glib takes the directory of its own loaded DLL as the installation prefix,
+#     so lib\ and share\ beside the exe are found wherever the folder ends up.
+#   - CPython searches for Lib\os.py starting beside the executable, so the same
+#     directory is also a Python prefix.
+#
+# The consequence, and it surprises everyone who opens the folder: Windows
+# filenames are case-insensitive, so Python's Lib\ and glib's lib\ are one
+# directory. It holds the standard library and gdk-pixbuf-2.0\ side by side.
+# That is deliberate. The tidy alternative was a python312._pth file naming a
+# python\ subdirectory, and it was turned down because such a file makes the
+# interpreter ignore every environment variable -- which would settle, badly and
+# in advance, the question of where a teacher's own packages go.
+
+$StageRoot = Join-Path $OutRoot 'stage'
+
+# Pinned, and to the same version the flatpak pins.
+$XlsxwriterVersion = '3.2.9'
+
+# Copies the contents of $From into $To, creating $To. $From is a wildcard or a
+# single file; a bare directory name would copy the directory itself instead of
+# its contents, so call sites always end in \*.
+function Copy-Staged {
+    param([string]$Label, [string]$From, [string]$To)
+
+    $found = @(Get-Item -Path $From -ErrorAction SilentlyContinue)
+    if ($found.Count -eq 0) {
+        Write-Fail "nothing to stage for $($Label): $From"
+        exit 1
+    }
+    $null = New-Item -ItemType Directory -Path $To -Force
+    Copy-Item -Path $From -Destination $To -Recurse -Force
+    Write-Note "$($Label): $($found.Count)"
+}
+
+Write-Step "staging the application"
+Write-Note "into: $StageRoot"
+
+# Rebuilt from nothing every time. The copying is trivial next to the rest of
+# this script, and a stale DLL left behind by a rename upstream is exactly the
+# kind of bug that only appears on someone else's machine.
+if (Test-Path $StageRoot) {
+    Remove-Item -Path $StageRoot -Recurse -Force
+}
+$null = New-Item -ItemType Directory -Path $StageRoot
+
+Copy-Item -Path $Exe -Destination $StageRoot -Force
+Write-Note "the application: $CargoPackage.exe"
+
+# Everything gvsbuild built, rather than a list of what the exe imports. A list
+# would be shorter and would go stale silently the first time a GTK version
+# changes what it pulls in; this cannot.
+Copy-Staged 'GTK, libadwaita and their stack' (Join-Path $GtkPrefix 'bin\*.dll') $StageRoot
+
+# python312.dll, and the libraries the standard library loads at run time --
+# sqlite3, the SSL pair, bz2, lzma, ffi. Missing one of these does not fail at
+# startup, it fails the first time a teacher's script imports something.
+Copy-Staged 'the Python runtime DLLs' (Join-Path $Prefix 'bin\*.dll') $StageRoot
+
+# python.exe comes along on purpose. It is how a teacher installs a package into
+# this interpreter later, and it is what runs ensurepip below.
+Copy-Staged 'the Python interpreter and standard library' `
+    (Join-Path $Prefix 'tools\python3\*') $StageRoot
+
+# The image loaders. GTK4 has its own PNG and JPEG loading, but icon themes are
+# SVG and that goes through librsvg's gdk-pixbuf loader -- and the whole UI is
+# built out of Adwaita's *-symbolic icons, so without this there are no icons.
+Copy-Staged 'the gdk-pixbuf loaders' `
+    (Join-Path $GtkPrefix 'lib\gdk-pixbuf-2.0\*') (Join-Path $StageRoot 'lib\gdk-pixbuf-2.0')
+
+# GTK reads its own settings from GSettings and will not start without the
+# compiled schemas.
+Copy-Staged 'the GSettings schemas' `
+    (Join-Path $GtkPrefix 'share\glib-2.0\schemas\gschemas.compiled') `
+    (Join-Path $StageRoot 'share\glib-2.0\schemas')
+
+# Adwaita is the theme the UI names icons from. hicolor is the fallback theme
+# every GTK application is required to have present.
+Copy-Staged 'the Adwaita icon theme' `
+    (Join-Path $GtkPrefix 'share\icons\Adwaita\*') (Join-Path $StageRoot 'share\icons\Adwaita')
+Copy-Staged 'the hicolor fallback theme' `
+    (Join-Path $GtkPrefix 'share\icons\hicolor\*') (Join-Path $StageRoot 'share\icons\hicolor')
+
+# GTK's and libadwaita's own translations -- the text in file dialogs and
+# standard buttons. Every language, not just French: picking is a size
+# optimisation and belongs with the installer, not here.
+Copy-Staged 'the GTK translations' `
+    (Join-Path $GtkPrefix 'share\locale\*') (Join-Path $StageRoot 'share\locale')
+
+# The loader cache has to be rebuilt, because the one in gvsbuild's prefix names
+# absolute paths inside C:\collo-build. Written with paths relative to the cache
+# file itself, which is what lets the folder be installed anywhere.
+#
+# The version directory is read rather than written down: it is gdk-pixbuf's
+# module ABI version, currently 2.10.0, and it is not ours to predict.
+$PixbufRoot    = Join-Path $StageRoot 'lib\gdk-pixbuf-2.0'
+$PixbufAbiDir  = @(Get-ChildItem -Path $PixbufRoot -Directory)[0].FullName
+$QueryLoaders  = Join-Path $GtkPrefix 'bin\gdk-pixbuf-query-loaders.exe'
+
+Write-Step "rebuilding the gdk-pixbuf loader cache"
+Push-Location $PixbufAbiDir
+try {
+    # Relative names in, relative names out. Capturing output from a native
+    # command is what the rest of this script avoids, but the rule is about
+    # long-running builds holding a pipeline open; this one prints and exits.
+    $LoaderNames = @(Get-ChildItem -Path 'loaders' -Filter '*.dll' |
+        ForEach-Object { Join-Path 'loaders' $_.Name })
+    $LoaderCache = & $QueryLoaders @LoaderNames
+} finally {
+    Pop-Location
+}
+
+if ($LASTEXITCODE -ne 0 -or -not $LoaderCache) {
+    Write-Fail "gdk-pixbuf-query-loaders produced no cache (exit code $LASTEXITCODE)."
+    Write-Note "without it the application starts but shows no icons at all."
+    exit 1
+}
+Set-Content -Path (Join-Path $PixbufAbiDir 'loaders.cache') -Value $LoaderCache -Encoding ASCII
+Write-Note "$($LoaderNames.Count) loaders"
+
+# vcpkg's python3 port ships pip as a bundled wheel rather than installed, so
+# this is the one step that turns the staged tree into an interpreter a teacher
+# can add packages to. Then xlsxwriter, which the application expects to be
+# there, exactly as the flatpak ships it.
+$StagePython = Join-Path $StageRoot 'python.exe'
+
+Write-Step "installing pip and xlsxwriter into the staged interpreter"
+& $StagePython -m ensurepip --upgrade
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "ensurepip failed (exit code $LASTEXITCODE)."
+    exit 1
+}
+
+& $StagePython -m pip install --no-warn-script-location "xlsxwriter==$XlsxwriterVersion"
+if ($LASTEXITCODE -ne 0) {
+    Write-Fail "could not install xlsxwriter==$XlsxwriterVersion (exit code $LASTEXITCODE)."
+    exit 1
+}
+
+Write-Host
+
+$StageSize = (Get-ChildItem -Path $StageRoot -Recurse -File | Measure-Object -Property Length -Sum).Sum
+Write-Step "staged: $StageRoot"
+Write-Note ("{0:N0} MB" -f ($StageSize / 1MB))
+Write-Note "run it from there. It should not need anything from this build"
+Write-Note "environment -- if it does, that is the bug this directory exists to find."
