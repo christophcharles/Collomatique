@@ -201,6 +201,31 @@ if (Test-Path $CbcPc) {
     Write-Note "into: $CbcPrefix"
 }
 
+# The archives are named the autotools way -- libCbc.lib, libCbcSolver.lib -- but
+# cbc.pc asks for -lCbc, and rustc on MSVC turns that straight into the filename
+# Cbc.lib. Nothing in between translates: the first attempt died on
+# "LNK1181: cannot open input file 'CbcSolver.lib'" with the right /LIBPATH
+# already on the command line. So each archive is copied to its MSVC spelling.
+#
+# This is what vcpkg does to the same sources, which is why its tree carries
+# Cbc.lib and even z.lib instead of zlib.lib. coinbrew would not have avoided it
+# either -- it builds through the same libtool and produces the same names.
+#
+# Copies rather than renames, so the tree still matches what was unpacked. It
+# sits outside the unpack branch above on purpose: a tree unpacked by an earlier
+# run is fixed by the next run rather than needing to be deleted by hand.
+$CbcLibDir = Join-Path $CbcPrefix 'lib'
+if (-not (Test-Path (Join-Path $CbcLibDir 'Cbc.lib'))) {
+    Write-Step "copying the CBC libraries to their MSVC names"
+    $CbcCopied = 0
+    foreach ($lib in Get-ChildItem -Path $CbcLibDir -Filter 'lib*.lib') {
+        $MsvcName = $lib.Name.Substring(3)
+        Copy-Item -Path $lib.FullName -Destination (Join-Path $CbcLibDir $MsvcName) -Force
+        $CbcCopied++
+    }
+    Write-Note "$CbcCopied libraries, libFoo.lib -> Foo.lib"
+}
+
 Write-Host
 
 # ---------------------------------------------------------------------------
