@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -82,11 +83,11 @@ pub enum WorkerEvent {
 /// (killing it if still running).
 ///
 /// The worker talks on two channels at once and this type merges them into one
-/// stream of [`WorkerEvent`]s. Its pty carries whatever the program prints —
-/// the engine's own logs, a Python script's `print()`, CBC's C++ output — and
-/// each line of it becomes a [`WorkerEvent::LogLine`]. Its private RPC channel
-/// carries the protocol, and nothing else: the init message out, then commands
-/// in and answers out.
+/// stream of [`WorkerEvent`]s. Its standard streams carry whatever the program
+/// prints — the engine's own logs, a Python script's `print()`, CBC's C++ output
+/// — and each line of it becomes a [`WorkerEvent::LogLine`]. Its private RPC
+/// channel carries the protocol, and nothing else: the init message out, then
+/// commands in and answers out.
 ///
 /// Two streams means two threads reading, so a `LogLine` and an `RpcCommand`
 /// have no fixed order relative to each other. Nothing needs one — the protocol
@@ -116,12 +117,12 @@ impl Worker {
         // Both threads report through the same callback, and it is only `Send`.
         let callback = Arc::new(Mutex::new(callback));
 
-        // Raised by the pty thread when the child dies, read by the accept loop
+        // Raised by the output thread when the child dies, read by the accept loop
         // so a child that crashes on startup does not leave it waiting out the
         // full timeout.
         let exited = Arc::new(AtomicBool::new(false));
 
-        let pty_callback = {
+        let output_callback = {
             let callback = Arc::clone(&callback);
             let exited = Arc::clone(&exited);
             move |event: ProcessEvent| match event {
@@ -135,12 +136,37 @@ impl Worker {
             }
         };
 
-        let process = Process::spawn_pty(
-            exe.as_os_str(),
-            &["--rpc-engine"],
-            &[(CHANNEL_ENV_VAR, channel_name.as_os_str())],
-            pty_callback,
-        )?;
+        let envs = [
+            (CHANNEL_ENV_VAR, channel_name.as_os_str()),
+            // The engine embeds a Python interpreter, and a script's `print()`
+            // is meant to be watched as it happens. Python block-buffers its
+            // output whenever it is not a terminal, which behind a pipe means a
+            // long script says nothing until it ends.
+            ("PYTHONUNBUFFERED", OsStr::new("1")),
+        ];
+
+        // What the program prints — the engine's logs, a script's `print()`, CBC's
+        // C++ log — travels on the child's standard streams. What kind of streams
+        // those are is the one place the two platforms part ways.
+        //
+        // On unix the pty earns its keep. Closing its master hangs the child up,
+        // and that SIGHUP cascade is how a subtree dies with its parent (see the
+        // note at the top of `process.rs`). A C library also sees a terminal and
+        // line-buffers, which is what makes a live log live.
+        //
+        // On windows it earns nothing. Teardown there is the job object's work,
+        // the RPC has its own channel now, and ConPTY is a terminal emulator that
+        // gets in the way: it reflows output at the console width, injects escape
+        // sequences, and stalls at startup waiting for an answer to the cursor
+        // position report it sends — an answer a log reader does not know how to
+        // give, so the child hangs before printing a single line. Plain pipes have
+        // none of those problems.
+        #[cfg(unix)]
+        let process =
+            Process::spawn_pty(exe.as_os_str(), &["--rpc-engine"], &envs, output_callback)?;
+        #[cfg(windows)]
+        let process =
+            Process::spawn_pipes(exe.as_os_str(), &["--rpc-engine"], &envs, output_callback)?;
 
         let rpc_writer: RpcWriter = Arc::new(Mutex::new(None));
 
