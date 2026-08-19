@@ -12,9 +12,9 @@
 // too. That costs it nothing: its standard streams are pipes the parent
 // creates and hands over, which need no console at either end.
 //
-// What it does cost is anything this program prints for a human at a terminal
-// -- `--help`, `--version`, `--debug` output, a clap parse error. On Windows
-// those now go to a handle nobody is reading. Unix is unaffected.
+// The cost is that nothing has a console to print to any more -- `--help`,
+// `--version`, `--debug` output, a clap parse error. `windows_console::attach`
+// gives those a destination again. Unix is unaffected throughout.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use clap::Parser;
@@ -23,6 +23,8 @@ use relm4::RelmApp;
 use std::path::PathBuf;
 
 mod debug;
+#[cfg(windows)]
+mod windows_console;
 
 const WORKER_THREAD_COUNT: usize = 4;
 
@@ -51,6 +53,11 @@ struct Args {
 }
 
 fn main() -> Result<(), anyhow::Error> {
+    // Before the parse, because a parse error is one of the things this makes
+    // visible again.
+    #[cfg(windows)]
+    windows_console::attach();
+
     let args = Args::parse();
 
     if args.rpc_engine {

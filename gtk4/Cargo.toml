@@ -34,3 +34,14 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "proces
 chrono.workspace = true
 anyhow.workspace = true
 non-empty-string.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# Only for reconnecting the standard streams to a terminal, in
+# src/windows_console.rs. Same version as the one `subprocesses` pulls in, so
+# the lock keeps a single copy. The console devices are opened through
+# std::fs::OpenOptions rather than CreateFileW, which is what keeps the feature
+# list down to these two.
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_System_Console",
+] }
