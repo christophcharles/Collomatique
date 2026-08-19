@@ -6,23 +6,25 @@
 # so that VCPKG_ROOT is in the environment.
 #
 # What it does today is the dependencies, then Collomatique. The dependencies
-# come in two halves: CBC and the Python the application embeds are built by
-# vcpkg, from the manifest next to this file, and GTK and libadwaita are built by
-# gvsbuild. It reports what landed, then builds the application against both. The
-# rest is added one piece at a time as the roadmap advances: the bundle layout,
-# then the installer.
+# come from three places, and each one is the place its own upstream blesses:
+# CBC from COIN-OR's own release binaries, GTK and libadwaita built by gvsbuild,
+# and the Python the application embeds built by vcpkg from the manifest next to
+# this file. It reports what landed, then builds the application against all
+# three. The rest is added one piece at a time as the roadmap advances: the
+# bundle layout, then the installer.
 #
-# The halves are separate because GTK cannot come from vcpkg. libadwaita needs
-# appstream, appstream needs libxmlb, and vcpkg's libxmlb port declares
-# "supports": "!windows | mingw", so vcpkg refuses it for MSVC before compiling
-# anything. gtk.org names MSYS2 and gvsbuild for Windows and never vcpkg, and
-# gvsbuild is the one that produces MSVC libraries. So each half uses the tool
-# its own upstream blesses, and the two produce two prefixes.
+# It is three rather than one because vcpkg cannot serve either of the first two.
+# For GTK: libadwaita needs appstream, appstream needs libxmlb, and vcpkg's
+# libxmlb port declares "supports": "!windows | mingw", so vcpkg refuses it for
+# MSVC before compiling anything -- and gtk.org names MSYS2 and gvsbuild for
+# Windows, never vcpkg. For CBC: vcpkg's coin-or-* ports pin raw master commits
+# instead of releases, which is explained where CBC is fetched below. Python and
+# pkgconf are what vcpkg is left doing, and it does them well.
 #
-# Expect most of a day on a first run, and a lot of downloading: both halves
+# Expect most of a day on a first run, and a lot of downloading: two of the three
 # build everything from source. Interrupting is safe and re-running resumes --
-# vcpkg keeps every package it has already built, and gvsbuild is asked to skip
-# projects it has already built.
+# vcpkg keeps every package it has already built, gvsbuild is asked to skip
+# projects it has already built, and CBC is skipped once it is unpacked.
 #
 # Nothing is written inside the repository. Everything goes under -OutRoot, which
 # is also where the staged application and the installer will be put later.
@@ -81,11 +83,20 @@ $CargoTarget = Join-Path $OutRoot 'target'
 $GtkBuildRoot = Join-Path $OutRoot 'gtk-build'
 $GtkPrefix    = Join-Path $GtkBuildRoot 'gtk\x64\release'
 
+# CBC is downloaded rather than built, so its version is a pin like any other and
+# lives here with the paths. See the section that fetches it for why it does not
+# come from vcpkg.
+$CbcVersion = '2.10.13'
+$CbcUrl     = "https://github.com/coin-or/Cbc/releases/download/releases/$CbcVersion/Cbc-releases.$CbcVersion-w64-msvc17-md.zip"
+$CbcSha256  = 'b9702ad7501b4249a9721984ce3c6dc8fb9b6cfb995f42d493a5bd54b8f42a74'
+$CbcPrefix  = Join-Path $OutRoot "cbc-$CbcVersion"
+
 Write-Step "Collomatique Windows build"
 Write-Note "manifest: $ManifestDir"
 Write-Note "triplet:  $Triplet"
 Write-Note "output:   $OutRoot"
 Write-Note "gtk:      $GtkBuildRoot"
+Write-Note "cbc:      $CbcPrefix"
 Write-Host
 
 # bootstrap.ps1 sets VCPKG_ROOT for the user account, so a terminal opened
@@ -118,7 +129,82 @@ if (-not (Test-Path $OutRoot)) {
 }
 
 # ---------------------------------------------------------------------------
-# CBC and Python, from vcpkg
+# CBC, from COIN-OR's own release
+# ---------------------------------------------------------------------------
+
+# This used to come from vcpkg and no longer does. vcpkg's COIN-OR ports pin raw
+# master commits rather than releases: coin-or-cbc is REF ca088df3 with
+# version-date 2024-06-04, coin-or-clp is dated 2023-02-01, coin-or-osi
+# 2024-04-16 -- no tags, and not even contemporaries of each other. Cbc's master
+# says AC_INIT([Cbc],[devel],...), so the cbc.pc vcpkg installs reports
+# "Version: devel", and collo-cbc/build.rs asks pkg-config for CBC >= 2.10, which
+# no version comparison can ever satisfy against the word "devel".
+#
+# COIN-OR publishes MSVC binaries with each release. This is not the same bargain
+# as the gvsbuild zip we turned down: those were raw CI output the project says
+# it cannot promise to update even for security issues, while these are the
+# project's own release artifacts, tagged and versioned.
+#
+# The "md" in the name is the /MD compiler flag -- the dynamic C runtime, which
+# is what rustc links with and what our vcpkg triplet is set to. The alternative
+# asset is "dbg", a debug build. Everything inside is a static .lib and there is
+# no DLL at all, which is what we need anyway: collo_cbc.cpp imports the data
+# symbol cbcPreProcessPointer, and MSVC will not auto-import data from a DLL.
+#
+# One oddity, checked in the VM before adopting this. The .pc files carry the
+# absolute path of the GitHub Actions runner that built them,
+# prefix=/d/a/Cbc/Cbc/dist. pkgconf recomputes that prefix from wherever it finds
+# the file, so what comes out is a real path under the directory below.
+
+$CbcPc = Join-Path $CbcPrefix 'lib\pkgconfig\cbc.pc'
+if (Test-Path $CbcPc) {
+    Write-Step "CBC $CbcVersion is already unpacked"
+    Write-Note "at: $CbcPrefix"
+} else {
+    $CbcZip = Join-Path $OutRoot "Cbc-$CbcVersion-w64-msvc17-md.zip"
+
+    if (-not (Test-Path $CbcZip)) {
+        Write-Step "downloading CBC $CbcVersion (about 18 MB)"
+        Write-Note $CbcUrl
+
+        # curl.exe, spelled with the extension because plain "curl" is a
+        # PowerShell alias for Invoke-WebRequest. --fail matters: without it an
+        # HTTP error page is written to the file and curl still exits 0, and we
+        # would go on to unpack HTML as if it were a zip.
+        & curl.exe --fail --location --output $CbcZip $CbcUrl
+
+        if ($LASTEXITCODE -ne 0) {
+            # Delete what landed. Otherwise the next run finds a file at that
+            # path, skips the download, and fails on the checksum instead --
+            # which is a confusing way to report a network problem.
+            Remove-Item $CbcZip -Force -ErrorAction SilentlyContinue
+            Write-Fail "could not download CBC (curl exit code $LASTEXITCODE)."
+            Write-Note "the URL above is the pinned release asset; check it is reachable."
+            exit 1
+        }
+    }
+
+    # Get-FileHash returns uppercase hex and the pin above is lowercase, which is
+    # fine: -ne on strings is case-insensitive in PowerShell. The pin is kept in
+    # the case that sha256sum and GitHub print, so it can be pasted either way.
+    $CbcActualSha = (Get-FileHash -Path $CbcZip -Algorithm SHA256).Hash
+    if ($CbcActualSha -ne $CbcSha256) {
+        Write-Fail "the CBC download does not match its expected checksum."
+        Write-Note "expected: $CbcSha256"
+        Write-Note "got:      $CbcActualSha"
+        Write-Note "delete $CbcZip and run again."
+        exit 1
+    }
+
+    Write-Step "unpacking CBC $CbcVersion"
+    Expand-Archive -Path $CbcZip -DestinationPath $CbcPrefix -Force
+    Write-Note "into: $CbcPrefix"
+}
+
+Write-Host
+
+# ---------------------------------------------------------------------------
+# Python and pkgconf, from vcpkg
 # ---------------------------------------------------------------------------
 
 # Run from the manifest directory rather than pass --x-manifest-root: vcpkg
@@ -131,7 +217,7 @@ if (-not (Test-Path $OutRoot)) {
 # process behind hangs the script forever. It also gives back vcpkg's real
 # progress output, which matters a lot across a build this long.
 
-Write-Step "building the dependencies with vcpkg (from source, on a first run)"
+Write-Step "building Python and pkgconf with vcpkg (from source, on a first run)"
 Write-Host
 
 Push-Location $ManifestDir
@@ -251,9 +337,10 @@ Write-Host
 # names the files the next steps depend on, so a failure is seen here rather
 # than an hour into the cargo build.
 
-Write-Step "the two prefixes"
+Write-Step "the three prefixes"
 Write-Note "vcpkg:    $Prefix"
 Write-Note "gvsbuild: $GtkPrefix"
+Write-Note "cbc:      $CbcPrefix"
 Write-Host
 
 # Reporting only. A tool that writes a warning to stderr while printing its
@@ -261,13 +348,13 @@ Write-Host
 $ErrorActionPreference = 'Continue'
 
 # cbc.pc is what collo-cbc/build.rs probes for; gtk4.pc and libadwaita-1.pc are
-# what the gtk4 and libadwaita crates probe for. They are in two different
-# prefixes, which is why step 4 will put both directories on PKG_CONFIG_PATH.
+# what the gtk4 and libadwaita crates probe for. Each lives in its own prefix,
+# which is why all three directories go on PKG_CONFIG_PATH further down.
 #
 # python3 is not looked for: pyo3 finds Python through an interpreter rather than
 # pkg-config, so whether the port ships a .pc file says nothing either way.
 foreach ($group in @(
-    @{ Dir = (Join-Path $Prefix    'lib\pkgconfig'); Files = @('cbc.pc') }
+    @{ Dir = (Join-Path $CbcPrefix 'lib\pkgconfig'); Files = @('cbc.pc') }
     @{ Dir = (Join-Path $GtkPrefix 'lib\pkgconfig'); Files = @('gtk4.pc', 'libadwaita-1.pc') }
 )) {
     foreach ($pc in $group.Files) {
@@ -344,7 +431,7 @@ Write-Host
 # already contains everything -- there is no second binary to produce.
 $CargoPackage = 'collomatique-gtk4'
 
-# Four environment variables are what connect the workspace to the two prefixes
+# Four environment variables are what connect the workspace to the three prefixes
 # above. They are set here rather than expected from the machine, so that a build
 # depends on this script and not on how a terminal happens to be configured, and
 # they are set on this process only -- nothing is written back to the machine.
@@ -354,13 +441,21 @@ $CargoPackage = 'collomatique-gtk4'
 # built rather than requiring one on PATH.
 $env:PKG_CONFIG = Join-Path $Prefix 'tools\pkgconf\pkgconf.exe'
 
-# Two directories, because there are two prefixes: CBC is vcpkg's, the whole GTK
-# stack is gvsbuild's. The separator is a semicolon -- this is a native Windows
-# pkgconf, and it splits the variable the way Windows splits PATH, not the way
-# Unix does.
+# Three directories, one per prefix. The separator is a semicolon -- this is a
+# native Windows pkgconf, and it splits the variable the way Windows splits PATH,
+# not the way Unix does.
+#
+# vcpkg's is still listed even though nothing in the workspace asks pkg-config for
+# Python: pkgconf resolves Requires: chains through this same path, so a future
+# port that others depend on is found without editing this line.
+#
+# CBC's comes first on purpose. An install root built before coin-or-cbc was
+# dropped from vcpkg.json may still hold the old "Version: devel" cbc.pc, and
+# pkgconf takes the first match in the path.
 $env:PKG_CONFIG_PATH = @(
-    (Join-Path $Prefix    'lib\pkgconfig')
+    (Join-Path $CbcPrefix 'lib\pkgconfig')
     (Join-Path $GtkPrefix 'lib\pkgconfig')
+    (Join-Path $Prefix    'lib\pkgconfig')
 ) -join ';'
 
 # gtk4/build.rs compiles the .gresource bundle through glib-build-tools, which
