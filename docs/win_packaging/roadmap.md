@@ -373,6 +373,32 @@ The toolchain gate that used to live here is gone: step 3 answered it, earlier
 and more clearly than a compile would have. gvsbuild for GTK, vcpkg for the
 rest.
 
+**Done**: `d8c34b19` added the build to the script, and then compiling it for
+real took three more commits — `08d38dce`, `df468047` and `a9be6378`.
+
+The expectation written above was the wrong way round. The Rust code needed
+nothing: not one source file changed, and the only thing the compiler asked for
+was a Cargo feature (`a9be6378` — `windows-sys` emits `CreateJobObjectW` only
+when `Win32_Security` is on, because its signature names a type from there).
+Everything else was the dependencies.
+
+**CBC no longer comes from vcpkg at all** (`08d38dce`), which is the one real
+change to step 3's outcome. vcpkg's `cbc.pc` reports `Version: devel`, so
+`collo-cbc/build.rs`, which asks pkg-config for CBC >= 2.10, can never be
+satisfied by it — and that is not a packaging slip to work around: vcpkg's
+COIN-OR ports pin raw master commits rather than releases, none of them tagged
+and none contemporaries. CBC is now COIN-OR's own release binaries, pinned to
+2.10.13 by URL and SHA256, `-md` for the dynamic CRT that matches rustc. They
+are static `.lib` files, which is what `cbcPreProcessPointer` needs anyway,
+since MSVC will not auto-import a data symbol from a DLL.
+
+The `-l` mismatch this step said to watch did happen (`df468047`), just not on
+`-lz`: the archives carry autotools names like `libCbcSolver.lib`, `cbc.pc`
+asks for `-lCbcSolver`, and rustc turns that into the literal filename
+`CbcSolver.lib`. Nothing in between translates. The script now copies each
+`lib*.lib` to its MSVC name after unpacking — the same thing vcpkg's own tree
+does.
+
 ### Step 5 — First run: native-stack verification
 
 Run the exe from the build environment and verify, in order of risk:
@@ -388,12 +414,59 @@ Run the exe from the build environment and verify, in order of risk:
 5. General GTK/adwaita behaviour: rendering, HiDPI, keyboard input, whether
    dark mode follows the Windows setting (observe and note; no promise).
 
+**In progress.** Items 1, 3 and 4 are confirmed on the VM as written: a solve
+streams mid-solve incumbents, so `cbcPreProcessPointer` works through the
+static COIN-OR archives; the embedded interpreter starts and finds its stdlib,
+and a script using xlsxwriter runs once xlsxwriter is installed into that
+interpreter; and rfd opens native Win32 dialogs. Item 5 has not been reported.
+
+Item 3's condition is worth spelling out, because step 7 depends on it: it was
+tested against an interpreter that had been through `ensurepip` and a pinned
+`pip install xlsxwriter`. So the requirement is real and measured. What is open
+is only who performs that install, now that the staging step does not.
+
+**Item 2 was not verified, it was rebuilt.** ConPTY is gone on Windows;
+`3266731d`, `ddf4da59`, `0eb05c5f` and `b05b06b8` are the story, and the
+teardown note at the top of `subprocesses/src/process.rs` is where the shape
+now lives. Briefly:
+
+The in-band RPC could not survive a terminal emulator. It travelled as marked,
+80-byte-chunked lines on the same stream as the logs, and the chunking and the
+markers existed only because a tty wraps and transforms text. On unix
+`cfmakeraw` turns all of that off; ConPTY has no such switch — it reflows at
+the console width and injects escape sequences. So the RPC moved off the
+stream entirely, onto its own private byte-clean local socket: a unix domain
+socket on Linux, a named pipe on Windows, one design on both platforms, with
+the name handed to the child in `COLLOMATIQUE_RPC_CHANNEL`. The whole
+marker-and-chunking layer is deleted.
+
+Then ConPTY turned out not to work at all, for a reason worth recording:
+conhost opens by asking the terminal where the cursor is (`ESC[6n`, a Device
+Status Report) and waits for the answer. Our consumer is a log reader, not a
+terminal emulator, so it never answers and the pseudoconsole stalls — even
+`cmd.exe /c echo bonjour` hangs, and the startup preamble only appears when the
+pty is torn down. With the RPC on its own channel and teardown already the Job
+Object's job, the pty was carrying nothing on Windows, so the worker there now
+spawns on plain pipes.
+
+That costs the one thing a terminal was giving for free: a C runtime behind a
+pipe block-buffers, so a log meant to be watched arrives in lumps or not until
+the end. Two answers, both narrow. CBC calls `setvbuf(_IONBF)` on stdout at
+startup (`collo_cbc_unbuffer_output`; MSVC has no line buffering to ask for —
+`_IOLBF` there behaves as `_IOFBF`). Python gets `PYTHONUNBUFFERED=1` in the
+worker's environment, which `Py_Initialize` reads, so an embedded interpreter
+honours it too.
+
+Linux is untouched by all this: it still spawns on a pty, because there the pty
+is load-bearing — closing the master hangs the child up, and that SIGHUP
+cascade is how a subtree dies with its parent.
+
 ### Step 6 — Windows polish (small code changes)
 
 - `#![cfg_attr(windows, windows_subsystem = "windows")]` on
   `gtk4/src/main.rs` so no console window flashes. The `--rpc-engine` child
-  must keep working — its stdio goes through ConPTY, which does not require a
-  console-subsystem exe — verify it after the change.
+  must keep working — its stdio is a set of pipes the parent creates, which
+  needs no console of its own — verify it after the change.
 - Embed the app icon and version info into the exe (taskbar/Explorer icon),
   e.g. with the `winresource` crate in `gtk4/build.rs` under `cfg(windows)`,
   from an `.ico` generated once out of
