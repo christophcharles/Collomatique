@@ -790,15 +790,36 @@ the interpreter to isolated mode, where `site.py` never runs. That would take
 the `.pth` above with it.
 
 Acceptance for this step was: the staged tree runs on a Windows machine without
-vcpkg, Build Tools or Python installed. **Met.** The tree runs, and the Python
-arrangement above was exercised on the VM after `2b4dc6af` and works.
+vcpkg, Build Tools or Python installed. **Met.** The tree runs, and one export
+script using XlsxWriter ran end to end on the VM after `2b4dc6af`.
 
-Two limits on that sentence, so it is not read as more than it is. The machine
-is the build VM, which does have vcpkg and Build Tools on it — "runs without
-them" is inferred from the tree being self-contained, not from a clean machine.
-And the check was that the arrangement works, not the item-by-item list this
-step and step 9 ask for. So these are believed right rather than each seen:
+That one script is worth reading carefully, because it proves more than it
+looks like and less than it might be taken for.
 
+**What it settles.** XlsxWriter imports and works, so unpacking a wheel into
+`Lib\site-packages` really does produce a working install — which is the same
+mechanism pip arrived by, though pip itself has not been run. More importantly
+it proves `site.py` runs at all: without it `Lib\site-packages` is not on
+`sys.path` and the import would simply have failed. That was the risk behind the
+`python312._pth` paragraph above, and the one failure that would have taken
+everything else down with it. It is gone.
+
+**What it does not settle: any of the private directory.** XlsxWriter sits in
+`Lib\site-packages`, which is searched whether or not `collomatique.pth` did
+anything. If `collomatique_site.py` raised, `site.py` prints the traceback and
+carries on, and the export would have worked exactly the same. So
+`%APPDATA%\collomatique\python\3.12\Lib\site-packages` being on `sys.path` is
+still unobserved — printing `sys.path` from a script inside the application is
+the one-line check, and a traceback from the `.pth` would be in the log beside
+it, since Python scripts run in the `--rpc-engine` child whose stderr is a pipe
+the application reads.
+
+Two further limits. The machine is the build VM, which does have vcpkg and Build
+Tools on it — "runs without them" is inferred from the tree being
+self-contained, not from a clean machine. And nothing below has been seen at
+all:
+
+- `collomatique-pip.cmd`, and pip working through it;
 - the same thing in a "me only" install as in an all-users one;
 - `pip list` agreeing with what the application can import;
 - a *binary* wheel, which is the case the version in the path exists for —
@@ -884,10 +905,10 @@ uninstall followed by an install, and taking a teacher's own modules out there
 would undo the reason they are kept out of `{app}` in the first place.
 
 What has actually been run: the first installer, `dfefa936`, built and installed
-on the VM. Nothing since. Step 7's Python arrangement works, but that is not
-evidence about this step — the staged tree and the installed one are the same
-files, so it runs identically from either, and which one it was tried from is
-not recorded.
+on the VM. Nothing since. Step 7's export script ran, but that is not evidence
+about this step — the staged tree and the installed one are the same files, so a
+script runs identically from either, and which one it was tried from is not
+recorded.
 
 So everything the installer does *besides* copying files is still unlooked at:
 
