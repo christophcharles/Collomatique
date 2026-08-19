@@ -768,5 +768,6 @@ if (-not (Test-Path $Setup)) {
 $SetupSize = (Get-Item -Path $Setup).Length
 Write-Step "installer: $Setup"
 Write-Note ("{0:N0} MB" -f ($SetupSize / 1MB))
-Write-Note "it installs for the current user only, so it asks for no administrator"
-Write-Note "rights. Test it on a machine that has never seen this build."
+Write-Note "it opens by asking whether to install for all users or for this user"
+Write-Note "only, and installs into Program Files or under AppData accordingly."
+Write-Note "Test it on a machine that has never seen this build."
