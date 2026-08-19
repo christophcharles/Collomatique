@@ -129,14 +129,26 @@ impl Default for ColloCbcSolver {
     }
 }
 
+/// Whoever prints CBC's log decides how it is buffered, and that is this type:
+/// it is what turns the log on. CBC prints through C stdout, which the runtime
+/// block-buffers as soon as it is a pipe rather than a terminal — so a log meant
+/// to be watched live would arrive in lumps of several kilobytes, or only once
+/// the solve ended. The setting is process-wide, hence the [`Once`].
+fn unbuffer_cbc_output() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(collo_cbc::unbuffer_output);
+}
+
 impl ColloCbcSolver {
     pub fn new() -> Self {
+        unbuffer_cbc_output();
         ColloCbcSolver {
             disable_logging: true,
         }
     }
 
     pub fn with_disable_logging(disable_logging: bool) -> Self {
+        unbuffer_cbc_output();
         ColloCbcSolver { disable_logging }
     }
 

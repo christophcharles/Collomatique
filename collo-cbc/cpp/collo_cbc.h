@@ -73,6 +73,18 @@ typedef struct {
 // Callback: returns 0 to continue, non-zero to stop.
 typedef int (*ColloCbcCallback)(const ColloCbcProgress* progress, void* user_data);
 
+// Stop the C runtime from holding CBC's log in a buffer.
+//
+// CBC prints through CoinMessageHandler, which writes to C stdout. When that is
+// a pipe rather than a terminal, the runtime buffers it in blocks, so a log a
+// human is meant to watch arrives in lumps of several kilobytes, or not at all
+// until the solve ends. Unbuffered output costs one write per line, which is
+// nothing next to a branch-and-bound node.
+//
+// Affects the whole process, so a host calls it once at startup. Note that MSVC
+// has no line buffering to ask for: _IOLBF there behaves as _IOFBF.
+void collo_cbc_unbuffer_output(void);
+
 ColloCbcModel* collo_cbc_new(void);
 void collo_cbc_free(ColloCbcModel* model);
 
