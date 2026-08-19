@@ -325,6 +325,19 @@ those three. The install prefix is not a choice: gvsbuild builds it as
 release` explicitly is what makes the path the script reports afterwards a fact
 rather than a guess.
 
+**The stack is built rather than downloaded, and that was tried the other way
+round first.** gvsbuild publishes prebuilt zips of its own CI runs, and
+`3d18167d` took one: release 2026.8.0, pinned by the SHA256 published beside the
+asset. It would have kept `bootstrap.ps1` at five tools, since MSYS2 and a
+second Python are only there to run gvsbuild. `430665cd` reverted it before it
+was ever run, on gvsbuild's own argument against those zips — they are raw CI
+output, and the project says it cannot promise timely updates even for security
+issues. That is fine for a developer and not fine for us: the zip carries zlib,
+libpng, freetype and harfbuzz, we ship an installer to teachers, and a CVE in
+any of them would be ours to answer for with no way to do it. Building the stack
+ourselves buys that back, and the three extra tools are the price. Worth
+knowing before anyone reaches for the zip again to save an afternoon.
+
 `adwaita-icon-theme` is asked for by name because it is not a library and does
 not arrive as a dependency, and a libadwaita application without it simply shows
 no icons. `librsvg` is *not* asked for and does not need to be — gvsbuild makes
@@ -609,12 +622,12 @@ prose around them was wrong. This is a trap of our own making, since `--` is
 the dash the rest of the tree writes freely, and the file now carries a note
 saying so.
 
-The pre-commit hook parses the **staged** manifest with `python3` and refuses
-the commit if it does not read, which is what would have caught this before it
-reached the VM. `xml.etree` is in the standard library, so this asks nothing new
-of the shell. Every other file here can be wrong in a way that shows up as a
-test failure or a compile error; this one can only be found by running the
-program on Windows, which is exactly the slowest place to find anything.
+The pre-commit hook parses the **staged** manifest with `python3` (`825e4d91`)
+and refuses the commit if it does not read, which is what would have caught this
+before it reached the VM. `xml.etree` is in the standard library, so this asks
+nothing new of the shell. Every other file here can be wrong in a way that shows
+up as a test failure or a compile error; this one can only be found by running
+the program on Windows, which is exactly the slowest place to find anything.
 
 Nothing is left in this step. The Python path setup it kept open turned out to
 need no Rust at all — it is two files staged into the interpreter, and step 7
@@ -643,11 +656,59 @@ something has to run `python -m ensurepip --upgrade` once before a teacher can
 add a package — and `xlsxwriter` has to arrive the same way, version-pinned like
 the flatpak.
 
-Not while staging, though. `build.ps1` used to do both and no longer does: the
-staging directory is rebuilt from nothing on every run, so paying for a download
-and an install there buys nothing that survives. It belongs to whatever ships
-the application — the installer, most likely (step 8) — and which of the two it
-is has not been settled.
+Not while staging, though. `build.ps1` used to do both and no longer does
+(`95d9c809`): the staging directory is rebuilt from nothing on every run, so
+paying for a download and an install there buys nothing that survives. It
+belongs to whatever ships the application — the installer, most likely (step 8)
+— and which of the two it is has not been settled.
+
+**Done** (`da2559a6`). `build.ps1` builds the tree under `<OutRoot>\stage`, and
+step 8 points Inno Setup at that same directory, so anything wrong here is wrong
+in the installer too. What it actually contains:
+
+```
+stage/
+  collomatique-gtk4.exe
+  collomatique-pip.cmd           # installs a module into the teacher's own
+                                 # directory -- see below
+  python.exe
+  *.dll                          # GTK/adw/glib/cairo/pango, python312.dll and
+                                 # the DLLs the stdlib loads at run time
+  Lib/                           # the stdlib AND glib's lib/ -- one directory
+    site-packages/               #   pip, xlsxwriter, collomatique.pth,
+                                 #   collomatique_site.py
+    gdk-pixbuf-2.0/2.10.0/       #   loaders + a regenerated loaders.cache
+  share/glib-2.0/schemas/gschemas.compiled
+  share/icons/Adwaita/  share/icons/hicolor/
+  share/locale/
+```
+
+Four things about it are worth keeping.
+
+**It is rebuilt from nothing on every run.** The copying is trivial next to the
+rest of the script, and a DLL left behind by a rename upstream is the kind of
+bug that only appears on someone else's machine.
+
+**Whole directories are copied, never lists of files.** Every `*.dll` gvsbuild
+produced, not the ones the exe imports; every locale, not French. A list would
+be smaller and would go stale in silence the first time a GTK version changes
+what it pulls in. The `Copy-Staged` helper fails the build when a source
+wildcard matches nothing, so a path that moves upstream stops the run instead of
+staging an empty directory.
+
+**`Lib\` really is one directory**, and it surprises everyone who opens the
+folder. Python's `Lib\` and glib's `lib\` differ only in case, and Windows
+filenames are case-insensitive, so the standard library and `gdk-pixbuf-2.0\`
+sit side by side in it. Nothing is broken by this; the last paragraph of this
+step says why the tidy alternative was refused.
+
+**The gdk-pixbuf loader cache has to be rebuilt**, because gvsbuild's own names
+absolute paths inside `C:\collo-build`. It is regenerated with paths relative to
+the cache file, which is what lets the folder be installed anywhere. The ABI
+directory (`2.10.0`) is read from disk rather than written down — it is
+gdk-pixbuf's number, not ours. Without a valid cache the application starts and
+shows no icons at all, which is a confusing way to fail, so the script treats an
+empty result as fatal.
 
 **Settled** (`2b4dc6af`), and neither of the two: both ship *unpacked into the
 stage*, so they reach a teacher as ordinary files that the installer records and
@@ -728,8 +789,24 @@ it with glib's `lib\` — and it was turned down because such a file also switch
 the interpreter to isolated mode, where `site.py` never runs. That would take
 the `.pth` above with it.
 
-Acceptance for this step: the staged tree runs on a Windows machine without
-vcpkg, Build Tools or Python installed.
+Acceptance for this step was: the staged tree runs on a Windows machine without
+vcpkg, Build Tools or Python installed. **Met.** The tree runs, and the Python
+arrangement above was exercised on the VM after `2b4dc6af` and works.
+
+Two limits on that sentence, so it is not read as more than it is. The machine
+is the build VM, which does have vcpkg and Build Tools on it — "runs without
+them" is inferred from the tree being self-contained, not from a clean machine.
+And the check was that the arrangement works, not the item-by-item list this
+step and step 9 ask for. So these are believed right rather than each seen:
+
+- the same thing in a "me only" install as in an all-users one;
+- `pip list` agreeing with what the application can import;
+- a *binary* wheel, which is the case the version in the path exists for —
+  everything shipped and everything tried so far is pure Python;
+- the module surviving an install over the top;
+- uninstall leaving nothing behind, and see `__pycache__` in step 9.
+
+Step 9 is where those belong, and step 9 is deferred.
 
 ### Step 8 — Installer, and `build.ps1` complete
 
@@ -807,18 +884,56 @@ uninstall followed by an install, and taking a teacher's own modules out there
 would undo the reason they are kept out of `{app}` in the first place.
 
 What has actually been run: the first installer, `dfefa936`, built and installed
-on the VM. The mode dialog, the icon and the association came after it and have
-not been. The clap check above is the one a double-click exercises, so it is the
-thing to try first — from a folder whose name contains a space.
+on the VM. Nothing since. Step 7's Python arrangement works, but that is not
+evidence about this step — the staged tree and the installed one are the same
+files, so it runs identically from either, and which one it was tried from is
+not recorded.
+
+So everything the installer does *besides* copying files is still unlooked at:
+
+- the install-mode dialog, and whether "me only" still lands somewhere usable;
+- the icon in its three places — the exe, the Start-menu shortcut, and
+  `.collomatique` files in Explorer;
+- the association itself, and with it the clap check above, which is what a
+  double-click exercises. Try that one from a folder whose name contains a
+  space;
+- `[UninstallDelete]`, and uninstalling at all.
+
+These are step 9's list, and step 9 is deferred.
 
 ### Step 9 — End-to-end acceptance (clean VM snapshot)
+
+**Not done, and deliberately postponed.** Every piece it would check has been
+built and every piece has been exercised in some looser way, so this is the run
+that turns "it worked when I tried it" into a statement about a machine that
+never built anything. It is a long sitting in front of a VM, and it is being put
+off rather than skipped: nothing below is retired, and steps 7 and 8 both point
+here for what they did not check.
 
 On a fresh Windows 11 snapshot with nothing installed: run setup.exe →
 SmartScreen "Run anyway" → next-next-next → double-click an
 `examples/*.collomatique` file → the app opens it → a solve runs and streams
-incumbents → an xlsxwriter export works → `pip install --user` of a binary
-wheel (e.g. pandas) works from a user script → uninstall leaves no trace.
-That is the definition of done.
+incumbents → an xlsxwriter export works → `collomatique-pip.cmd` installs a
+**binary** wheel (e.g. pandas) as an account with no administrator rights, and a
+user script then imports it → uninstall leaves no trace. Then the whole thing
+again in "me only" mode, which is a different install directory, a different
+registry hive and a different answer to every question about who may write
+where. That is the definition of done.
+
+The binary wheel is not an arbitrary example. Everything shipped and everything
+tried so far is pure Python, so the reason the install path carries `3.12` —
+that a compiled module is built for one minor version — has never actually been
+exercised.
+
+**"Leaves no trace" already has one known exception, and it is worth expecting
+rather than discovering.** The interpreter writes `__pycache__` beside the
+standard library as scripts import it, and Setup has no record of those files,
+so the uninstaller cannot remove them or the directories holding them. This only
+bites after a "me only" install: there `{app}` belongs to the teacher and is
+writable, while an all-users install puts it under `C:\Program Files`, where
+Python cannot write and silently skips. Predicted from how the two halves work,
+not observed. It is older and wider than the `[UninstallDelete]` entries in step
+8, which cover what pip writes and not this.
 
 ## Version pinning summary
 
