@@ -5,13 +5,13 @@
 # Run it from a terminal opened after pkgs\windows\bootstrap.ps1 has finished,
 # so that VCPKG_ROOT is in the environment.
 #
-# What it does today is the dependencies, then Collomatique. The dependencies
-# come from three places, and each one is the place its own upstream blesses:
-# CBC from COIN-OR's own release binaries, GTK and libadwaita built by gvsbuild,
-# and the Python the application embeds built by vcpkg from the manifest next to
-# this file. It reports what landed, builds the application against all three,
-# then stages a directory that runs on a machine with no build tools on it. The
-# installer is what remains.
+# What it does is the dependencies, then Collomatique, then the installer. The
+# dependencies come from three places, and each one is the place its own upstream
+# blesses: CBC from COIN-OR's own release binaries, GTK and libadwaita built by
+# gvsbuild, and the Python the application embeds built by vcpkg from the
+# manifest next to this file. It reports what landed, builds the application
+# against all three, stages a directory that runs on a machine with no build
+# tools on it, and compiles that directory into a setup.exe with Inno Setup.
 #
 # It is three rather than one because vcpkg cannot serve either of the first two.
 # For GTK: libadwaita needs appstream, appstream needs libxmlb, and vcpkg's
@@ -537,8 +537,8 @@ if (Test-Path $Exe) {
 # ---------------------------------------------------------------------------
 
 # Everything a machine with no build tools needs, arranged the way it will be
-# installed. The installer step will point Inno Setup at this directory and copy
-# it verbatim, so anything wrong here is wrong in the installer too.
+# installed. The installer step below points Inno Setup at this directory and
+# copies it verbatim, so anything wrong here is wrong in the installer too.
 #
 # No configuration file, no environment variable and no code in the application
 # makes this work. Both halves relocate themselves:
@@ -667,3 +667,106 @@ Write-Step "staged: $StageRoot"
 Write-Note ("{0:N0} MB" -f ($StageSize / 1MB))
 Write-Note "run it from there. It should not need anything from this build"
 Write-Note "environment -- if it does, that is the bug this directory exists to find."
+
+Write-Host
+
+# ---------------------------------------------------------------------------
+# The installer
+# ---------------------------------------------------------------------------
+
+# Inno Setup compiles the staged directory above into a single setup.exe. The
+# script is collomatique.iss, next to this one, and it is kept deliberately small:
+# copy the directory, add a Start-menu entry, register an uninstaller. No file
+# association and nothing written under Software\Classes yet -- see the comments
+# in the .iss for why those are held back.
+#
+# Every path and version the .iss needs is passed in with /D rather than written
+# down there, so this script stays the one place that knows where things are.
+
+$IssScript = Join-Path $ManifestDir 'collomatique.iss'
+
+# ISCC.exe is Inno Setup's command line compiler. Its installer does not put it
+# on PATH, so it is looked for where bootstrap.ps1 reported it -- the same two
+# machine-wide locations, in the same order.
+$IsccCandidates = @(
+    (Join-Path $env:ProgramFiles        'Inno Setup 7\ISCC.exe')
+    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
+)
+$Iscc = $IsccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $Iscc) {
+    Write-Fail "Inno Setup's compiler was not found."
+    foreach ($candidate in $IsccCandidates) { Write-Note "looked at: $candidate" }
+    Write-Note "run pkgs\windows\bootstrap.ps1, which installs it machine-wide."
+    Write-Note "the staged directory above is finished and usable without this step."
+    exit 1
+}
+
+# The version comes from the workspace Cargo.toml, the same single source
+# pkgs/flatpak/build.sh reads. Read rather than passed as a parameter, so that a
+# release is one edit in one file.
+$WorkspaceToml = Join-Path $RepoRoot 'Cargo.toml'
+$Version       = $null
+$InPackage     = $false
+foreach ($line in Get-Content -Path $WorkspaceToml) {
+    if ($line -match '^\s*\[workspace\.package\]') { $InPackage = $true; continue }
+    # Any other section header ends it. Without this, a "version =" belonging to
+    # some later table would be picked up as if it were ours.
+    if ($InPackage -and $line -match '^\s*\[')     { break }
+    if ($InPackage -and $line -match '^\s*version\s*=\s*"([^"]+)"') {
+        $Version = $Matches[1]
+        break
+    }
+}
+
+if (-not $Version) {
+    Write-Fail "no version found under [workspace.package] in $WorkspaceToml."
+    exit 1
+}
+
+# setup.exe's own file properties want a plain numeric version, and ours is
+# "0.1.0-alpha.1.99". Take the leading numbers for that field only; what the
+# installer shows the user is the full string.
+if ($Version -match '^(\d+(?:\.\d+){0,3})') {
+    $VersionInfo = $Matches[1]
+} else {
+    Write-Fail "the version '$Version' does not start with a number."
+    Write-Note "Inno Setup needs a numeric version for the setup.exe file properties."
+    exit 1
+}
+
+Write-Step "compiling the installer with Inno Setup"
+Write-Note "version: $Version (file properties: $VersionInfo)"
+Write-Note "script:  $IssScript"
+Write-Host
+
+# Bare, no pipeline and no redirection, for the reason given above the vcpkg
+# call. Compressing a few hundred megabytes solid takes minutes, and ISCC prints
+# its progress while it does.
+& $Iscc `
+    "/DAppVersion=$Version" `
+    "/DVersionInfo=$VersionInfo" `
+    "/DStageDir=$StageRoot" `
+    "/DOutputDir=$OutRoot" `
+    $IssScript
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host
+    Write-Fail "Inno Setup failed (exit code $LASTEXITCODE)."
+    Write-Note "it names the line of the .iss it stopped on; read that first."
+    exit 1
+}
+
+Write-Host
+
+$Setup = Join-Path $OutRoot "Collomatique-Setup-$Version.exe"
+if (-not (Test-Path $Setup)) {
+    Write-Fail "Inno Setup reported success but $Setup is not there."
+    exit 1
+}
+
+$SetupSize = (Get-Item -Path $Setup).Length
+Write-Step "installer: $Setup"
+Write-Note ("{0:N0} MB" -f ($SetupSize / 1MB))
+Write-Note "it installs for the current user only, so it asks for no administrator"
+Write-Note "rights. Test it on a machine that has never seen this build."
