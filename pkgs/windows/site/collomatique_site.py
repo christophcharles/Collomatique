@@ -42,6 +42,8 @@ _prefix = prefix()
 if _prefix:
     # addsitedir rather than sys.path.append: it makes this a real site
     # directory, so .pth files inside it are processed like any other package
-    # install. It ignores a directory that does not exist, so nothing has to be
-    # created before the first module is installed.
+    # install. A directory that is not there yet costs nothing -- it is added to
+    # sys.path all the same, and the listing that follows simply finds nothing.
+    # So nothing has to exist before the first module is installed, and
+    # sys.path shows the path even on a machine where none ever is.
     site.addsitedir(os.path.join(_prefix, "Lib", "site-packages"))
