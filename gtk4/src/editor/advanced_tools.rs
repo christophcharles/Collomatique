@@ -342,6 +342,23 @@ impl AdvancedTools {
 
         format!("<b>Python :</b> {} ({})", self.python.version, origin)
     }
+
+    /// The line under the version: where extra modules come from.
+    ///
+    /// Two situations needing two different answers. With a Python of our own
+    /// there is a directory of ours to install into, and a button to do it.
+    /// With the machine's Python there is neither: what goes into a shared
+    /// interpreter is the distribution's business, and most of them now refuse
+    /// pip outright (PEP 668). The sentence names the way out rather than the
+    /// packaging we are missing -- someone running a distribution package does
+    /// not need to hear the word "flatpak".
+    fn generate_python_packages_text(&self) -> &'static str {
+        if self.python.bundled {
+            "Les modules supplémentaires s'installent dans votre espace personnel, à côté des réglages de Collomatique."
+        } else {
+            "Les modules supplémentaires s'installent avec le gestionnaire de paquets de votre distribution."
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -457,6 +474,16 @@ impl Component for AdvancedTools {
                         set_use_markup: true,
                         set_label: &model.generate_python_text(),
                     },
+                    // Same, read once: it depends on the packaging alone.
+                    gtk::Label {
+                        add_css_class: "dimmed",
+                        set_halign: gtk::Align::Start,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_margin_bottom: 5,
+                        set_wrap: true,
+                        set_label: model.generate_python_packages_text(),
+                    },
                     gtk::Button {
                         add_css_class: "frame",
                         add_css_class: "warning",
@@ -477,6 +504,12 @@ impl Component for AdvancedTools {
                         set_margin_start: 10,
                         set_margin_end: 10,
                         set_size_request: (-1, 40),
+                        // Hidden rather than greyed out where Python belongs to
+                        // the machine: there is no directory of ours to install
+                        // into there, so this is not a button waiting to become
+                        // available, it is a button that does not apply. The
+                        // line above says what to do instead.
+                        set_visible: model.python.bundled,
                         // Insensitive until there is something behind it:
                         // installing a module is a different operation on each
                         // platform, and none of them is written yet.
