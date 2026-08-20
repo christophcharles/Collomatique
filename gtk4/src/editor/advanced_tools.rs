@@ -5,7 +5,10 @@ use relm4::{RelmWidgetExt, adw, gtk};
 
 use collomatique_constraints_colloscopes::IlpInnerProblem;
 
+use python_packages::python_is_bundled;
+
 mod install_package;
+mod python_packages;
 
 /// Whether the document cannot be written to a file as it stands
 ///
@@ -175,49 +178,6 @@ impl IlpProblemInfo {
     fn total_constraints(&self) -> usize {
         self.user_constraints + self.defining_constraints
     }
-}
-
-/// Whether this process runs inside a Flatpak sandbox
-///
-/// `/.flatpak-info` is placed in the sandbox's own mount namespace, so a
-/// process outside it does not see the file. The `FLATPAK_ID` variable says the
-/// same thing but is inherited by children, including those that have left the
-/// sandbox, so the file is the sounder test. GTK itself asks this way.
-///
-/// Linux rather than unix: Flatpak exists nowhere else, and a macOS build
-/// asking this question is a mistake worth a compiler error rather than a
-/// `false`.
-#[cfg(target_os = "linux")]
-fn in_flatpak() -> bool {
-    std::path::Path::new("/.flatpak-info").exists()
-}
-
-/// Whether the Python library came with Collomatique
-///
-/// It did on Windows, where it is installed beside the executable, and in the
-/// flatpak, where it is in `/app`. On any other Linux it is the machine's own,
-/// shared with everything else installed there -- which is what makes
-/// installing a module a different question.
-///
-/// There is deliberately no answer for a platform we do not package. A third
-/// one has to say which of the two situations it is in; guessing here would put
-/// a wrong sentence on screen instead of stopping the build.
-#[cfg(windows)]
-fn python_is_bundled() -> bool {
-    true
-}
-
-#[cfg(target_os = "linux")]
-fn python_is_bundled() -> bool {
-    in_flatpak()
-}
-
-#[cfg(not(any(windows, target_os = "linux")))]
-fn python_is_bundled() -> bool {
-    compile_error!(
-        "this platform has to say where its Python comes from: shipped with \
-         Collomatique, or the machine's own"
-    )
 }
 
 /// What the "Interpréteur Python" section says.
