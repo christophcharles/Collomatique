@@ -24,17 +24,28 @@ finish-args:
   - --socket=fallback-x11
   - --share=ipc
   - --device=dri
+  # Collomatique reaches the network for things a user asks for by name: a
+  # Python module from PyPI, the school holiday calendar from its official
+  # source, and later an extension repository. None of them can go through a
+  # portal -- there is no portal for network access -- and a sandboxed process
+  # cannot hand a child more than it has itself, so a helper holding the
+  # network on its own is not an option either. This permission is what those
+  # features cost.
+  #
+  # What matters for a document is untouched: still no filesystem permission at
+  # all, still every file through the document portal.
+  - --share=network
   # Nothing here about Python. The interpreter shipped below has /app as its
   # prefix, so it finds its own site-packages with no PYTHONPATH; and extra
   # packages a user installs land under PYTHONUSERBASE, which the runtime
   # already points at /var/data/python, the sandbox name of the private data
   # directory ~/.var/app/fr.collomatique.Collomatique/data, so they survive
-  # updates of the application. Installing one is collomatique-pip, shipped in
-  # /app/bin by the collomatique module below and run from outside with the
-  # network the application itself deliberately does without -- granted to
-  # that one invocation, and to nothing the application does afterwards:
+  # updates of the application. Installing one is the "Installer un paquet"
+  # button of the advanced tools panel, or collomatique-pip -- shipped in
+  # /app/bin by the collomatique module below -- for whoever prefers a
+  # terminal:
   #
-  #     flatpak run --share=network --command=collomatique-pip fr.collomatique.Collomatique <module>
+  #     flatpak run --command=collomatique-pip fr.collomatique.Collomatique <module>
   #
 
 # Build leftovers of the solver stack and of Python. The Rust binary is already
