@@ -29,11 +29,12 @@ finish-args:
   # packages a user installs land under PYTHONUSERBASE, which the runtime
   # already points at /var/data/python, the sandbox name of the private data
   # directory ~/.var/app/fr.collomatique.Collomatique/data, so they survive
-  # updates of the application. Installing one takes network, which the
-  # application itself deliberately does without:
+  # updates of the application. Installing one is collomatique-pip, shipped in
+  # /app/bin by the collomatique module below and run from outside with the
+  # network the application itself deliberately does without -- granted to
+  # that one invocation, and to nothing the application does afterwards:
   #
-  #     flatpak run --share=network --command=sh fr.collomatique.Collomatique
-  #     python3 -m pip install --user <package>
+  #     flatpak run --share=network --command=collomatique-pip fr.collomatique.Collomatique <module>
   #
 
 # Build leftovers of the solver stack and of Python. The Rust binary is already
@@ -216,6 +217,8 @@ modules:
       - cargo --offline fetch --manifest-path Cargo.toml
       - cargo build --offline --release -p collomatique-gtk4
       - install -Dm755 target/release/collomatique-gtk4 ${FLATPAK_DEST}/bin/collomatique-gtk4
+      # Installing a Python module of one's own, see finish-args above.
+      - install -Dm755 pkgs/flatpak/collomatique-pip ${FLATPAK_DEST}/bin/collomatique-pip
       - install -Dm644 pkgs/flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - install -Dm644 pkgs/flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
       # Registers *.collomatique with the desktop. The %f in the desktop file

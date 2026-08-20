@@ -1,0 +1,45 @@
+#!/bin/sh
+# Installs a Python module for whoever runs this, into the application's own
+# data directory: /var/data/python inside the sandbox, which is
+# ~/.var/app/fr.collomatique.Collomatique/data/python outside it. The runtime
+# points PYTHONUSERBASE there, so `pip install --user` is the whole mechanism.
+# The path carries the Python version the way every user site directory does,
+# and what is installed survives updates of the application.
+#
+# The flatpak sibling of pkgs/windows/collomatique-pip.cmd, and like it, this
+# only installs. Nothing here needs the site hook that file's Windows twin
+# needs: the embedded interpreter reads PYTHONUSERBASE by itself, because
+# python-runner starts it with Python::initialize(), which respects the
+# environment.
+#
+# The application has no network, on purpose, and this script does not change
+# that: it is run from outside with network granted to that one invocation.
+#
+#     flatpak run --share=network --command=collomatique-pip fr.collomatique.Collomatique <module>
+#
+set -u
+
+# The message is in French, like the prompt of the Windows script: whoever
+# reads it is a user of the application, not a packager.
+if [ $# -eq 0 ]; then
+    echo "collomatique-pip : indiquez le ou les modules à installer." >&2
+    echo >&2
+    echo "    flatpak run --share=network --command=collomatique-pip fr.collomatique.Collomatique <module>" >&2
+    exit 2
+fi
+
+# --no-warn-script-location: the bin directory under the user base is not on
+# PATH and is not meant to be. Only imports matter here.
+#
+# Not exec'd, so that a failure can be explained below.
+/app/bin/python3 -m pip install --user --no-warn-script-location "$@"
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo >&2
+    echo "collomatique-pip : pip a échoué. S'il n'a pas pu joindre le réseau," >&2
+    echo "c'est que la ligne flatpak run doit comporter --share=network :" >&2
+    echo "l'application elle-même n'a aucun accès au réseau." >&2
+fi
+
+exit $status
