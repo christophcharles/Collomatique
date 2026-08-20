@@ -1,9 +1,11 @@
 use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
-use relm4::{adw, gtk};
+use relm4::{Component, ComponentController, ComponentParts, ComponentSender, Controller};
+use relm4::{RelmWidgetExt, adw, gtk};
 
 use collomatique_constraints_colloscopes::IlpInnerProblem;
+
+mod install_package;
 
 /// Whether the document cannot be written to a file as it stands
 ///
@@ -241,6 +243,10 @@ pub struct AdvancedTools {
     stats: Stats,
     ilp_info: Option<IlpProblemInfo>,
     python: PythonInfo,
+    /// Owned here rather than by the editor: installing a module concerns
+    /// nothing outside this panel -- it does not touch the document, and there
+    /// is no answer to bring back.
+    install_package_dialog: Controller<install_package::Dialog>,
 }
 
 #[derive(Debug)]
@@ -249,6 +255,7 @@ pub enum AdvancedToolsInput {
     UpdateIlpProblemInfo(Option<IlpProblemInfo>),
 
     RunPythonScriptClicked,
+    InstallPackageClicked,
     ExportMpsClicked,
     CompactIdsClicked,
 }
@@ -510,14 +517,11 @@ impl Component for AdvancedTools {
                         // available, it is a button that does not apply. The
                         // line above says what to do instead.
                         set_visible: model.python.bundled,
-                        // Insensitive until there is something behind it:
-                        // installing a module is a different operation on each
-                        // platform, and none of them is written yet.
-                        set_sensitive: false,
                         adw::ButtonContent {
                             set_icon_name: "system-software-install-symbolic",
                             set_label: "Installer un paquet",
                         },
+                        connect_clicked => AdvancedToolsInput::InstallPackageClicked,
                     },
                 },
             },
@@ -529,10 +533,19 @@ impl Component for AdvancedTools {
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // `root` is this panel, not a window: relm4 resolves the toplevel late,
+        // once the widget tree is built, which is how every other panel here
+        // gives its dialogs a parent.
+        let install_package_dialog = install_package::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
         let model = AdvancedTools {
             stats: Stats::default(),
             ilp_info: None,
             python: PythonInfo::read(),
+            install_package_dialog,
         };
         let widgets = view_output!();
 
@@ -550,6 +563,12 @@ impl Component for AdvancedTools {
             AdvancedToolsInput::RunPythonScriptClicked => {
                 sender
                     .output(AdvancedToolsOutput::RunPythonScriptClicked)
+                    .unwrap();
+            }
+            AdvancedToolsInput::InstallPackageClicked => {
+                self.install_package_dialog
+                    .sender()
+                    .send(install_package::DialogInput::Show)
                     .unwrap();
             }
             AdvancedToolsInput::ExportMpsClicked => {
