@@ -315,6 +315,32 @@ impl Process {
             command.env(key, value);
         }
 
+        // Start console programs without a console.
+        //
+        // A windows process that has no console of its own -- which the graphical
+        // interface is, being built with `windows_subsystem = "windows"` -- makes
+        // windows allocate a fresh console for any console-subsystem child it
+        // starts. That console is a command window, popping up in front of the
+        // application for as long as the child runs. CREATE_NO_WINDOW says to
+        // create none: the child simply has no console.
+        //
+        // Nothing is lost by it. Every stream we care about is a pipe we handed
+        // the child ourselves, and the flag only ever applies to a console
+        // program -- an `--rpc-engine` child, being this same windows-subsystem
+        // binary, had no console either way.
+        //
+        // `creation_flags` replaces the flag word rather than adding to it, but
+        // the standard library ORs its own CREATE_UNICODE_ENVIRONMENT in
+        // afterwards, so nothing it needs is lost.
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+
+            const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+            command.creation_flags(CREATE_NO_WINDOW);
+        }
+
         let mut child = command.spawn().map_err(SpawnError::PipeSpawn)?;
 
         let stdout = child
