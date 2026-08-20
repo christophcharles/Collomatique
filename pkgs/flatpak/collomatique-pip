@@ -1,0 +1,36 @@
+#!/bin/sh
+# Installs a Python module for whoever runs this, into the application's own
+# data directory: /var/data/python inside the sandbox, which is
+# ~/.var/app/fr.collomatique.Collomatique/data/python outside it. The runtime
+# points PYTHONUSERBASE there, so `pip install --user` is the whole mechanism.
+# The path carries the Python version the way every user site directory does,
+# and what is installed survives updates of the application.
+#
+# The flatpak sibling of pkgs/windows/collomatique-pip.cmd, and like it, this
+# only installs. Nothing here needs the site hook that file's Windows twin
+# needs: the embedded interpreter reads PYTHONUSERBASE by itself, because
+# python-runner starts it with Python::initialize(), which respects the
+# environment.
+#
+# The same install is available from the application itself, in the advanced
+# tools panel. This is the way in for whoever prefers a terminal:
+#
+#     flatpak run --command=collomatique-pip fr.collomatique.Collomatique <module>
+#
+set -u
+
+# The message is in French, like the prompt of the Windows script: whoever
+# reads it is a user of the application, not a packager.
+if [ $# -eq 0 ]; then
+    echo "collomatique-pip : indiquez le ou les modules à installer." >&2
+    echo >&2
+    echo "    flatpak run --command=collomatique-pip fr.collomatique.Collomatique <module>" >&2
+    exit 2
+fi
+
+# --no-warn-script-location: the bin directory under the user base is not on
+# PATH and is not meant to be. Only imports matter here.
+#
+# exec, and no explanation afterwards: pip reports its own failures, and there
+# is no longer a missing permission to warn about.
+exec /app/bin/python3 -m pip install --user --no-warn-script-location "$@"

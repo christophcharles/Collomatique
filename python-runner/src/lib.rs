@@ -14,6 +14,30 @@ pub use collomatique_python_old::SharedFileState;
 /// [run_python_script] needs this crate and nothing else.
 pub use collomatique_python::Host;
 
+/// The version of the Python library this binary is linked against, as
+/// `major.minor.micro`
+///
+/// Read from the library rather than from the headers pyo3 compiled against,
+/// so a system that upgrades its Python under an installed Collomatique
+/// reports what is really loaded.
+///
+/// No interpreter is started, and none is needed: `Py_GetVersion` fills a
+/// static buffer from constants of its own translation unit and reads no
+/// interpreter state (CPython's `Python/getversion.c`). That is what lets the
+/// graphical interface show the version without paying for an interpreter it
+/// may never use -- scripts run in another process entirely.
+pub fn version() -> String {
+    // SAFETY: the pointer is to a static buffer that lives as long as the
+    // process, filled by the call itself. Valid before [initialize], per the
+    // note above.
+    let raw = unsafe { std::ffi::CStr::from_ptr(pyo3::ffi::Py_GetVersion()) };
+    let full = raw.to_string_lossy();
+
+    // "3.12.13 (main, Jun  3 2026, 09:12:41) [GCC 13.2.0]": the version is
+    // everything up to the first space, the rest describes the build.
+    full.split_whitespace().next().unwrap_or(&full).to_string()
+}
+
 pub fn initialize() {
     use collomatique_python::collomatique;
     use collomatique_python_old::collomatique_old;

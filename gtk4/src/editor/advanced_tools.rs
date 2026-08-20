@@ -1,9 +1,14 @@
 use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
-use relm4::{Component, ComponentParts, ComponentSender, RelmWidgetExt};
-use relm4::{adw, gtk};
+use relm4::{Component, ComponentController, ComponentParts, ComponentSender, Controller};
+use relm4::{RelmWidgetExt, adw, gtk};
 
 use collomatique_constraints_colloscopes::IlpInnerProblem;
+
+use python_packages::python_is_bundled;
+
+mod install_package;
+mod python_packages;
 
 /// Whether the document cannot be written to a file as it stands
 ///
@@ -175,9 +180,33 @@ impl IlpProblemInfo {
     }
 }
 
+/// What the "Interpréteur Python" section says.
+///
+/// Read once, in [Component::init]: neither answer can change while the
+/// application runs.
+struct PythonInfo {
+    /// `3.12.13`, from the library this binary is linked against.
+    version: String,
+    bundled: bool,
+}
+
+impl PythonInfo {
+    fn read() -> Self {
+        PythonInfo {
+            version: collomatique_python_runner::version(),
+            bundled: python_is_bundled(),
+        }
+    }
+}
+
 pub struct AdvancedTools {
     stats: Stats,
     ilp_info: Option<IlpProblemInfo>,
+    python: PythonInfo,
+    /// Owned here rather than by the editor: installing a module concerns
+    /// nothing outside this panel -- it does not touch the document, and there
+    /// is no answer to bring back.
+    install_package_dialog: Controller<install_package::Dialog>,
 }
 
 #[derive(Debug)]
@@ -186,6 +215,7 @@ pub enum AdvancedToolsInput {
     UpdateIlpProblemInfo(Option<IlpProblemInfo>),
 
     RunPythonScriptClicked,
+    InstallPackageClicked,
     ExportMpsClicked,
     CompactIdsClicked,
 }
@@ -268,6 +298,34 @@ impl AdvancedTools {
 
         lines.join("\n")
     }
+
+    /// The one line under the "Interpréteur Python" title.
+    fn generate_python_text(&self) -> String {
+        let origin = if self.python.bundled {
+            "fourni avec Collomatique"
+        } else {
+            "installé sur le système"
+        };
+
+        format!("<b>Python :</b> {} ({})", self.python.version, origin)
+    }
+
+    /// The line under the version: where extra modules come from.
+    ///
+    /// Two situations needing two different answers. With a Python of our own
+    /// there is a directory of ours to install into, and a button to do it.
+    /// With the machine's Python there is neither: what goes into a shared
+    /// interpreter is the distribution's business, and most of them now refuse
+    /// pip outright (PEP 668). The sentence names the way out rather than the
+    /// packaging we are missing -- someone running a distribution package does
+    /// not need to hear the word "flatpak".
+    fn generate_python_packages_text(&self) -> &'static str {
+        if self.python.bundled {
+            "Les modules supplémentaires s'installent dans votre espace personnel, à côté des réglages de Collomatique."
+        } else {
+            "Les modules supplémentaires s'installent avec le gestionnaire de paquets de votre distribution."
+        }
+    }
 }
 
 #[relm4::component(pub)]
@@ -284,11 +342,12 @@ impl Component for AdvancedTools {
             set_vexpand: true,
             gtk::Box {
                 set_margin_top: 30,
-                set_orientation: gtk::Orientation::Vertical,
+                set_orientation: gtk::Orientation::Horizontal,
                 set_hexpand: true,
-                set_spacing: 15,
+                set_spacing: 0,
                 gtk::Box {
                     set_hexpand: true,
+                    set_valign: gtk::Align::Start,
                     set_spacing: 10,
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Label {
@@ -317,32 +376,22 @@ impl Component for AdvancedTools {
                         set_visible: model.stats.needs_compaction,
                     },
                 },
+                // The two columns are what the horizontal separator used to be:
+                // a line between the figures of the document and what can be
+                // done to it.
+                gtk::Separator {
+                    set_orientation: gtk::Orientation::Vertical,
+                },
                 gtk::Box {
                     set_hexpand: true,
+                    set_valign: gtk::Align::Start,
                     set_spacing: 10,
-                    set_margin_top: 30,
                     set_orientation: gtk::Orientation::Vertical,
-                    gtk::Separator {
-                        set_orientation: gtk::Orientation::Horizontal,
-                    },
                     gtk::Label {
                         set_label: "<b><i><big>Outils</big></i></b>",
                         set_use_markup: true,
                         set_margin_all: 5,
                         set_margin_bottom: 10,
-                    },
-                    gtk::Button {
-                        add_css_class: "frame",
-                        add_css_class: "warning",
-                        set_hexpand: true,
-                        set_margin_start: 10,
-                        set_margin_end: 10,
-                        set_size_request: (-1, 40),
-                        adw::ButtonContent {
-                            set_icon_name: "text-x-script",
-                            set_label: "Exécuter un script Python",
-                        },
-                        connect_clicked => AdvancedToolsInput::RunPythonScriptClicked,
                     },
                     gtk::Button {
                         add_css_class: "frame",
@@ -372,6 +421,68 @@ impl Component for AdvancedTools {
                         },
                         connect_clicked => AdvancedToolsInput::CompactIdsClicked,
                     },
+                    gtk::Separator {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_margin_top: 30,
+                    },
+                    gtk::Label {
+                        set_label: "<b><i><big>Interpréteur Python</big></i></b>",
+                        set_use_markup: true,
+                        set_margin_all: 5,
+                        set_margin_bottom: 10,
+                    },
+                    // No #[watch]: both halves of this line are read once, at
+                    // startup, and neither can change while the program runs.
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_margin_bottom: 5,
+                        set_use_markup: true,
+                        set_label: &model.generate_python_text(),
+                    },
+                    // Same, read once: it depends on the packaging alone.
+                    gtk::Label {
+                        add_css_class: "dimmed",
+                        set_halign: gtk::Align::Start,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_margin_bottom: 5,
+                        set_wrap: true,
+                        set_label: model.generate_python_packages_text(),
+                    },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
+                        adw::ButtonContent {
+                            set_icon_name: "text-x-script",
+                            set_label: "Exécuter un script Python",
+                        },
+                        connect_clicked => AdvancedToolsInput::RunPythonScriptClicked,
+                    },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
+                        // Hidden rather than greyed out where Python belongs to
+                        // the machine: there is no directory of ours to install
+                        // into there, so this is not a button waiting to become
+                        // available, it is a button that does not apply. The
+                        // line above says what to do instead.
+                        set_visible: model.python.bundled,
+                        adw::ButtonContent {
+                            set_icon_name: "system-software-install-symbolic",
+                            set_label: "Installer un paquet",
+                        },
+                        connect_clicked => AdvancedToolsInput::InstallPackageClicked,
+                    },
                 },
             },
         }
@@ -382,9 +493,19 @@ impl Component for AdvancedTools {
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // `root` is this panel, not a window: relm4 resolves the toplevel late,
+        // once the widget tree is built, which is how every other panel here
+        // gives its dialogs a parent.
+        let install_package_dialog = install_package::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .detach();
+
         let model = AdvancedTools {
             stats: Stats::default(),
             ilp_info: None,
+            python: PythonInfo::read(),
+            install_package_dialog,
         };
         let widgets = view_output!();
 
@@ -402,6 +523,12 @@ impl Component for AdvancedTools {
             AdvancedToolsInput::RunPythonScriptClicked => {
                 sender
                     .output(AdvancedToolsOutput::RunPythonScriptClicked)
+                    .unwrap();
+            }
+            AdvancedToolsInput::InstallPackageClicked => {
+                self.install_package_dialog
+                    .sender()
+                    .send(install_package::DialogInput::Show)
                     .unwrap();
             }
             AdvancedToolsInput::ExportMpsClicked => {

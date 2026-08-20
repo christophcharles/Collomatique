@@ -24,27 +24,45 @@ finish-args:
   - --socket=fallback-x11
   - --share=ipc
   - --device=dri
-  # Where the embedded Python finds the packages shipped below. Extra packages
-  # a user installs themselves need nothing here: the runtime already points
-  # PYTHONUSERBASE at /var/data/python, the sandbox name of the private data
-  # directory ~/.var/app/fr.collomatique.Collomatique/data, so they land there
-  # and survive updates of the application. Installing one takes a shell with
-  # the two things the application itself deliberately does without, pip and
-  # network, neither of which it keeps afterwards:
+  # Collomatique reaches the network for things a user asks for by name: a
+  # Python module from PyPI, the school holiday calendar from its official
+  # source, and later an extension repository. None of them can go through a
+  # portal -- there is no portal for network access -- and a sandboxed process
+  # cannot hand a child more than it has itself, so a helper holding the
+  # network on its own is not an option either. This permission is what those
+  # features cost.
   #
-  #     flatpak run --devel --share=network --command=sh fr.collomatique.Collomatique
-  #     pip3 install --user <package>
+  # What matters for a document is untouched: still no filesystem permission at
+  # all, still every file through the document portal.
+  - --share=network
+  # Nothing here about Python. The interpreter shipped below has /app as its
+  # prefix, so it finds its own site-packages with no PYTHONPATH; and extra
+  # packages a user installs land under PYTHONUSERBASE, which the runtime
+  # already points at /var/data/python, the sandbox name of the private data
+  # directory ~/.var/app/fr.collomatique.Collomatique/data, so they survive
+  # updates of the application. Installing one is the "Installer un paquet"
+  # button of the advanced tools panel, or collomatique-pip -- shipped in
+  # /app/bin by the collomatique module below -- for whoever prefers a
+  # terminal:
   #
-  - --env=PYTHONPATH=/app/lib/python3.13/site-packages
+  #     flatpak run --command=collomatique-pip fr.collomatique.Collomatique <module>
+  #
 
-# Build leftovers of the solver stack. The Rust binary is already linked
-# against it by the time this runs.
+# Build leftovers of the solver stack and of Python. The Rust binary is already
+# linked against both by the time this runs, headers included: cleanup is the
+# last step of the whole build, well after pyo3 has compiled against
+# /app/include.
 cleanup:
   - /include
   - /lib/pkgconfig
   - /share/coin
   - /share/doc
   - /share/man
+  # Tcl and Tk install their manual pages here rather than in /share/man.
+  - /man
+  # CPython's own test suite, some 25 MB of it, which nothing imports.
+  - /lib/python3.12/test
+  - /lib/tk8.6/demos
   - '*.a'
   - '*.la'
 
@@ -108,12 +126,84 @@ modules:
         url: https://github.com/coin-or/Cbc/archive/refs/tags/releases/2.10.12.tar.gz
         sha256: 9ed71e4b61668462fc3794c102e26b4bb01a047efbbbcbd69ae7bde1f04f46a8
 
+  # Tcl and Tk, so the Python below can build _tkinter. 8.6.18 is the last
+  # release of the 8.6 line, which is the line CPython 3.12 is built against
+  # everywhere. Both are configured from their unix/ subdirectory, which is how
+  # these source trees are laid out, and both install a pkg-config file that
+  # CPython's configure reads.
+  #
+  # Tk speaks X11 and nothing else. With --socket=fallback-x11 above, tkinter
+  # opens a window in an X11 session and raises in a Wayland one. That is the
+  # accepted trade: the file dialogs scripts actually need go through rfd and
+  # the portal, tkinter is a bonus for simple prompts.
+  - name: tcl
+    buildsystem: autotools
+    subdir: unix
+    # Both Makefiles end their install with `chmod 555` on the shared library
+    # they just wrote (tcl unix/Makefile.in:815, tk unix/Makefile.in:748).
+    # flatpak-builder then runs eu-strip over /app to split the debug symbols
+    # out, and eu-strip rewrites the file in place, so it stops on a read-only
+    # one with "Permission denied" and takes the whole build down with it.
+    # Giving the owner write permission back is what every distribution that
+    # packages Tcl does.
+    post-install:
+      - chmod 755 /app/lib/libtcl8.6.so
+    sources:
+      - type: archive
+        url: https://prdownloads.sourceforge.net/tcl/tcl8.6.18-src.tar.gz
+        sha256: 14f9af32b1767ff718477a8f974ad03c34341097e6b43f4ce54644ee974e268e
+
+  - name: tk
+    buildsystem: autotools
+    subdir: unix
+    config-opts:
+      # tclConfig.sh is in /app/lib, not beside Tk's own sources.
+      - --with-tcl=/app/lib
+    # Same read-only shared library as Tcl above, same reason.
+    post-install:
+      - chmod 755 /app/lib/libtk8.6.so
+    sources:
+      - type: archive
+        url: https://prdownloads.sourceforge.net/tcl/tk8.6.18-src.tar.gz
+        sha256: 95cd528a80f5e4bdb557af9b14a7197d6860793a3894e25e7c9fad2ed05d4c3c
+
+  # The Python the application embeds, shipped in /app instead of the runtime's
+  # own. Shipping it is what buys tkinter, which the runtime strips, at the cost
+  # of owning security updates -- and that cost is shared rather than new: this
+  # is exactly the version the Windows build gets from vcpkg, so there is one
+  # Python to follow CVEs for and not two. A security release moves both
+  # together: the vcpkg baseline in pkgs/windows/vcpkg.json, and the url and
+  # sha256 here.
+  #
+  # --enable-shared because pyo3 links libpython; the collomatique module below
+  # points pyo3 at this interpreter with PYO3_PYTHON.
+  #
+  # --with-ensurepip=install makes `make install` unpack the pip CPython
+  # bundles, offline and with no pin of its own, exactly as the Windows build
+  # does. That pip installs XlsxWriter just below, and is what a user reaches
+  # for to install a module of their own.
+  #
+  # No --enable-optimizations: PGO roughly doubles a build that every run of
+  # build.sh pays for, and this interpreter runs teacher scripts.
+  - name: cpython
+    buildsystem: autotools
+    config-opts:
+      - --enable-shared
+      - --with-ensurepip=install
+    sources:
+      - type: archive
+        url: https://www.python.org/ftp/python/3.12.13/Python-3.12.13.tar.xz
+        sha256: c08bc65a81971c1dd5783182826503369466c7e67374d1646519adf05207b684
+
   # XlsxWriter, for user scripts that write spreadsheets. Pure Python, so the
-  # wheel is installed as it is.
+  # wheel is installed as it is -- with the interpreter shipped above and its
+  # own pip, so that it lands in that interpreter's site-packages. The line is
+  # also the build's check that ensurepip ran: it fails loudly if pip is not
+  # there.
   - name: python3-xlsxwriter
     buildsystem: simple
     build-commands:
-      - pip3 install --no-index --no-deps --prefix=${FLATPAK_DEST} xlsxwriter-3.2.9-py3-none-any.whl
+      - /app/bin/python3 -m pip install --no-index --no-deps --prefix=${FLATPAK_DEST} xlsxwriter-3.2.9-py3-none-any.whl
     sources:
       - type: file
         url: https://files.pythonhosted.org/packages/3a/0c/3662f4a66880196a590b202f0db82d919dd2f89e99a27fadef91c4a33d41/xlsxwriter-3.2.9-py3-none-any.whl
@@ -128,10 +218,18 @@ modules:
         # that nothing else will be fetched: the build sandbox has no network.
         CARGO_HOME: /run/build/collomatique/cargo
         CARGO_NET_OFFLINE: 'true'
+        # The interpreter pyo3 links against, which is the one shipped above
+        # and not the runtime's. Left to itself pyo3 takes python3 from PATH,
+        # and that is the SDK's 3.13. Same rule as PYO3_PYTHON in
+        # pkgs/windows/build.ps1: the Python linked at build time has to be the
+        # Python in the bundle.
+        PYO3_PYTHON: /app/bin/python3
     build-commands:
       - cargo --offline fetch --manifest-path Cargo.toml
       - cargo build --offline --release -p collomatique-gtk4
       - install -Dm755 target/release/collomatique-gtk4 ${FLATPAK_DEST}/bin/collomatique-gtk4
+      # Installing a Python module of one's own, see finish-args above.
+      - install -Dm755 pkgs/flatpak/collomatique-pip ${FLATPAK_DEST}/bin/collomatique-pip
       - install -Dm644 pkgs/flatpak/${FLATPAK_ID}.desktop ${FLATPAK_DEST}/share/applications/${FLATPAK_ID}.desktop
       - install -Dm644 pkgs/flatpak/${FLATPAK_ID}.metainfo.xml ${FLATPAK_DEST}/share/metainfo/${FLATPAK_ID}.metainfo.xml
       # Registers *.collomatique with the desktop. The %f in the desktop file
