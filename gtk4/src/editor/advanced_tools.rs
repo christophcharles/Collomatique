@@ -175,9 +175,72 @@ impl IlpProblemInfo {
     }
 }
 
+/// Whether this process runs inside a Flatpak sandbox
+///
+/// `/.flatpak-info` is placed in the sandbox's own mount namespace, so a
+/// process outside it does not see the file. The `FLATPAK_ID` variable says the
+/// same thing but is inherited by children, including those that have left the
+/// sandbox, so the file is the sounder test. GTK itself asks this way.
+///
+/// Linux rather than unix: Flatpak exists nowhere else, and a macOS build
+/// asking this question is a mistake worth a compiler error rather than a
+/// `false`.
+#[cfg(target_os = "linux")]
+fn in_flatpak() -> bool {
+    std::path::Path::new("/.flatpak-info").exists()
+}
+
+/// Whether the Python library came with Collomatique
+///
+/// It did on Windows, where it is installed beside the executable, and in the
+/// flatpak, where it is in `/app`. On any other Linux it is the machine's own,
+/// shared with everything else installed there -- which is what makes
+/// installing a module a different question.
+///
+/// There is deliberately no answer for a platform we do not package. A third
+/// one has to say which of the two situations it is in; guessing here would put
+/// a wrong sentence on screen instead of stopping the build.
+#[cfg(windows)]
+fn python_is_bundled() -> bool {
+    true
+}
+
+#[cfg(target_os = "linux")]
+fn python_is_bundled() -> bool {
+    in_flatpak()
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+fn python_is_bundled() -> bool {
+    compile_error!(
+        "this platform has to say where its Python comes from: shipped with \
+         Collomatique, or the machine's own"
+    )
+}
+
+/// What the "Interpréteur Python" section says.
+///
+/// Read once, in [Component::init]: neither answer can change while the
+/// application runs.
+struct PythonInfo {
+    /// `3.12.13`, from the library this binary is linked against.
+    version: String,
+    bundled: bool,
+}
+
+impl PythonInfo {
+    fn read() -> Self {
+        PythonInfo {
+            version: collomatique_python_runner::version(),
+            bundled: python_is_bundled(),
+        }
+    }
+}
+
 pub struct AdvancedTools {
     stats: Stats,
     ilp_info: Option<IlpProblemInfo>,
+    python: PythonInfo,
 }
 
 #[derive(Debug)]
@@ -268,6 +331,17 @@ impl AdvancedTools {
 
         lines.join("\n")
     }
+
+    /// The one line under the "Interpréteur Python" title.
+    fn generate_python_text(&self) -> String {
+        let origin = if self.python.bundled {
+            "fourni avec Collomatique"
+        } else {
+            "installé sur le système"
+        };
+
+        format!("<b>Python :</b> {} ({})", self.python.version, origin)
+    }
 }
 
 #[relm4::component(pub)]
@@ -284,11 +358,12 @@ impl Component for AdvancedTools {
             set_vexpand: true,
             gtk::Box {
                 set_margin_top: 30,
-                set_orientation: gtk::Orientation::Vertical,
+                set_orientation: gtk::Orientation::Horizontal,
                 set_hexpand: true,
-                set_spacing: 15,
+                set_spacing: 0,
                 gtk::Box {
                     set_hexpand: true,
+                    set_valign: gtk::Align::Start,
                     set_spacing: 10,
                     set_orientation: gtk::Orientation::Vertical,
                     gtk::Label {
@@ -317,32 +392,22 @@ impl Component for AdvancedTools {
                         set_visible: model.stats.needs_compaction,
                     },
                 },
+                // The two columns are what the horizontal separator used to be:
+                // a line between the figures of the document and what can be
+                // done to it.
+                gtk::Separator {
+                    set_orientation: gtk::Orientation::Vertical,
+                },
                 gtk::Box {
                     set_hexpand: true,
+                    set_valign: gtk::Align::Start,
                     set_spacing: 10,
-                    set_margin_top: 30,
                     set_orientation: gtk::Orientation::Vertical,
-                    gtk::Separator {
-                        set_orientation: gtk::Orientation::Horizontal,
-                    },
                     gtk::Label {
                         set_label: "<b><i><big>Outils</big></i></b>",
                         set_use_markup: true,
                         set_margin_all: 5,
                         set_margin_bottom: 10,
-                    },
-                    gtk::Button {
-                        add_css_class: "frame",
-                        add_css_class: "warning",
-                        set_hexpand: true,
-                        set_margin_start: 10,
-                        set_margin_end: 10,
-                        set_size_request: (-1, 40),
-                        adw::ButtonContent {
-                            set_icon_name: "text-x-script",
-                            set_label: "Exécuter un script Python",
-                        },
-                        connect_clicked => AdvancedToolsInput::RunPythonScriptClicked,
                     },
                     gtk::Button {
                         add_css_class: "frame",
@@ -372,6 +437,55 @@ impl Component for AdvancedTools {
                         },
                         connect_clicked => AdvancedToolsInput::CompactIdsClicked,
                     },
+                    gtk::Separator {
+                        set_orientation: gtk::Orientation::Horizontal,
+                        set_margin_top: 30,
+                    },
+                    gtk::Label {
+                        set_label: "<b><i><big>Interpréteur Python</big></i></b>",
+                        set_use_markup: true,
+                        set_margin_all: 5,
+                        set_margin_bottom: 10,
+                    },
+                    // No #[watch]: both halves of this line are read once, at
+                    // startup, and neither can change while the program runs.
+                    gtk::Label {
+                        set_halign: gtk::Align::Start,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_margin_bottom: 5,
+                        set_use_markup: true,
+                        set_label: &model.generate_python_text(),
+                    },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
+                        adw::ButtonContent {
+                            set_icon_name: "text-x-script",
+                            set_label: "Exécuter un script Python",
+                        },
+                        connect_clicked => AdvancedToolsInput::RunPythonScriptClicked,
+                    },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
+                        // Insensitive until there is something behind it:
+                        // installing a module is a different operation on each
+                        // platform, and none of them is written yet.
+                        set_sensitive: false,
+                        adw::ButtonContent {
+                            set_icon_name: "system-software-install-symbolic",
+                            set_label: "Installer un paquet",
+                        },
+                    },
                 },
             },
         }
@@ -385,6 +499,7 @@ impl Component for AdvancedTools {
         let model = AdvancedTools {
             stats: Stats::default(),
             ilp_info: None,
+            python: PythonInfo::read(),
         };
         let widgets = view_output!();
 

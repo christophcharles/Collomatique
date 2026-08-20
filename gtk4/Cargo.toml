@@ -22,6 +22,9 @@ collomatique-time = { path = "../time" }
 collomatique-ilp = { path = "../ilp" }
 collomatique-ilp-modeler = { path = "../ilp-modeler" }
 collomatique-ops = { path = "../ops" }
+# Only for the Python version shown in the advanced tools panel. The library is
+# linked into this binary either way, through rpc-engine.
+collomatique-python-runner = { path = "../python-runner" }
 collomatique-rpc = { path = "../rpc" }
 collomatique-rpc-engine = { path = "../rpc-engine" }
 collomatique-settings = { path = "../settings" }
