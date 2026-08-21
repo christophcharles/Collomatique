@@ -26,6 +26,17 @@ pub enum SubjectsInput {
     PeriodStatusUpdated(collomatique_state_colloscopes::SubjectId, usize, bool),
 
     SubjectParamsSelected(collomatique_state_colloscopes::SubjectParameters),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum SubjectsOutput {
+    UpdateOp(SubjectsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -48,7 +59,7 @@ pub struct Subjects {
 #[relm4::component(pub)]
 impl Component for Subjects {
     type Input = SubjectsInput;
-    type Output = SubjectsUpdateOp;
+    type Output = SubjectsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -96,6 +107,7 @@ impl Component for Subjects {
                 subject_params::DialogOutput::Accepted(params) => {
                     SubjectsInput::SubjectParamsSelected(params)
                 }
+                subject_params::DialogOutput::PresentParent => SubjectsInput::PresentParent,
             });
 
         let subjects_list = FactoryVecDeque::builder()
@@ -189,38 +201,55 @@ impl Component for Subjects {
                     .unwrap();
             }
             SubjectsInput::DeleteSubjectClicked(id) => {
-                sender.output(SubjectsUpdateOp::DeleteSubject(id)).unwrap();
+                sender
+                    .output(SubjectsOutput::UpdateOp(SubjectsUpdateOp::DeleteSubject(
+                        id,
+                    )))
+                    .unwrap();
             }
             SubjectsInput::MoveUpSubjectClicked(id) => {
-                sender.output(SubjectsUpdateOp::MoveSubjectUp(id)).unwrap();
+                sender
+                    .output(SubjectsOutput::UpdateOp(SubjectsUpdateOp::MoveSubjectUp(
+                        id,
+                    )))
+                    .unwrap();
             }
             SubjectsInput::MoveDownSubjectClicked(id) => {
                 sender
-                    .output(SubjectsUpdateOp::MoveSubjectDown(id))
+                    .output(SubjectsOutput::UpdateOp(SubjectsUpdateOp::MoveSubjectDown(
+                        id,
+                    )))
                     .unwrap();
             }
             SubjectsInput::PeriodStatusUpdated(id, period_num, status) => {
                 sender
-                    .output(SubjectsUpdateOp::UpdatePeriodStatus(
-                        id,
-                        self.periods
-                            .period_id_at(period_num)
-                            .expect("valid period index"),
-                        status,
+                    .output(SubjectsOutput::UpdateOp(
+                        SubjectsUpdateOp::UpdatePeriodStatus(
+                            id,
+                            self.periods
+                                .period_id_at(period_num)
+                                .expect("valid period index"),
+                            status,
+                        ),
                     ))
                     .unwrap();
             }
             SubjectsInput::SubjectParamsSelected(params) => {
                 sender
-                    .output(match self.subject_params_selection_reason {
-                        SubjectParamsSelectionReason::New => {
-                            SubjectsUpdateOp::AddNewSubject(params)
-                        }
-                        SubjectParamsSelectionReason::Edit(id) => {
-                            SubjectsUpdateOp::UpdateSubject(id, params)
-                        }
-                    })
+                    .output(SubjectsOutput::UpdateOp(
+                        match self.subject_params_selection_reason {
+                            SubjectParamsSelectionReason::New => {
+                                SubjectsUpdateOp::AddNewSubject(params)
+                            }
+                            SubjectParamsSelectionReason::Edit(id) => {
+                                SubjectsUpdateOp::UpdateSubject(id, params)
+                            }
+                        },
+                    ))
                     .unwrap();
+            }
+            SubjectsInput::PresentParent => {
+                sender.output(SubjectsOutput::PresentParent).unwrap();
             }
         }
     }

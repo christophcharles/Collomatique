@@ -36,6 +36,7 @@ pub struct DialogSettings {
 
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
+    move_front: bool,
     is_running: bool,
     // True while the (slow, off-thread) `StrategySubprocess::spawn` is in flight; the view shows
     // a dedicated "Initialisation..." screen and hides the normal solve content meanwhile.
@@ -83,11 +84,17 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     ToggleDebug(bool),
     ReportError(String),
     SpawnError(String),
+    /// One of this window's own dialogs just closed: bring this window back to
+    /// the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput<B: UsableData, E: UsableData> {
     NewConfig(ConfigData<InternalVar<B, E>>),
+    /// This window just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 /// Outputs of the dialog's background commands.
@@ -131,7 +138,7 @@ where
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (700, 400),
             set_resizable: true,
@@ -470,13 +477,16 @@ where
         let error_dialog = error_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                error_dialog::DialogOutput::PresentParent => DialogInput::Present,
+            });
 
         let warning_running = warning_running::Dialog::builder()
             .transient_for(&root)
             .launch(settings.cancel_warning)
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
+                warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let warning_validate = warning_running::Dialog::builder()
@@ -486,6 +496,7 @@ where
             )
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Accept,
+                warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let strategy_frames = FactoryVecDeque::builder()
@@ -513,6 +524,7 @@ where
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             is_running: false,
             initializing: false,
             end_with_error: false,
@@ -547,9 +559,11 @@ where
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.move_front = false;
         match msg {
             DialogInput::Run(strategy, model, payload) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.is_running = true;
                 self.initializing = true;
                 self.end_with_error = false;
@@ -679,7 +693,10 @@ where
                 }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 self.is_running = false;
                 self.run_end = Some(Instant::now());
                 if let Some(subprocess) = self.subprocess.take() {
@@ -781,7 +798,10 @@ where
                     .unwrap();
             }
             DialogInput::Accept => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 self.is_running = false;
                 if let Some(subprocess) = self.subprocess.take() {
                     subprocess.kill();
@@ -792,6 +812,9 @@ where
                         .unwrap();
                 }
             }
+            DialogInput::Present => {
+                self.move_front = true;
+            }
         }
     }
 
@@ -801,6 +824,7 @@ where
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        self.move_front = false;
         match msg {
             DialogCommandOutput::Tick(epoch) => {
                 // Drop stale ticks from a previous run and let the loop die once the solve has
@@ -830,6 +854,12 @@ where
                     Err(_e) => {} // Ignore message if the dialog was hidden during init
                 }
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

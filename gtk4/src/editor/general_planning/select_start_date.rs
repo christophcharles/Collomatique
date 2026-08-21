@@ -7,6 +7,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     start_date: collomatique_time::WeekStart,
     current_selected_date: chrono::NaiveDate,
     update_date: bool,
@@ -23,6 +24,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_time::WeekStart),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -66,7 +70,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: false,
             #[watch]
@@ -144,6 +148,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             start_date: collomatique_time::WeekStart::new(
                 chrono::NaiveDate::from_ymd_opt(2025, 09, 01).unwrap(),
             )
@@ -159,21 +164,29 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.update_date = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(date) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.start_date = date;
                 self.current_selected_date = *self.start_date.monday();
                 self.update_date = true;
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.start_date.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.start_date.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::Select(date) => {
                 self.start_date = collomatique_time::WeekStart::round_from(date);
@@ -183,6 +196,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         widgets.calendar.clear_marks();
         if self.start_date.monday().month0() == self.current_selected_date.month0() {
             widgets.calendar.mark_day(self.start_date.monday().day());

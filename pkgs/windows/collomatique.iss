@@ -194,12 +194,28 @@ Root: HKA; Subkey: "Software\Classes\{#ProgId}\shell\open\command"; \
 ; "nowait" so setup.exe finishes instead of waiting for the application to be
 ; closed; "skipifsilent" because a silent install has no last page to offer it on.
 ;
-; No "runasoriginaluser" flag, and it is wanted: "postinstall" already implies it.
-; After an all-users install, Setup is elevated -- possibly under a different
-; account entirely, if a password was typed -- and launching Collomatique from
-; there would put the first session's settings in that account's profile rather
-; than in the teacher's.
-Filename: "{app}\collomatique-gtk4.exe"; \
+; The launch goes through explorer.exe rather than running the executable
+; directly, so that it starts exactly as if the teacher had clicked the
+; Start-menu entry. The spawned explorer hands the request to the logged-in
+; user's existing shell, and the shell does the launching. That buys two
+; things at once:
+;
+;   the right account    -- after an all-users install, Setup is elevated,
+;                           possibly under a different account entirely. The
+;                           shell launches in the teacher's own session, so the
+;                           first session's settings land in the teacher's
+;                           profile. (postinstall's implied runasoriginaluser
+;                           used to be what guaranteed this; the shell route
+;                           keeps the guarantee.)
+;   the foreground       -- Windows only lets a window come to the front if its
+;                           process was started by the foreground process. The
+;                           de-elevated helper that runasoriginaluser launches
+;                           through is not it, so a direct launch left the main
+;                           window behind Explorer, its present() refused. A
+;                           launch by the shell holds the same foreground
+;                           rights as a Start-menu click.
+Filename: "{win}\explorer.exe"; \
+    Parameters: """{app}\collomatique-gtk4.exe"""; \
     Description: "{cm:LaunchProgram,Collomatique}"; \
     Flags: nowait postinstall skipifsilent
 

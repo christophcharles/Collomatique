@@ -6,6 +6,7 @@ use relm4::{adw, gtk};
 use std::num::NonZeroU32;
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     student_name: Option<String>,
 
@@ -47,6 +48,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::settings::Limits),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -67,7 +71,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -288,6 +292,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             student_name: None,
             has_max_interrogations_per_day: false,
@@ -308,21 +313,29 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(limits, student_name) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.student_name = student_name;
                 self.update_state_from_limits(limits);
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.build_limits()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.build_limits()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateHasMaxInterrogationsPerDay(value) => {
                 if self.has_max_interrogations_per_day == value {
@@ -396,6 +409,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

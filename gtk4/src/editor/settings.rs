@@ -22,6 +22,17 @@ pub enum SettingsInput {
     EditStudentLimits(collomatique_state_colloscopes::StudentId),
     DeleteStudentLimits(collomatique_state_colloscopes::StudentId),
     LimitsAccepted(collomatique_state_colloscopes::settings::Limits),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum SettingsOutput {
+    UpdateOp(SettingsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 pub struct Settings {
@@ -36,7 +47,7 @@ pub struct Settings {
 #[relm4::component(pub)]
 impl Component for Settings {
     type Input = SettingsInput;
-    type Output = SettingsUpdateOp;
+    type Output = SettingsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -143,6 +154,7 @@ impl Component for Settings {
                 limits_dialog::DialogOutput::Accepted(limits) => {
                     SettingsInput::LimitsAccepted(limits)
                 }
+                limits_dialog::DialogOutput::PresentParent => SettingsInput::PresentParent,
             });
 
         let model = Settings {
@@ -199,21 +211,30 @@ impl Component for Settings {
             }
             SettingsInput::DeleteStudentLimits(student_id) => {
                 sender
-                    .output(SettingsUpdateOp::RemoveStudentLimits(student_id))
+                    .output(SettingsOutput::UpdateOp(
+                        SettingsUpdateOp::RemoveStudentLimits(student_id),
+                    ))
                     .unwrap();
             }
             SettingsInput::LimitsAccepted(limits) => match self.edit_reason.take() {
                 Some(student_id) => {
                     sender
-                        .output(SettingsUpdateOp::UpdateStudentLimits(student_id, limits))
+                        .output(SettingsOutput::UpdateOp(
+                            SettingsUpdateOp::UpdateStudentLimits(student_id, limits),
+                        ))
                         .unwrap();
                 }
                 None => {
                     sender
-                        .output(SettingsUpdateOp::UpdateGlobalLimits(limits))
+                        .output(SettingsOutput::UpdateOp(
+                            SettingsUpdateOp::UpdateGlobalLimits(limits),
+                        ))
                         .unwrap();
                 }
             },
+            SettingsInput::PresentParent => {
+                sender.output(SettingsOutput::PresentParent).unwrap();
+            }
         }
     }
 }

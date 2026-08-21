@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     path: PathBuf,
     text: String,
 }
@@ -20,6 +21,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Run(PathBuf, String),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -31,7 +35,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (700, 700),
             set_resizable: true,
@@ -95,6 +99,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             path: PathBuf::new(),
             text: String::new(),
         };
@@ -105,21 +110,35 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(path, text) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.path = path;
                 self.text = text;
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Run => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Run(self.path.clone(), self.text.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Run(self.path.clone(), self.text.clone()))
+                        .unwrap();
+                }
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

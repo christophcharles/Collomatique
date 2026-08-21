@@ -63,12 +63,18 @@ pub enum ExportPanelInput {
     AutomaticConfigAccepted(export_config::PerStudentGroupsConfig),
     EditPerGroupListConfigClicked,
     PerGroupListConfigAccepted(export_config::PerGroupListConfig),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
 }
 
 #[derive(Debug)]
 pub enum ExportPanelOutput {
     UpdateExportConfig(collomatique_ops::ExportConfigUpdateOp),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -526,6 +532,9 @@ impl Component for ExportPanel {
                 colloscope_config_dialog::DialogOutput::Accepted(config) => {
                     ExportPanelInput::ColloscopeConfigAccepted(config)
                 }
+                colloscope_config_dialog::DialogOutput::PresentParent => {
+                    ExportPanelInput::PresentParent
+                }
             });
 
         let all_groups_config_dialog = per_student_groups_config_dialog::Dialog::builder()
@@ -534,6 +543,9 @@ impl Component for ExportPanel {
             .forward(sender.input_sender(), |msg| match msg {
                 per_student_groups_config_dialog::DialogOutput::Accepted(config) => {
                     ExportPanelInput::AllGroupsConfigAccepted(config)
+                }
+                per_student_groups_config_dialog::DialogOutput::PresentParent => {
+                    ExportPanelInput::PresentParent
                 }
             });
 
@@ -544,6 +556,9 @@ impl Component for ExportPanel {
                 per_student_groups_config_dialog::DialogOutput::Accepted(config) => {
                     ExportPanelInput::PrefilledConfigAccepted(config)
                 }
+                per_student_groups_config_dialog::DialogOutput::PresentParent => {
+                    ExportPanelInput::PresentParent
+                }
             });
 
         let automatic_config_dialog = per_student_groups_config_dialog::Dialog::builder()
@@ -552,6 +567,9 @@ impl Component for ExportPanel {
             .forward(sender.input_sender(), |msg| match msg {
                 per_student_groups_config_dialog::DialogOutput::Accepted(config) => {
                     ExportPanelInput::AutomaticConfigAccepted(config)
+                }
+                per_student_groups_config_dialog::DialogOutput::PresentParent => {
+                    ExportPanelInput::PresentParent
                 }
             });
 
@@ -562,6 +580,9 @@ impl Component for ExportPanel {
                 per_group_list_config_dialog::DialogOutput::Accepted(config) => {
                     ExportPanelInput::PerGroupListConfigAccepted(config)
                 }
+                per_group_list_config_dialog::DialogOutput::PresentParent => {
+                    ExportPanelInput::PresentParent
+                }
             });
 
         let global_config_dialog = global_config_dialog::Dialog::builder()
@@ -570,6 +591,9 @@ impl Component for ExportPanel {
             .forward(sender.input_sender(), |msg| match msg {
                 global_config_dialog::DialogOutput::Accepted(config) => {
                     ExportPanelInput::GlobalConfigAccepted(config)
+                }
+                global_config_dialog::DialogOutput::PresentParent => {
+                    ExportPanelInput::PresentParent
                 }
             });
 
@@ -605,7 +629,7 @@ impl Component for ExportPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match message {
             ExportPanelInput::Update(config, file_name, annotations) => {
                 self.export_config = config;
@@ -623,8 +647,9 @@ impl Component for ExportPanel {
                         format!("{}.xlsx", super::DEFAULT_FILE_STEM).into(),
                     ),
                 };
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_xlsx_dialog(default).await {
+                    match tools::open_save::save_xlsx_dialog(parent, default).await {
                         Some(path) => ExportPanelCommandOutput::FileChosen(path),
                         None => ExportPanelCommandOutput::FileNotChosen,
                     }
@@ -826,6 +851,9 @@ impl Component for ExportPanel {
                         collomatique_ops::ExportConfigUpdateOp::UpdatePerGroupListConfig(config),
                     ))
                     .unwrap();
+            }
+            ExportPanelInput::PresentParent => {
+                sender.output(ExportPanelOutput::PresentParent).unwrap();
             }
         }
     }

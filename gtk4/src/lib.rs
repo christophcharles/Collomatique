@@ -1,5 +1,6 @@
 use adw::prelude::AdwDialogExt;
-use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
+// `WidgetExtManual` is the one carrying `add_tick_callback`.
+use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt, WidgetExtManual};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
@@ -63,6 +64,11 @@ pub struct AppModel {
     state: GlobalState,
     next_warn_msg: Option<AppInput>,
     update_about: Option<()>,
+    present_window: Option<()>,
+    /// The development warning to show once the main window is mapped, if one
+    /// is due. Taken on the first `MainWindowMapped`, so a later re-map does
+    /// not re-open it.
+    development_warning_due: Option<collomatique_settings::Version>,
     main_window_sensitive: bool,
 }
 
@@ -80,6 +86,15 @@ impl AppModel {
 #[derive(Debug)]
 pub enum AppInput {
     Ignore,
+    /// Bring the main window to the front. Sent at startup, because merely
+    /// showing a window does not make Windows give it the foreground.
+    Present,
+    /// The main window has drawn a full frame. This is when the development
+    /// warning can open: Windows centers a transient window on its parent when
+    /// the window is shown, using the position GDK has recorded for the parent
+    /// -- and GDK records it while drawing, so before the first frame there is
+    /// nothing to center on.
+    MainWindowDrawn,
     AcknowledgeDevelopmentVersion(collomatique_settings::Version),
     WarnDirty,
     OkDirty,
@@ -194,6 +209,7 @@ impl Component for AppModel {
                 }
                 editor::EditorOutput::StartOpenSaveDialog => AppInput::StartOpenSaveDialog,
                 editor::EditorOutput::EndOpenSaveDialog => AppInput::EndOpenSaveDialog,
+                editor::EditorOutput::PresentParent => AppInput::Present,
             },
         );
 
@@ -222,18 +238,23 @@ impl Component for AppModel {
         let file_error = dialogs::file_error::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .forward(sender.input_sender(), |_| AppInput::Ignore);
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::file_error::DialogOutput::PresentParent => AppInput::Present,
+            });
 
         let file_caveats = dialogs::file_caveats::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .forward(sender.input_sender(), |_| AppInput::Ignore);
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::file_caveats::DialogOutput::PresentParent => AppInput::Present,
+            });
 
         let warn_dirty = dialogs::warning_changed::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 dialogs::warning_changed::DialogOutput::Accept => AppInput::OkDirty,
+                dialogs::warning_changed::DialogOutput::PresentParent => AppInput::Present,
             });
 
         let development_warning = dialogs::development_warning::Dialog::builder()
@@ -245,6 +266,7 @@ impl Component for AppModel {
                 dialogs::development_warning::DialogOutput::Acknowledged(Some(version)) => {
                     AppInput::AcknowledgeDevelopmentVersion(version)
                 }
+                dialogs::development_warning::DialogOutput::PresentParent => AppInput::Present,
             });
 
         let controllers = AppControllers {
@@ -261,13 +283,37 @@ impl Component for AppModel {
         // on its own the day the version becomes a plain release. Whether the
         // warning is due is not a question for the GTK layer: collomatique-settings
         // answers it, so another frontend would get the same answer.
+        //
+        // The dialog is not opened from here. Windows centers a transient
+        // window on its parent when the window is shown, and it centers on the
+        // position GDK has recorded for the parent. GDK writes that position
+        // while drawing a frame and nowhere else, so before the main window has
+        // drawn, the recorded position is zero and the dialog lands in the
+        // corner of the screen. Waiting for "map" was not enough either:
+        // mapping happens before any frame.
+        //
+        // So the version waits in the model, and a drawn frame opens the
+        // dialog. The second tick rather than the first: a tick callback runs
+        // in the frame clock's update phase, which is before the layout phase
+        // that writes the position, so one whole frame has to go by. Returning
+        // Break then removes the callback -- it costs two frames, not one per
+        // frame forever.
         let version = collomatique_settings::current_version();
-        if collomatique_settings::development_warning::is_due(&version) {
-            controllers
-                .development_warning
-                .sender()
-                .send(dialogs::development_warning::DialogInput::Show(version))
-                .unwrap();
+        let development_warning_due =
+            collomatique_settings::development_warning::is_due(&version).then_some(version);
+        {
+            let sender = sender.clone();
+            root.connect_map(move |window| {
+                let sender = sender.clone();
+                let first_tick = std::cell::Cell::new(true);
+                let _ = window.add_tick_callback(move |_, _| {
+                    if first_tick.replace(false) {
+                        return gtk::glib::ControlFlow::Continue;
+                    }
+                    sender.input(AppInput::MainWindowDrawn);
+                    gtk::glib::ControlFlow::Break
+                });
+            });
         }
 
         let state = GlobalState::WelcomeScreen;
@@ -356,10 +402,13 @@ impl Component for AppModel {
             next_warn_msg: None,
             actions,
             update_about: None,
+            present_window: None,
+            development_warning_due,
             main_window_sensitive: true,
         };
         let widgets = view_output!();
 
+        sender.input(AppInput::Present);
         sender.input(if params.new {
             AppInput::NewColloscope(params.file_name.clone())
         } else {
@@ -372,10 +421,22 @@ impl Component for AppModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
+            }
+            AppInput::Present => {
+                self.present_window = Some(());
+            }
+            AppInput::MainWindowDrawn => {
+                if let Some(version) = self.development_warning_due.take() {
+                    self.controllers
+                        .development_warning
+                        .sender()
+                        .send(dialogs::development_warning::DialogInput::Show(version))
+                        .unwrap();
+                }
             }
             AppInput::AcknowledgeDevelopmentVersion(version) => {
                 collomatique_settings::development_warning::acknowledge(&version);
@@ -428,8 +489,9 @@ impl Component for AppModel {
             }
             AppInput::OpenExistingColloscopeWithDialog => {
                 sender.input(AppInput::StartOpenSaveDialog);
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::open_dialog().await {
+                    match tools::open_save::open_dialog(parent).await {
                         Some(path) => AppCommandOutput::OpenFileSelected(path),
                         None => AppCommandOutput::OpenFileNotSelected,
                     }
@@ -610,6 +672,7 @@ impl Component for AppModel {
     ) {
         self.update(message, sender.clone(), root);
         self.update_about_dialog(widgets);
+        self.update_present_window(widgets);
         self.update_view(widgets, sender);
     }
 
@@ -635,6 +698,12 @@ impl AppModel {
     fn update_about_dialog(&mut self, widgets: &mut <Self as Component>::Widgets) {
         if self.update_about.take().is_some() {
             widgets.about_dialog.present(Some(&widgets.root_window));
+        }
+    }
+
+    fn update_present_window(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if self.present_window.take().is_some() {
+            widgets.root_window.present();
         }
     }
 }

@@ -22,6 +22,7 @@ use crate::editor::run_solver::conductor_config;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// The parameters the request is assembled against, set on `Show` and echoed back on
     /// `Accepted` so the rest of the chain builds its model from exactly these.
     params: Parameters,
@@ -68,6 +69,9 @@ pub enum DialogInput {
     SetSubjectRebuild(usize, usize, bool),
     /// (prefilled-list index, new value)
     SetKeptList(usize, bool),
+    /// One of this window's own dialogs just closed: bring this window back to
+    /// the front.
+    Present,
 }
 
 #[derive(Debug)]
@@ -79,6 +83,9 @@ pub enum DialogOutput {
         ObjectiveWeights,
         Parameters,
     ),
+    /// This window just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -329,7 +336,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -567,6 +574,7 @@ impl SimpleComponent for Dialog {
                     DialogInput::UpdateStrategy(strategy)
                 }
                 conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+                conductor_config::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let advanced_dialog = advanced_dialog::Dialog::builder()
@@ -577,6 +585,7 @@ impl SimpleComponent for Dialog {
                     DialogInput::UpdateAdvancedParams(weights, canonical_range)
                 }
                 advanced_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+                advanced_dialog::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let periods_list = FactoryVecDeque::builder()
@@ -596,6 +605,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
@@ -617,9 +627,11 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(strategy, weights, canonical_range, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.params = params;
                 self.strategy = strategy;
                 self.weights = weights;
@@ -669,20 +681,35 @@ impl SimpleComponent for Dialog {
                 self.refresh_kept_lists_list();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(
-                        self.request_from_data(),
-                        self.strategy.clone(),
-                        self.weights,
-                        self.params.clone(),
-                    ))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(
+                            self.request_from_data(),
+                            self.strategy.clone(),
+                            self.weights,
+                            self.params.clone(),
+                        ))
+                        .unwrap();
+                }
             }
+            DialogInput::Present => {
+                self.move_front = true;
+            }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

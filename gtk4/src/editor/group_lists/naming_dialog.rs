@@ -26,6 +26,7 @@ use crate::widgets::debug_view::{DebugView, DebugViewInput};
 /// into a [`DebugView`]. "Valider" stays insensitive until the model is built.
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// Toggles the content between the naming rows and the build log.
     show_debug: bool,
     /// Flips the header indicator from spinner to "ok". Distinct from `model.is_some()`: with
@@ -71,6 +72,9 @@ pub enum DialogOutput {
         ConductorPayload<Var>,
     ),
     Cancelled,
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -161,7 +165,7 @@ impl Component for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -283,6 +287,7 @@ impl Component for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             show_debug: false,
             built: false,
             build_seq: 0,
@@ -302,9 +307,11 @@ impl Component for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(request, weights, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.show_debug = false;
                 self.built = false;
                 self.model = None;
@@ -360,8 +367,11 @@ impl Component for Dialog {
                 }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
                 // "Valider" is insensitive until the model exists, so a missing model here can
@@ -386,7 +396,10 @@ impl Component for Dialog {
                     },
                 };
 
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 sender
                     .output(DialogOutput::Accepted(plan, names, model, payload))
                     .unwrap();
@@ -411,6 +424,7 @@ impl Component for Dialog {
         _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        self.move_front = false;
         let DialogCommandOutput::Built(seq, model) = msg;
         // A stale result: the dialog was reopened (new sequence number) or cancelled (hidden)
         // while this build was running. Drop it.
@@ -419,5 +433,11 @@ impl Component for Dialog {
         }
         self.built = true;
         self.model = Some(model);
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
     }
 }

@@ -14,6 +14,7 @@ use collomatique_strategies::{
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
 
     worker_count: u32,
@@ -84,6 +85,9 @@ pub enum DialogInput {
 pub enum DialogOutput {
     Cancelled,
     Accepted(ConductorStrategy),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -95,7 +99,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -610,6 +614,7 @@ impl SimpleComponent for Dialog {
         let incremental_defaults = IncrementalConfig::default();
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             worker_count: strategy.worker_count.get(),
             enable_warm_start: strategy.warm_start_config.is_some(),
@@ -670,21 +675,29 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(strategy) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.update_state_from_strategy(strategy);
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.strategy.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.strategy.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateWorkerCount(value) => {
                 if self.worker_count == value {
@@ -830,6 +843,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

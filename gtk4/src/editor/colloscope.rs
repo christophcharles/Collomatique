@@ -71,6 +71,9 @@ pub enum ColloscopeInput {
     EraseGroupListsClicked,
 
     ShowBlamedConstraints,
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -88,6 +91,9 @@ pub enum ColloscopeOutput {
     UpdateOp(ColloscopeUpdateOp),
     NewColloscope(collomatique_state_colloscopes::colloscopes::Colloscope),
     UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 /// The ILP problem together with the parameters needed to rebuild a colloscope
@@ -534,6 +540,7 @@ impl Component for Colloscope {
                 group_list_dialog::DialogOutput::Accepted(collo_group_list) => {
                     ColloscopeInput::GroupListAccepted(collo_group_list)
                 }
+                group_list_dialog::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
         let colloscope_display = colloscope_display::Display::builder().launch(()).forward(
@@ -552,12 +559,15 @@ impl Component for Colloscope {
                 interrogation_dialog::DialogOutput::Accepted(interrogation) => {
                     ColloscopeInput::InterrogationAccepted(interrogation)
                 }
+                interrogation_dialog::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
         let blame_dialog = blame_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                blame_dialog::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
+            });
 
         let run_solver_dialog = SolverDialog::builder()
             .transient_for(&root)
@@ -568,6 +578,7 @@ impl Component for Colloscope {
             })
             .forward(sender.input_sender(), |msg| match msg {
                 run_solver::DialogOutput::NewConfig(config) => ColloscopeInput::SolveResult(config),
+                run_solver::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
         let config_dialog = config_dialog::Dialog::builder()
@@ -578,6 +589,7 @@ impl Component for Colloscope {
                     ColloscopeInput::ConductorConfigAccepted(config, strategy, params)
                 }
                 config_dialog::DialogOutput::Cancelled => ColloscopeInput::ConductorConfigCancelled,
+                config_dialog::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
         let loading_dialog = loading_dialog::Dialog::builder()
@@ -587,6 +599,7 @@ impl Component for Colloscope {
                 loading_dialog::DialogOutput::ModelReady(model, payload) => {
                     ColloscopeInput::ModelBuilt(model, payload)
                 }
+                loading_dialog::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
         let model = Colloscope {
@@ -842,6 +855,9 @@ impl Component for Colloscope {
                     .sender()
                     .send(blame_dialog::DialogInput::Show)
                     .unwrap();
+            }
+            ColloscopeInput::PresentParent => {
+                sender.output(ColloscopeOutput::PresentParent).unwrap();
             }
         }
     }

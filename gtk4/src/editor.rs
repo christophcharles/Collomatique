@@ -107,6 +107,9 @@ pub enum EditorInput {
     ExportMpsClicked,
     ExportMpsAs(PathBuf),
     UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
+    /// A dialog somewhere below this panel just closed. The panel hosts no
+    /// window of its own, so it passes the request up to the application.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -117,6 +120,9 @@ pub enum EditorOutput {
     ExportError(PathBuf, String),
     StartOpenSaveDialog,
     EndOpenSaveDialog,
+    /// A dialog below the editor just closed: the main window should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -789,27 +795,44 @@ impl Component for EditorPanel {
     ) -> ComponentParts<Self> {
         let general_planning = general_planning::GeneralPlanning::builder()
             .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::GeneralPlanning(op))
+            .forward(sender.input_sender(), |msg| match msg {
+                general_planning::GeneralPlanningOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::GeneralPlanning(op))
+                }
+                general_planning::GeneralPlanningOutput::PresentParent => {
+                    EditorInput::PresentParent
+                }
             });
 
-        let subjects = subjects::Subjects::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Subjects(op))
-            });
+        let subjects = subjects::Subjects::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                subjects::SubjectsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Subjects(op))
+                }
+                subjects::SubjectsOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
-        let teachers = teachers::Teachers::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Teachers(op))
-            });
+        let teachers = teachers::Teachers::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                teachers::TeachersOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Teachers(op))
+                }
+                teachers::TeachersOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
-        let students = students::Students::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Students(op))
-            });
+        let students = students::Students::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                students::StudentsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Students(op))
+                }
+                students::StudentsOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
         let assignments = assignments::Assignments::builder()
             .launch(())
@@ -817,53 +840,84 @@ impl Component for EditorPanel {
                 EditorInput::UpdateOp(collomatique_ops::UpdateOp::Assignments(op))
             });
 
-        let week_patterns = week_patterns::WeekPatterns::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::WeekPatterns(op))
-            });
+        let week_patterns = week_patterns::WeekPatterns::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                week_patterns::WeekPatternsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::WeekPatterns(op))
+                }
+                week_patterns::WeekPatternsOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
         let slots = slots::Slots::builder()
             .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Slots(op))
+            .forward(sender.input_sender(), |msg| match msg {
+                slots::SlotsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Slots(op))
+                }
+                slots::SlotsOutput::PresentParent => EditorInput::PresentParent,
             });
 
-        let slot_pairings = slot_pairings::SlotPairings::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::SlotPairings(op))
-            });
+        let slot_pairings = slot_pairings::SlotPairings::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                slot_pairings::SlotPairingsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::SlotPairings(op))
+                }
+                slot_pairings::SlotPairingsOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
-        let incompats = incompats::Incompats::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Incompatibilities(op))
-            });
+        let incompats =
+            incompats::Incompats::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    incompats::IncompatsOutput::UpdateOp(op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::Incompatibilities(op))
+                    }
+                    incompats::IncompatsOutput::PresentParent => EditorInput::PresentParent,
+                });
 
-        let group_lists = group_lists::GroupLists::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::GroupLists(op))
-            });
+        let group_lists =
+            group_lists::GroupLists::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    group_lists::GroupListsOutput::UpdateOp(op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::GroupLists(op))
+                    }
+                    group_lists::GroupListsOutput::PresentParent => EditorInput::PresentParent,
+                });
 
-        let pairings = pairings::Pairings::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Pairings(op))
-            });
+        let pairings = pairings::Pairings::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                pairings::PairingsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Pairings(op))
+                }
+                pairings::PairingsOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
-        let settings = settings::Settings::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
-            });
+        let settings = settings::Settings::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                settings::SettingsOutput::UpdateOp(op) => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Settings(op))
+                }
+                settings::SettingsOutput::PresentParent => EditorInput::PresentParent,
+            },
+        );
 
-        let balancing = balancing::Balancing::builder()
-            .launch(())
-            .forward(sender.input_sender(), |op| {
-                EditorInput::UpdateOp(collomatique_ops::UpdateOp::Balancing(op))
-            });
+        let balancing =
+            balancing::Balancing::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    balancing::BalancingOutput::UpdateOp(op) => {
+                        EditorInput::UpdateOp(collomatique_ops::UpdateOp::Balancing(op))
+                    }
+                    balancing::BalancingOutput::PresentParent => EditorInput::PresentParent,
+                });
 
         let colloscope =
             colloscope::Colloscope::builder()
@@ -882,6 +936,7 @@ impl Component for EditorPanel {
                     ColloscopeOutput::UpdateIlpProblem(problem) => {
                         EditorInput::UpdateIlpProblem(problem)
                     }
+                    ColloscopeOutput::PresentParent => EditorInput::PresentParent,
                 });
 
         let export_panel =
@@ -894,6 +949,7 @@ impl Component for EditorPanel {
                     export_panel::ExportPanelOutput::UpdateExportConfig(update_op) => {
                         EditorInput::UpdateOp(collomatique_ops::UpdateOp::ExportConfig(update_op))
                     }
+                    export_panel::ExportPanelOutput::PresentParent => EditorInput::PresentParent,
                 });
 
         let advanced_tools = advanced_tools::AdvancedTools::builder().launch(()).forward(
@@ -908,6 +964,7 @@ impl Component for EditorPanel {
                 advanced_tools::AdvancedToolsOutput::CompactIdsClicked => {
                     EditorInput::CompactIdsClicked
                 }
+                advanced_tools::AdvancedToolsOutput::PresentParent => EditorInput::PresentParent,
             },
         );
 
@@ -918,6 +975,7 @@ impl Component for EditorPanel {
                 check_script::DialogOutput::Run(path, script) => {
                     EditorInput::RunScript(path, script)
                 }
+                check_script::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
         let run_python_script_dialog = run_python_script::Dialog::builder()
@@ -927,12 +985,15 @@ impl Component for EditorPanel {
                 run_python_script::DialogOutput::NewData(new_data) => {
                     EditorInput::NewStateFromSecondInstance(new_data)
                 }
+                run_python_script::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
         let error_dialog = error_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                error_dialog::DialogOutput::PresentParent => EditorInput::PresentParent,
+            });
 
         let warning_op_dialog = warning_op::Dialog::builder()
             .transient_for(&root)
@@ -940,6 +1001,7 @@ impl Component for EditorPanel {
             .forward(sender.input_sender(), |msg| match msg {
                 warning_op::DialogOutput::Continue => EditorInput::ContinueOp,
                 warning_op::DialogOutput::Cancel => EditorInput::CancelOp,
+                warning_op::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
         let warning_save_ids_dialog = warning_save_ids::Dialog::builder()
@@ -948,6 +1010,7 @@ impl Component for EditorPanel {
             .forward(sender.input_sender(), |msg| match msg {
                 warning_save_ids::DialogOutput::Compact => EditorInput::CompactAndSave,
                 warning_save_ids::DialogOutput::Cancel => EditorInput::CancelSaveCompaction,
+                warning_save_ids::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
         let warning_compact_ids_dialog = warning_compact_ids::Dialog::builder()
@@ -955,6 +1018,7 @@ impl Component for EditorPanel {
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 warning_compact_ids::DialogOutput::Compact => EditorInput::CompactIds,
+                warning_compact_ids::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
         let pages_names = PanelNumbers::iter().map(|x| x.panel_name()).collect();
@@ -1024,7 +1088,7 @@ impl Component for EditorPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         self.show_particular_panel = None;
         match message {
             EditorInput::Ignore => {}
@@ -1056,13 +1120,17 @@ impl Component for EditorPanel {
             EditorInput::SaveAsClicked => {
                 let default_path = self.file_name.path().cloned();
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_collomatique_dialog(match default_path {
-                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path),
-                        None => tools::open_save::DefaultSaveFile::SuggestedName(
-                            format!("{DEFAULT_FILE_STEM}.collomatique").into(),
-                        ),
-                    })
+                    match tools::open_save::save_collomatique_dialog(
+                        parent,
+                        match default_path {
+                            Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path),
+                            None => tools::open_save::DefaultSaveFile::SuggestedName(
+                                format!("{DEFAULT_FILE_STEM}.collomatique").into(),
+                            ),
+                        },
+                    )
                     .await
                     {
                         Some(path) => EditorCommandOutput::FileChosen(path),
@@ -1244,8 +1312,9 @@ impl Component for EditorPanel {
             }
             EditorInput::RunScriptClicked => {
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::open_python_dialog().await {
+                    match tools::open_save::open_python_dialog(parent).await {
                         Some(path) => EditorCommandOutput::ScriptChosen(path),
                         None => EditorCommandOutput::ScriptNotChosen,
                     }
@@ -1296,8 +1365,9 @@ impl Component for EditorPanel {
                         format!("{DEFAULT_FILE_STEM}.mps").into(),
                     ),
                 };
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_mps_dialog(default).await {
+                    match tools::open_save::save_mps_dialog(parent, default).await {
                         Some(path) => EditorCommandOutput::MpsFileChosen(path),
                         None => EditorCommandOutput::MpsFileNotChosen,
                     }
@@ -1329,6 +1399,9 @@ impl Component for EditorPanel {
                     .emit(advanced_tools::AdvancedToolsInput::UpdateIlpProblemInfo(
                         info,
                     ));
+            }
+            EditorInput::PresentParent => {
+                sender.output(EditorOutput::PresentParent).unwrap();
             }
         }
     }

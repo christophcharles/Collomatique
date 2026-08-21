@@ -5,6 +5,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     version: Version,
     silence: bool,
 }
@@ -22,6 +23,9 @@ pub enum DialogOutput {
     Quit,
     /// `Some(version)` when the user asked not to be warned about it again
     Acknowledged(Option<Version>),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -139,6 +143,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             version: Version::new(0, 0, 0),
             silence: false,
         };
@@ -149,24 +154,37 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(version) => {
                 self.version = version;
                 self.silence = false;
                 self.hidden = false;
+                self.move_front = true;
             }
             DialogInput::SetSilence(silence) => self.silence = silence,
             DialogInput::Acknowledge => {
-                self.hidden = true;
-                let silenced = self.silence.then(|| self.version.clone());
-                sender.output(DialogOutput::Acknowledged(silenced)).unwrap()
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    let silenced = self.silence.then(|| self.version.clone());
+                    sender.output(DialogOutput::Acknowledged(silenced)).unwrap()
+                }
             }
             // Quitting records nothing, even with the box ticked: the user
             // never got past the warning.
             DialogInput::Quit => {
-                self.hidden = true;
-                sender.output(DialogOutput::Quit).unwrap()
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::Quit).unwrap()
+                }
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.dialog.present();
         }
     }
 }

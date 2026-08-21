@@ -22,6 +22,17 @@ pub enum IncompatsInput {
     DeleteIncompat(collomatique_state_colloscopes::IncompatId),
     EditIncompat(collomatique_state_colloscopes::IncompatId),
     AddIncompat(collomatique_state_colloscopes::SubjectId),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum IncompatsOutput {
+    UpdateOp(IncompatibilitiesUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -43,7 +54,7 @@ pub struct Incompats {
 #[relm4::component(pub)]
 impl Component for Incompats {
     type Input = IncompatsInput;
-    type Output = IncompatibilitiesUpdateOp;
+    type Output = IncompatsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -105,6 +116,7 @@ impl Component for Incompats {
                 incompat_params::DialogOutput::Accepted(params) => {
                     IncompatsInput::IncompatParamsSelected(params)
                 }
+                incompat_params::DialogOutput::PresentParent => IncompatsInput::PresentParent,
             });
 
         let model = Incompats {
@@ -164,7 +176,9 @@ impl Component for Incompats {
 
             IncompatsInput::DeleteIncompat(incompat_id) => {
                 sender
-                    .output(IncompatibilitiesUpdateOp::DeleteIncompat(incompat_id))
+                    .output(IncompatsOutput::UpdateOp(
+                        IncompatibilitiesUpdateOp::DeleteIncompat(incompat_id),
+                    ))
                     .unwrap();
             }
             IncompatsInput::EditIncompat(incompat_id) => {
@@ -207,18 +221,22 @@ impl Component for Incompats {
                 match self.incompat_params_selection_reason {
                     IncompatParamsSelectionReason::Edit(incompat_id) => {
                         sender
-                            .output(IncompatibilitiesUpdateOp::UpdateIncompat(
-                                incompat_id,
-                                params,
+                            .output(IncompatsOutput::UpdateOp(
+                                IncompatibilitiesUpdateOp::UpdateIncompat(incompat_id, params),
                             ))
                             .unwrap();
                     }
                     IncompatParamsSelectionReason::New => {
                         sender
-                            .output(IncompatibilitiesUpdateOp::AddNewIncompat(params))
+                            .output(IncompatsOutput::UpdateOp(
+                                IncompatibilitiesUpdateOp::AddNewIncompat(params),
+                            ))
                             .unwrap();
                     }
                 }
+            }
+            IncompatsInput::PresentParent => {
+                sender.output(IncompatsOutput::PresentParent).unwrap();
             }
         }
     }

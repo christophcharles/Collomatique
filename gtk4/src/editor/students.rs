@@ -20,6 +20,17 @@ pub enum StudentsInput {
     AddStudentClicked,
     FilterChanged(Option<usize>),
     StudentEditResult(collomatique_state_colloscopes::students::Student),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum StudentsOutput {
+    UpdateOp(StudentsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -75,7 +86,7 @@ impl Students {
 #[relm4::component(pub)]
 impl Component for Students {
     type Input = StudentsInput;
-    type Output = StudentsUpdateOp;
+    type Output = StudentsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -158,6 +169,7 @@ impl Component for Students {
                 dialog::DialogOutput::Accepted(student_data) => {
                     StudentsInput::StudentEditResult(student_data)
                 }
+                dialog::DialogOutput::PresentParent => StudentsInput::PresentParent,
             });
         let model = Students {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -187,7 +199,11 @@ impl Component for Students {
                 self.update_current_list();
             }
             StudentsInput::DeleteStudentClicked(id) => {
-                sender.output(StudentsUpdateOp::DeleteStudent(id)).unwrap();
+                sender
+                    .output(StudentsOutput::UpdateOp(StudentsUpdateOp::DeleteStudent(
+                        id,
+                    )))
+                    .unwrap();
             }
             StudentsInput::EditStudentClicked(id) => {
                 self.student_modification_reason = StudentModificationReason::Edit(id);
@@ -235,15 +251,20 @@ impl Component for Students {
             }
             StudentsInput::StudentEditResult(student_data) => {
                 sender
-                    .output(match self.student_modification_reason {
-                        StudentModificationReason::New => {
-                            StudentsUpdateOp::AddNewStudent(student_data)
-                        }
-                        StudentModificationReason::Edit(student_id) => {
-                            StudentsUpdateOp::UpdateStudent(student_id, student_data)
-                        }
-                    })
+                    .output(StudentsOutput::UpdateOp(
+                        match self.student_modification_reason {
+                            StudentModificationReason::New => {
+                                StudentsUpdateOp::AddNewStudent(student_data)
+                            }
+                            StudentModificationReason::Edit(student_id) => {
+                                StudentsUpdateOp::UpdateStudent(student_id, student_data)
+                            }
+                        },
+                    ))
                     .unwrap();
+            }
+            StudentsInput::PresentParent => {
+                sender.output(StudentsOutput::PresentParent).unwrap();
             }
         }
     }

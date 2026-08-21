@@ -4,6 +4,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     message: String,
 }
 
@@ -17,6 +18,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accept,
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -101,6 +105,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             message,
         };
         let widgets = view_output!();
@@ -109,13 +114,31 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
-            DialogInput::Show => self.hidden = false,
-            DialogInput::Accept => {
-                self.hidden = true;
-                sender.output(DialogOutput::Accept).unwrap()
+            DialogInput::Show => {
+                self.hidden = false;
+                self.move_front = true;
             }
-            DialogInput::Cancel => self.hidden = true,
+            DialogInput::Accept => {
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Accept).unwrap()
+                }
+            }
+            DialogInput::Cancel => {
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
+            }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.dialog.present();
         }
     }
 }

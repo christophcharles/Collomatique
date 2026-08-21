@@ -198,6 +198,7 @@ impl FactoryComponent for ExtraColorEntry {
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     config: export_config::ColloscopeConfig,
     extra_colors_state: BTreeMap<String, (bool, export_config::Color)>,
@@ -230,6 +231,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(export_config::ColloscopeConfig),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -279,7 +283,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -521,6 +525,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             config: export_config::ColloscopeConfig::default(),
             extra_colors_state: BTreeMap::new(),
@@ -535,10 +540,12 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(config, annotations) => {
                 self.config = config;
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
 
                 // Build extra_colors_state by merging annotations and config.extra_colors
@@ -592,20 +599,26 @@ impl SimpleComponent for Dialog {
                 );
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                // Rebuild extra_colors from state (only enabled entries)
-                self.config.extra_colors = self
-                    .extra_colors_state
-                    .iter()
-                    .filter(|(_, (enabled, _))| *enabled)
-                    .map(|(annotation, (_, color))| (annotation.clone(), color.clone()))
-                    .collect();
-                sender
-                    .output(DialogOutput::Accepted(self.config.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    // Rebuild extra_colors from state (only enabled entries)
+                    self.config.extra_colors = self
+                        .extra_colors_state
+                        .iter()
+                        .filter(|(_, (enabled, _))| *enabled)
+                        .map(|(annotation, (_, color))| (annotation.clone(), color.clone()))
+                        .collect();
+                    sender
+                        .output(DialogOutput::Accepted(self.config.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateSheetName(new_name) => {
                 if self.config.sheet_name == new_name {
@@ -728,6 +741,12 @@ impl SimpleComponent for Dialog {
                 }
                 state.1 = color;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

@@ -8,6 +8,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     assigned_groups: std::collections::BTreeSet<u32>,
     /// One row title per group of the edited list, in group order — built by
@@ -30,6 +31,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(std::collections::BTreeSet<u32>),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -41,7 +45,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -108,6 +112,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             assigned_groups: std::collections::BTreeSet::new(),
             group_titles: Vec::new(),
@@ -122,9 +127,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(group_titles, assigned_groups) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.group_titles = group_titles;
                 self.assigned_groups = assigned_groups;
@@ -143,13 +150,19 @@ impl SimpleComponent for Dialog {
                 );
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.assigned_groups.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.assigned_groups.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateGroupStatus(group_num, new_status) => {
                 if new_status {
@@ -165,6 +178,9 @@ impl SimpleComponent for Dialog {
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);
+        }
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

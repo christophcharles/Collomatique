@@ -54,3 +54,10 @@ windows-sys = { version = "0.59", features = [
   "Win32_Foundation",
   "Win32_System_Console",
 ] }
+# Both only to hand `rfd` the HWND of the window a file dialog belongs to, in
+# src/tools/open_save.rs. Without an owner window, Windows gives the dialog no
+# parent and hands the foreground to whatever is next in z-order when it
+# closes. `gdk4-win32` follows gdk4 0.9; `raw-window-handle` is the version
+# `rfd` 0.15 speaks.
+gdk4-win32 = "0.9"
+raw-window-handle = "0.6"

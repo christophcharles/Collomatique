@@ -5,6 +5,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     week_count: usize,
     max_week_count: usize,
@@ -21,6 +22,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(usize),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -38,7 +42,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: false,
             #[watch]
@@ -111,6 +115,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             week_count: 0,
             max_week_count: 10,
@@ -123,25 +128,39 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(week_count) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.max_week_count = week_count;
                 self.week_count = week_count / 2;
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.week_count))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.week_count))
+                        .unwrap();
+                }
             }
             DialogInput::Select(week_count) => {
                 self.week_count = week_count;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

@@ -7,6 +7,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     entry: String,
 }
@@ -22,6 +23,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(String),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -33,7 +37,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: false,
             #[watch]
@@ -93,6 +97,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             entry: String::new(),
         };
@@ -104,20 +109,28 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(text) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.entry = text;
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.entry.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.entry.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateEntry(entry) => {
                 self.entry = entry;
@@ -126,6 +139,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             widgets.entry.grab_focus();
         }

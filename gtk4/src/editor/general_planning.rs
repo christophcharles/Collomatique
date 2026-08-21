@@ -34,6 +34,17 @@ pub enum GeneralPlanningInput {
     WeekStatusUpdated(collomatique_state_colloscopes::PeriodId, usize, bool),
     EditAnnotationClicked(collomatique_state_colloscopes::PeriodId, usize),
     AnnotationSelected(String),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum GeneralPlanningOutput {
+    UpdateOp(GeneralPlanningUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -119,7 +130,7 @@ impl GeneralPlanning {
 #[relm4::component(pub)]
 impl Component for GeneralPlanning {
     type Input = GeneralPlanningInput;
-    type Output = GeneralPlanningUpdateOp;
+    type Output = GeneralPlanningOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -199,6 +210,9 @@ impl Component for GeneralPlanning {
                 select_start_date::DialogOutput::Accepted(date) => {
                     GeneralPlanningInput::FirstWeekChanged(date)
                 }
+                select_start_date::DialogOutput::PresentParent => {
+                    GeneralPlanningInput::PresentParent
+                }
             });
         let period_duration_dialog = period_duration::Dialog::builder()
             .transient_for(&root)
@@ -207,6 +221,7 @@ impl Component for GeneralPlanning {
                 period_duration::DialogOutput::Accepted(week_count) => {
                     GeneralPlanningInput::WeekCountSelected(week_count)
                 }
+                period_duration::DialogOutput::PresentParent => GeneralPlanningInput::PresentParent,
             });
         let period_cut_dialog = period_cut::Dialog::builder()
             .transient_for(&root)
@@ -215,6 +230,7 @@ impl Component for GeneralPlanning {
                 period_cut::DialogOutput::Accepted(week_count) => {
                     GeneralPlanningInput::WeekCountSelected(week_count)
                 }
+                period_cut::DialogOutput::PresentParent => GeneralPlanningInput::PresentParent,
             });
         let annotation_dialog = annotation_dialog::Dialog::builder()
             .transient_for(&root)
@@ -222,6 +238,9 @@ impl Component for GeneralPlanning {
             .forward(sender.input_sender(), |msg| match msg {
                 annotation_dialog::DialogOutput::Accepted(new_annotation) => {
                     GeneralPlanningInput::AnnotationSelected(new_annotation)
+                }
+                annotation_dialog::DialogOutput::PresentParent => {
+                    GeneralPlanningInput::PresentParent
                 }
             });
         let periods_list = FactoryVecDeque::builder()
@@ -287,7 +306,9 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::DeleteFirstWeekClicked => {
                 sender
-                    .output(GeneralPlanningUpdateOp::DeleteFirstWeek)
+                    .output(GeneralPlanningOutput::UpdateOp(
+                        GeneralPlanningUpdateOp::DeleteFirstWeek,
+                    ))
                     .unwrap();
             }
             GeneralPlanningInput::EditFirstWeekClicked => {
@@ -303,7 +324,9 @@ impl Component for GeneralPlanning {
             }
             GeneralPlanningInput::FirstWeekChanged(date) => {
                 sender
-                    .output(GeneralPlanningUpdateOp::UpdateFirstWeek(date))
+                    .output(GeneralPlanningOutput::UpdateOp(
+                        GeneralPlanningUpdateOp::UpdateFirstWeek(date),
+                    ))
                     .unwrap();
             }
             GeneralPlanningInput::AddPeriodClicked => {
@@ -314,17 +337,19 @@ impl Component for GeneralPlanning {
                     .unwrap();
             }
             GeneralPlanningInput::WeekCountSelected(week_count) => sender
-                .output(match self.week_selection_reason {
-                    WeekCountSelectionReason::New => {
-                        GeneralPlanningUpdateOp::AddNewPeriod(week_count)
-                    }
-                    WeekCountSelectionReason::Edit(id) => {
-                        GeneralPlanningUpdateOp::UpdatePeriodWeekCount(id, week_count)
-                    }
-                    WeekCountSelectionReason::Cut(id) => {
-                        GeneralPlanningUpdateOp::CutPeriod(id, week_count)
-                    }
-                })
+                .output(GeneralPlanningOutput::UpdateOp(
+                    match self.week_selection_reason {
+                        WeekCountSelectionReason::New => {
+                            GeneralPlanningUpdateOp::AddNewPeriod(week_count)
+                        }
+                        WeekCountSelectionReason::Edit(id) => {
+                            GeneralPlanningUpdateOp::UpdatePeriodWeekCount(id, week_count)
+                        }
+                        WeekCountSelectionReason::Cut(id) => {
+                            GeneralPlanningUpdateOp::CutPeriod(id, week_count)
+                        }
+                    },
+                ))
                 .unwrap(),
             GeneralPlanningInput::EditPeriodClicked(period_id) => {
                 self.week_selection_reason = WeekCountSelectionReason::Edit(period_id);
@@ -343,14 +368,18 @@ impl Component for GeneralPlanning {
                     .unwrap();
             }
             GeneralPlanningInput::DeletePeriodClicked(period_id) => sender
-                .output(GeneralPlanningUpdateOp::DeletePeriodAndWeeks(period_id))
+                .output(GeneralPlanningOutput::UpdateOp(
+                    GeneralPlanningUpdateOp::DeletePeriodAndWeeks(period_id),
+                ))
                 .unwrap(),
             GeneralPlanningInput::MergePeriodClicked(period_id) => sender
-                .output(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id))
+                .output(GeneralPlanningOutput::UpdateOp(
+                    GeneralPlanningUpdateOp::MergeWithPreviousPeriod(period_id),
+                ))
                 .unwrap(),
             GeneralPlanningInput::WeekStatusUpdated(period_id, week_num, state) => sender
-                .output(GeneralPlanningUpdateOp::UpdateWeekStatus(
-                    period_id, week_num, state,
+                .output(GeneralPlanningOutput::UpdateOp(
+                    GeneralPlanningUpdateOp::UpdateWeekStatus(period_id, week_num, state),
                 ))
                 .unwrap(),
             GeneralPlanningInput::EditAnnotationClicked(period_id, week_num) => {
@@ -379,12 +408,17 @@ impl Component for GeneralPlanning {
                     .expect("There should be a selected week for the annotation");
 
                 sender
-                    .output(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
-                        period_id,
-                        week_num,
-                        non_empty_string::NonEmptyString::new(new_annotation).ok(),
+                    .output(GeneralPlanningOutput::UpdateOp(
+                        GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+                            period_id,
+                            week_num,
+                            non_empty_string::NonEmptyString::new(new_annotation).ok(),
+                        ),
                     ))
                     .unwrap();
+            }
+            GeneralPlanningInput::PresentParent => {
+                sender.output(GeneralPlanningOutput::PresentParent).unwrap();
             }
         }
     }

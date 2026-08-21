@@ -14,6 +14,7 @@ use crate::tools::messages::MessageRow;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     periods: collomatique_state_colloscopes::periods::Periods,
@@ -51,6 +52,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::pairings::PairingRule),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -208,7 +212,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -368,6 +372,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -393,9 +398,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(subjects, periods, rule) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.subjects = subjects;
                 self.periods = periods;
@@ -404,13 +411,19 @@ impl SimpleComponent for Dialog {
                 self.rebuild_period_entries();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.build_rule_from_data()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.build_rule_from_data()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateAntecedentCondition(selected) => {
                 self.antecedent_condition_selected = selected;
@@ -437,6 +450,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

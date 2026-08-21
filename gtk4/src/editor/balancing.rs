@@ -24,6 +24,17 @@ pub enum BalancingInput {
     EditSubjectOptions(SubjectId),
     DeleteSubjectOptions(SubjectId),
     OptionsAccepted(BalancingOptions),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum BalancingOutput {
+    UpdateOp(BalancingUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 pub struct Balancing {
@@ -38,7 +49,7 @@ pub struct Balancing {
 #[relm4::component(pub)]
 impl Component for Balancing {
     type Input = BalancingInput;
-    type Output = BalancingUpdateOp;
+    type Output = BalancingOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -145,6 +156,7 @@ impl Component for Balancing {
                 options_dialog::DialogOutput::Accepted(options) => {
                     BalancingInput::OptionsAccepted(options)
                 }
+                options_dialog::DialogOutput::PresentParent => BalancingInput::PresentParent,
             });
 
         let model = Balancing {
@@ -199,21 +211,30 @@ impl Component for Balancing {
             }
             BalancingInput::DeleteSubjectOptions(subject_id) => {
                 sender
-                    .output(BalancingUpdateOp::RemoveSubjectOptions(subject_id))
+                    .output(BalancingOutput::UpdateOp(
+                        BalancingUpdateOp::RemoveSubjectOptions(subject_id),
+                    ))
                     .unwrap();
             }
             BalancingInput::OptionsAccepted(options) => match self.edit_reason.take() {
                 Some(subject_id) => {
                     sender
-                        .output(BalancingUpdateOp::UpdateSubjectOptions(subject_id, options))
+                        .output(BalancingOutput::UpdateOp(
+                            BalancingUpdateOp::UpdateSubjectOptions(subject_id, options),
+                        ))
                         .unwrap();
                 }
                 None => {
                     sender
-                        .output(BalancingUpdateOp::UpdateGlobalOptions(options))
+                        .output(BalancingOutput::UpdateOp(
+                            BalancingUpdateOp::UpdateGlobalOptions(options),
+                        ))
                         .unwrap();
                 }
             },
+            BalancingInput::PresentParent => {
+                sender.output(BalancingOutput::PresentParent).unwrap();
+            }
         }
     }
 }

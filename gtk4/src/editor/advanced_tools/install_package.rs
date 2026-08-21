@@ -17,6 +17,7 @@ use super::python_packages::InstallCommand;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// What the entry holds.
     ///
     /// Kept in the model because a `SimpleComponent`'s `update` cannot reach
@@ -42,17 +43,25 @@ pub enum DialogInput {
     Finished(Option<u32>),
 }
 
+/// Nothing here touches the document, so the only thing to report back is the
+/// window handover.
+#[derive(Debug)]
+pub enum DialogOutput {
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
+}
+
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
     type Init = ();
 
     type Input = DialogInput;
-    /// Nothing here touches the document, so there is nothing to report back.
-    type Output = ();
+    type Output = DialogOutput;
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (600, 400),
             set_resizable: true,
@@ -119,6 +128,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             package: String::new(),
             debug_view,
             process: None,
@@ -130,12 +140,14 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             // The log is deliberately not cleared: each install announces
             // itself with its own line, so keeping it means a second install
             // does not erase what the first one said.
             DialogInput::Show => {
                 self.hidden = false;
+                self.move_front = true;
             }
             // Closing does not kill anything: the window hides while pip
             // finishes, and reopening shows the same log with "Installer" still
@@ -143,7 +155,10 @@ impl SimpleComponent for Dialog {
             // of those two behaviours, and a window that refuses to close is
             // the worse of the other two.
             DialogInput::Close => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::UpdatePackage(package) => {
                 self.package = package;
@@ -224,6 +239,12 @@ impl SimpleComponent for Dialog {
                     }));
                 }
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

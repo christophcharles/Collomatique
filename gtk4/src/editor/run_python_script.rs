@@ -23,6 +23,7 @@ mod warning_running;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     path: PathBuf,
     script: String,
     end_with_error: bool,
@@ -49,17 +50,26 @@ pub enum DialogInput {
     ProcessFinished,
     Cmd(Result<collomatique_rpc::CmdMsg, collomatique_rpc::RpcDecodeError>),
     Error(String),
+    /// One of this window's own dialogs just closed: bring this window back to
+    /// the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogCmdOutput {
     AdjustScrolling,
     DelayedRpcAnswer(ResultMsg),
+    /// One of the dialogs that answer over the command sender just closed: this
+    /// window has to come back to the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     NewData(AppState<Data, Desc>),
+    /// This window just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -72,7 +82,7 @@ impl Component for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (700, 400),
             set_resizable: true,
@@ -204,13 +214,16 @@ impl Component for Dialog {
         let error_dialog = error_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                error_dialog::DialogOutput::PresentParent => DialogInput::Present,
+            });
 
         let warning_running = warning_running::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
+                warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let ok_dialog = ok_dialog::Dialog::builder()
@@ -220,6 +233,7 @@ impl Component for Dialog {
                 ok_dialog::DialogOutput::Ok => DialogCmdOutput::DelayedRpcAnswer(
                     ResultMsg::AckGui(collomatique_rpc::GuiAnswer::OkDialogClosed),
                 ),
+                ok_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
             });
 
         let confirm_dialog = confirm_dialog::Dialog::builder()
@@ -232,6 +246,7 @@ impl Component for Dialog {
                 confirm_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
                     ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(false)),
                 ),
+                confirm_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
             });
 
         let input_dialog = input_dialog::Dialog::builder()
@@ -244,6 +259,7 @@ impl Component for Dialog {
                 input_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
                     ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(None)),
                 ),
+                input_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
             });
 
         let debug_view = DebugView::builder().launch(()).detach();
@@ -254,6 +270,7 @@ impl Component for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             path: PathBuf::new(),
             script: String::new(),
             end_with_error: false,
@@ -276,11 +293,13 @@ impl Component for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         self.adjust_scrolling = false;
+        self.move_front = false;
         match msg {
             DialogInput::Run(path, script, app_state) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.path = path;
                 self.script = script;
                 self.app_session = Some(AppSession::new(app_state));
@@ -332,7 +351,10 @@ impl Component for Dialog {
                 }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 // Dropping the worker kills the subprocess if it is still running.
                 self.worker = None;
             }
@@ -350,7 +372,7 @@ impl Component for Dialog {
                         self.send_response(ResultMsg::generate_data_msg(data));
                     }
                     CmdMsg::GuiRequest(gui_cmd) => {
-                        self.handle_gui_request(sender, gui_cmd);
+                        self.handle_gui_request(sender, root, gui_cmd);
                     }
                     CmdMsg::SetData(data_stream) => {
                         let app_session = self
@@ -384,7 +406,10 @@ impl Component for Dialog {
                 }
             },
             DialogInput::Accept => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 let app_session = self
                     .app_session
                     .take()
@@ -410,10 +435,16 @@ impl Component for Dialog {
                     .send(error_dialog::DialogInput::Show(error))
                     .unwrap();
             }
+            DialogInput::Present => {
+                self.move_front = true;
+            }
         }
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.adjust_scrolling {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(adj.upper());
@@ -426,12 +457,16 @@ impl Component for Dialog {
         _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        self.move_front = false;
         match message {
             DialogCmdOutput::AdjustScrolling => {
                 self.adjust_scrolling = true;
             }
             DialogCmdOutput::DelayedRpcAnswer(result_msg) => {
                 self.send_response(result_msg);
+            }
+            DialogCmdOutput::Present => {
+                self.move_front = true;
             }
         }
     }
@@ -466,11 +501,16 @@ impl Dialog {
     fn handle_gui_request(
         &mut self,
         sender: ComponentSender<Self>,
+        root: &<Self as Component>::Root,
         gui_cmd: collomatique_rpc::cmd_msg::GuiMsg,
     ) {
         match gui_cmd {
             collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
                 let path = self.path.clone();
+                // These dialogs belong to this window: the script asks for them
+                // over RPC, but they are shown by the GUI process, on top of the
+                // script runner's own window.
+                let parent = crate::tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -479,6 +519,7 @@ impl Dialog {
                         .collect();
 
                     let file_name = crate::tools::open_save::generic_open_dialog(
+                        parent,
                         &params.title,
                         &ext_vec[..],
                         Some(path.as_path()),
@@ -493,6 +534,7 @@ impl Dialog {
                 });
             }
             collomatique_rpc::cmd_msg::GuiMsg::SaveFileDialog(params) => {
+                let parent = crate::tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -501,6 +543,7 @@ impl Dialog {
                         .collect();
 
                     let file_name = crate::tools::open_save::generic_save_dialog(
+                        parent,
                         &params.title,
                         &ext_vec[..],
                         params.suggested_name.as_deref(),

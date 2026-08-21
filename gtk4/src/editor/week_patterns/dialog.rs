@@ -11,6 +11,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     periods: collomatique_state_colloscopes::periods::Periods,
     weeks_state: collomatique_state_colloscopes::weeks::Weeks,
@@ -45,6 +46,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::week_patterns::WeekPattern),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -56,7 +60,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -181,6 +185,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             periods,
             weeks_state,
@@ -212,9 +217,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(periods, weeks_state, week_pattern) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 // Project the sparse core pattern into positional bits, in the
                 // global walk order the UI is indexed by.
@@ -231,24 +238,30 @@ impl SimpleComponent for Dialog {
                 self.update_factory();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                // Fold the positional bits back into the sparse exclusion set.
-                let excluded_weeks = self
-                    .weeks_state
-                    .walk(&self.periods)
-                    .zip(self.weeks.iter())
-                    .filter_map(|((_period_id, week_id, _week), active)| {
-                        (!*active).then_some(week_id)
-                    })
-                    .collect();
-                let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
-                    name: self.name.clone(),
-                    excluded_weeks,
-                };
-                sender.output(DialogOutput::Accepted(week_pattern)).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    // Fold the positional bits back into the sparse exclusion set.
+                    let excluded_weeks = self
+                        .weeks_state
+                        .walk(&self.periods)
+                        .zip(self.weeks.iter())
+                        .filter_map(|((_period_id, week_id, _week), active)| {
+                            (!*active).then_some(week_id)
+                        })
+                        .collect();
+                    let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
+                        name: self.name.clone(),
+                        excluded_weeks,
+                    };
+                    sender.output(DialogOutput::Accepted(week_pattern)).unwrap();
+                }
             }
             DialogInput::UpdateName(new_name) => {
                 if self.name == new_name {
@@ -336,6 +349,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

@@ -25,6 +25,17 @@ pub enum SlotsInput {
     DeleteSlot(collomatique_state_colloscopes::SlotId),
     EditSlot(collomatique_state_colloscopes::SlotId),
     AddSlot(collomatique_state_colloscopes::SubjectId),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum SlotsOutput {
+    UpdateOp(SlotsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -47,7 +58,7 @@ pub struct Slots {
 #[relm4::component(pub)]
 impl Component for Slots {
     type Input = SlotsInput;
-    type Output = SlotsUpdateOp;
+    type Output = SlotsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -107,6 +118,7 @@ impl Component for Slots {
                 slot_params::DialogOutput::Accepted(params) => {
                     SlotsInput::SlotParamsSelected(params)
                 }
+                slot_params::DialogOutput::PresentParent => SlotsInput::PresentParent,
             });
 
         let model = Slots {
@@ -164,13 +176,19 @@ impl Component for Slots {
             }
 
             SlotsInput::MoveSlotUp(slot_id) => {
-                sender.output(SlotsUpdateOp::MoveSlotUp(slot_id)).unwrap();
+                sender
+                    .output(SlotsOutput::UpdateOp(SlotsUpdateOp::MoveSlotUp(slot_id)))
+                    .unwrap();
             }
             SlotsInput::MoveSlotDown(slot_id) => {
-                sender.output(SlotsUpdateOp::MoveSlotDown(slot_id)).unwrap();
+                sender
+                    .output(SlotsOutput::UpdateOp(SlotsUpdateOp::MoveSlotDown(slot_id)))
+                    .unwrap();
             }
             SlotsInput::DeleteSlot(slot_id) => {
-                sender.output(SlotsUpdateOp::DeleteSlot(slot_id)).unwrap();
+                sender
+                    .output(SlotsOutput::UpdateOp(SlotsUpdateOp::DeleteSlot(slot_id)))
+                    .unwrap();
             }
             SlotsInput::EditSlot(slot_id) => {
                 self.slot_params_selection_reason = Some(SlotParamsSelectionReason::Edit(slot_id));
@@ -250,15 +268,22 @@ impl Component for Slots {
                 match reason {
                     SlotParamsSelectionReason::Edit(slot_id) => {
                         sender
-                            .output(SlotsUpdateOp::UpdateSlot(slot_id, params))
+                            .output(SlotsOutput::UpdateOp(SlotsUpdateOp::UpdateSlot(
+                                slot_id, params,
+                            )))
                             .unwrap();
                     }
                     SlotParamsSelectionReason::New(subject_id) => {
                         sender
-                            .output(SlotsUpdateOp::AddNewSlot(subject_id, params))
+                            .output(SlotsOutput::UpdateOp(SlotsUpdateOp::AddNewSlot(
+                                subject_id, params,
+                            )))
                             .unwrap();
                     }
                 }
+            }
+            SlotsInput::PresentParent => {
+                sender.output(SlotsOutput::PresentParent).unwrap();
             }
         }
     }

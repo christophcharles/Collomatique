@@ -60,6 +60,17 @@ pub enum GroupListsInput {
     GenerationNamingCancelled,
     /// The solver dialog was validated with a solution.
     GenerationSolveResult(collomatique_ilp::ConfigData<GroupsInternalVar>),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum GroupListsOutput {
+    UpdateOp(GroupListsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -109,7 +120,7 @@ pub struct GroupLists {
 #[relm4::component(pub)]
 impl Component for GroupLists {
     type Input = GroupListsInput;
-    type Output = GroupListsUpdateOp;
+    type Output = GroupListsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -214,13 +225,15 @@ impl Component for GroupLists {
                     period_id,
                     subject_id,
                     group_list_id,
-                ) => GroupListsUpdateOp::AssignGroupListToSubject(
+                ) => GroupListsOutput::UpdateOp(GroupListsUpdateOp::AssignGroupListToSubject(
                     period_id,
                     subject_id,
                     group_list_id,
-                ),
+                )),
                 associations_display::PeriodEntryOutput::CopyPreviousPeriod(period_id) => {
-                    GroupListsUpdateOp::DuplicatePreviousPeriod(period_id)
+                    GroupListsOutput::UpdateOp(GroupListsUpdateOp::DuplicatePreviousPeriod(
+                        period_id,
+                    ))
                 }
             });
 
@@ -231,6 +244,7 @@ impl Component for GroupLists {
                 edit_dialog::DialogOutput::Accepted(group_list) => {
                     GroupListsInput::GroupListSelected(group_list)
                 }
+                edit_dialog::DialogOutput::PresentParent => GroupListsInput::PresentParent,
             });
 
         let generate_dialog = generate_dialog::Dialog::builder()
@@ -243,6 +257,7 @@ impl Component for GroupLists {
                 generate_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationConfigCancelled
                 }
+                generate_dialog::DialogOutput::PresentParent => GroupListsInput::PresentParent,
             });
 
         let naming_dialog = naming_dialog::Dialog::builder()
@@ -255,6 +270,7 @@ impl Component for GroupLists {
                 naming_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationNamingCancelled
                 }
+                naming_dialog::DialogOutput::PresentParent => GroupListsInput::PresentParent,
             });
 
         let run_solver_dialog = SolverDialog::builder()
@@ -267,6 +283,7 @@ impl Component for GroupLists {
                 run_solver::DialogOutput::NewConfig(config) => {
                     GroupListsInput::GenerationSolveResult(config)
                 }
+                run_solver::DialogOutput::PresentParent => GroupListsInput::PresentParent,
             });
 
         let model = GroupLists {
@@ -368,7 +385,9 @@ impl Component for GroupLists {
                 let entries =
                     collomatique_constraints_groups::build_group_lists(&plan, &names, &base_config);
                 sender
-                    .output(GroupListsUpdateOp::AddGeneratedGroupLists(entries))
+                    .output(GroupListsOutput::UpdateOp(
+                        GroupListsUpdateOp::AddGeneratedGroupLists(entries),
+                    ))
                     .unwrap();
             }
             GroupListsInput::AddGroupList => {
@@ -413,24 +432,30 @@ impl Component for GroupLists {
             }
             GroupListsInput::DeleteGroupList(id) => {
                 sender
-                    .output(GroupListsUpdateOp::DeleteGroupList(id))
+                    .output(GroupListsOutput::UpdateOp(
+                        GroupListsUpdateOp::DeleteGroupList(id),
+                    ))
                     .unwrap();
             }
             GroupListsInput::GroupListSelected(group_list) => match self.selection_reason {
                 GroupListSelectionReason::New => {
                     sender
-                        .output(GroupListsUpdateOp::AddNewGroupList(group_list))
+                        .output(GroupListsOutput::UpdateOp(
+                            GroupListsUpdateOp::AddNewGroupList(group_list),
+                        ))
                         .unwrap();
                 }
                 GroupListSelectionReason::Edit(group_list_id) => {
                     sender
-                        .output(GroupListsUpdateOp::UpdateGroupList(
-                            group_list_id,
-                            group_list,
+                        .output(GroupListsOutput::UpdateOp(
+                            GroupListsUpdateOp::UpdateGroupList(group_list_id, group_list),
                         ))
                         .unwrap();
                 }
             },
+            GroupListsInput::PresentParent => {
+                sender.output(GroupListsOutput::PresentParent).unwrap();
+            }
         }
     }
 }
