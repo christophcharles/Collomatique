@@ -6,5 +6,13 @@ authors.workspace = true
 
 [dependencies]
 semver.workspace = true
+serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 directories = "6.0"
+fs4 = "0.13"
+
+# Reading the host path of a file handed over by the XDG document portal, which
+# the portal records in an extended attribute of the file it exposes. Nothing
+# else in this crate needs xattrs, and no other platform has that portal.
+[target.'cfg(unix)'.dependencies]
+xattr = "1"

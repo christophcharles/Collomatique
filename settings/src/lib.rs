@@ -3,7 +3,7 @@
 //! This crate holds what is true of the installation rather than of any
 //! colloscope: which build this is, and the settings that belong to the person
 //! running it — where those are stored, and the decisions that depend on them.
-//! The two belong together, since the one preference there is so far is about a
+//! The two belong together, since the first preference stored here was about a
 //! version. It deliberately depends on no other `collomatique-*` crate and on
 //! no toolkit, so that a frontend other than the GTK one asks the same
 //! questions and gets the same answers.
@@ -18,6 +18,7 @@ use std::path::PathBuf;
 pub use semver::Version;
 
 pub mod development_warning;
+pub mod recent_files;
 
 /// Returns the version number of the compiled Collomatique package
 ///

@@ -81,6 +81,21 @@ impl AppModel {
             sender.input(msg);
         }
     }
+
+    /// Has the welcome screen read its recent files again
+    ///
+    /// Sent whenever that screen comes back into view. The list it was built
+    /// with is by then out of date twice over: this run has opened or saved
+    /// something since, and so may another instance of Collomatique running
+    /// beside it. Files that have moved away meanwhile are re-checked at the
+    /// same time.
+    fn refresh_recent_files(&self) {
+        self.controllers
+            .welcome
+            .sender()
+            .send(welcome::WelcomeInput::Refresh)
+            .unwrap();
+    }
 }
 
 #[derive(Debug)]
@@ -232,6 +247,14 @@ impl Component for AppModel {
                     welcome::WelcomeMessage::OpenNewColloscope => AppInput::NewColloscope(None),
                     welcome::WelcomeMessage::OpenExistingColloscope => {
                         AppInput::OpenExistingColloscopeWithDialog
+                    }
+                    // No dirty check: the welcome screen is shown precisely
+                    // when there is no document open, which is why its other
+                    // two buttons do without one too. A recent file that no
+                    // longer opens takes the ordinary error dialog, and stays
+                    // in the list.
+                    welcome::WelcomeMessage::OpenRecentColloscope(path) => {
+                        AppInput::LoadColloscope(path)
                     }
                 });
 
@@ -501,6 +524,13 @@ impl Component for AppModel {
                 if self.state != GlobalState::LoadingScreen {
                     return;
                 }
+                // Every way of opening a file arrives here -- the welcome
+                // screen, the menu, the command line, a double-click in the
+                // file manager -- so this one line is the whole "opened"
+                // half of the recent files list. A file that failed to load
+                // is deliberately not recorded, and one recorded earlier that
+                // fails to load now is deliberately not forgotten.
+                collomatique_settings::recent_files::record(&path);
                 self.state = GlobalState::EditorScreen;
                 // A file loaded with caveats is suspect: keep its path but mark
                 // it so "Enregistrer" won't overwrite it silently.
@@ -536,6 +566,7 @@ impl Component for AppModel {
                     ))
                     .unwrap();
                 self.state = GlobalState::WelcomeScreen;
+                self.refresh_recent_files();
             }
             AppInput::ColloscopeSavingFailed(path, error) => {
                 self.controllers
@@ -586,6 +617,7 @@ impl Component for AppModel {
             }
             AppInput::CloseFile => {
                 self.state = GlobalState::WelcomeScreen;
+                self.refresh_recent_files();
                 self.controllers
                     .editor
                     .sender()
