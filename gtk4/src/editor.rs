@@ -1421,6 +1421,11 @@ impl Component for EditorPanel {
                 sender.input(EditorInput::SaveCurrentFileAs(path));
             }
             EditorCommandOutput::SaveSuccessful(path) => {
+                // The other half of the recent files list, and it covers
+                // "Enregistrer sous" as well as a plain save: a file just
+                // written to is a file the user is working on, so it belongs
+                // at the front either way.
+                collomatique_settings::recent_files::record(&path);
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("{} enregistré", path.to_string_lossy()),
                     timeout: DEFAULT_TOAST_TIMEOUT,
