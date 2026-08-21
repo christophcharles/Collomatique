@@ -1,5 +1,6 @@
 use adw::prelude::AdwDialogExt;
-use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt};
+// `WidgetExtManual` is the one carrying `add_tick_callback`.
+use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt, WidgetExtManual};
 use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
 use relm4::prelude::ComponentController;
 use relm4::{Component, ComponentParts, ComponentSender, Controller};
@@ -88,10 +89,12 @@ pub enum AppInput {
     /// Bring the main window to the front. Sent at startup, because merely
     /// showing a window does not make Windows give it the foreground.
     Present,
-    /// The main window has just been mapped. This is when the development
-    /// warning can open: Windows centers a transient window on its parent at
-    /// show time, so the parent must already be on screen.
-    MainWindowMapped,
+    /// The main window has drawn a full frame. This is when the development
+    /// warning can open: Windows centers a transient window on its parent when
+    /// the window is shown, using the position GDK has recorded for the parent
+    /// -- and GDK records it while drawing, so before the first frame there is
+    /// nothing to center on.
+    MainWindowDrawn,
     AcknowledgeDevelopmentVersion(collomatique_settings::Version),
     WarnDirty,
     OkDirty,
@@ -281,20 +284,35 @@ impl Component for AppModel {
         // warning is due is not a question for the GTK layer: collomatique-settings
         // answers it, so another frontend would get the same answer.
         //
-        // The dialog is not opened from here. At this point the main window has
-        // never been mapped, and Windows centers a transient window on its
-        // parent once, when it is shown: with the parent not yet on screen
-        // there is nothing to center on, and the dialog lands in the corner of
-        // the screen. So the version waits in the model, and the window's own
-        // "map" signal opens the dialog once the parent has a position and a
-        // size to center on.
+        // The dialog is not opened from here. Windows centers a transient
+        // window on its parent when the window is shown, and it centers on the
+        // position GDK has recorded for the parent. GDK writes that position
+        // while drawing a frame and nowhere else, so before the main window has
+        // drawn, the recorded position is zero and the dialog lands in the
+        // corner of the screen. Waiting for "map" was not enough either:
+        // mapping happens before any frame.
+        //
+        // So the version waits in the model, and a drawn frame opens the
+        // dialog. The second tick rather than the first: a tick callback runs
+        // in the frame clock's update phase, which is before the layout phase
+        // that writes the position, so one whole frame has to go by. Returning
+        // Break then removes the callback -- it costs two frames, not one per
+        // frame forever.
         let version = collomatique_settings::current_version();
         let development_warning_due =
             collomatique_settings::development_warning::is_due(&version).then_some(version);
         {
             let sender = sender.clone();
-            root.connect_map(move |_| {
-                sender.input(AppInput::MainWindowMapped);
+            root.connect_map(move |window| {
+                let sender = sender.clone();
+                let first_tick = std::cell::Cell::new(true);
+                let _ = window.add_tick_callback(move |_, _| {
+                    if first_tick.replace(false) {
+                        return gtk::glib::ControlFlow::Continue;
+                    }
+                    sender.input(AppInput::MainWindowDrawn);
+                    gtk::glib::ControlFlow::Break
+                });
             });
         }
 
@@ -411,7 +429,7 @@ impl Component for AppModel {
             AppInput::Present => {
                 self.present_window = Some(());
             }
-            AppInput::MainWindowMapped => {
+            AppInput::MainWindowDrawn => {
                 if let Some(version) = self.development_warning_due.take() {
                     self.controllers
                         .development_warning
