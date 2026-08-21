@@ -64,6 +64,10 @@ pub struct AppModel {
     next_warn_msg: Option<AppInput>,
     update_about: Option<()>,
     present_window: Option<()>,
+    /// The development warning to show once the main window is mapped, if one
+    /// is due. Taken on the first `MainWindowMapped`, so a later re-map does
+    /// not re-open it.
+    development_warning_due: Option<collomatique_settings::Version>,
     main_window_sensitive: bool,
 }
 
@@ -84,6 +88,10 @@ pub enum AppInput {
     /// Bring the main window to the front. Sent at startup, because merely
     /// showing a window does not make Windows give it the foreground.
     Present,
+    /// The main window has just been mapped. This is when the development
+    /// warning can open: Windows centers a transient window on its parent at
+    /// show time, so the parent must already be on screen.
+    MainWindowMapped,
     AcknowledgeDevelopmentVersion(collomatique_settings::Version),
     WarnDirty,
     OkDirty,
@@ -272,13 +280,22 @@ impl Component for AppModel {
         // on its own the day the version becomes a plain release. Whether the
         // warning is due is not a question for the GTK layer: collomatique-settings
         // answers it, so another frontend would get the same answer.
+        //
+        // The dialog is not opened from here. At this point the main window has
+        // never been mapped, and Windows centers a transient window on its
+        // parent once, when it is shown: with the parent not yet on screen
+        // there is nothing to center on, and the dialog lands in the corner of
+        // the screen. So the version waits in the model, and the window's own
+        // "map" signal opens the dialog once the parent has a position and a
+        // size to center on.
         let version = collomatique_settings::current_version();
-        if collomatique_settings::development_warning::is_due(&version) {
-            controllers
-                .development_warning
-                .sender()
-                .send(dialogs::development_warning::DialogInput::Show(version))
-                .unwrap();
+        let development_warning_due =
+            collomatique_settings::development_warning::is_due(&version).then_some(version);
+        {
+            let sender = sender.clone();
+            root.connect_map(move |_| {
+                sender.input(AppInput::MainWindowMapped);
+            });
         }
 
         let state = GlobalState::WelcomeScreen;
@@ -368,6 +385,7 @@ impl Component for AppModel {
             actions,
             update_about: None,
             present_window: None,
+            development_warning_due,
             main_window_sensitive: true,
         };
         let widgets = view_output!();
@@ -392,6 +410,15 @@ impl Component for AppModel {
             }
             AppInput::Present => {
                 self.present_window = Some(());
+            }
+            AppInput::MainWindowMapped => {
+                if let Some(version) = self.development_warning_due.take() {
+                    self.controllers
+                        .development_warning
+                        .sender()
+                        .send(dialogs::development_warning::DialogInput::Show(version))
+                        .unwrap();
+                }
             }
             AppInput::AcknowledgeDevelopmentVersion(version) => {
                 collomatique_settings::development_warning::acknowledge(&version);
