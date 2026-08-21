@@ -33,6 +33,9 @@ pub enum DialogOutput {
     Cancelled,
     /// The assembled `objectify_cross_fixed_period` and `l1_anchor_weight`.
     Accepted(Option<f64>, f64),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -192,17 +195,23 @@ impl SimpleComponent for Dialog {
                 self.l1_anchor_weight = l1_anchor_weight;
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(
-                        self.objectify_enabled.then_some(self.objectify_weight),
-                        self.l1_anchor_weight,
-                    ))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(
+                            self.objectify_enabled.then_some(self.objectify_weight),
+                            self.l1_anchor_weight,
+                        ))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateObjectifyEnabled(value) => {
                 if self.objectify_enabled == value {

@@ -14,12 +14,19 @@ pub enum DialogInput {
     Hide,
 }
 
+#[derive(Debug)]
+pub enum DialogOutput {
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
+}
+
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
     type Init = ();
 
     type Input = DialogInput;
-    type Output = ();
+    type Output = DialogOutput;
 
     view! {
         dialog = gtk::Window {
@@ -95,7 +102,7 @@ impl SimpleComponent for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.move_front = false;
         match msg {
             DialogInput::Show(text) => {
@@ -103,7 +110,12 @@ impl SimpleComponent for Dialog {
                 self.move_front = true;
                 self.error_msg = text;
             }
-            DialogInput::Hide => self.hidden = true,
+            DialogInput::Hide => {
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
+            }
         }
     }
 

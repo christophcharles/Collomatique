@@ -69,6 +69,9 @@ pub enum DialogInput {
     SetSubjectRebuild(usize, usize, bool),
     /// (prefilled-list index, new value)
     SetKeptList(usize, bool),
+    /// One of this window's own dialogs just closed: bring this window back to
+    /// the front.
+    Present,
 }
 
 #[derive(Debug)]
@@ -80,6 +83,9 @@ pub enum DialogOutput {
         ObjectiveWeights,
         Parameters,
     ),
+    /// This window just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -568,6 +574,7 @@ impl SimpleComponent for Dialog {
                     DialogInput::UpdateStrategy(strategy)
                 }
                 conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+                conductor_config::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let advanced_dialog = advanced_dialog::Dialog::builder()
@@ -578,6 +585,7 @@ impl SimpleComponent for Dialog {
                     DialogInput::UpdateAdvancedParams(weights, canonical_range)
                 }
                 advanced_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+                advanced_dialog::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let periods_list = FactoryVecDeque::builder()
@@ -673,19 +681,28 @@ impl SimpleComponent for Dialog {
                 self.refresh_kept_lists_list();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(
-                        self.request_from_data(),
-                        self.strategy.clone(),
-                        self.weights,
-                        self.params.clone(),
-                    ))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(
+                            self.request_from_data(),
+                            self.strategy.clone(),
+                            self.weights,
+                            self.params.clone(),
+                        ))
+                        .unwrap();
+                }
+            }
+            DialogInput::Present => {
+                self.move_front = true;
             }
         }
     }

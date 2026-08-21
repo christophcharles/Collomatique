@@ -43,13 +43,21 @@ pub enum DialogInput {
     Finished(Option<u32>),
 }
 
+/// Nothing here touches the document, so the only thing to report back is the
+/// window handover.
+#[derive(Debug)]
+pub enum DialogOutput {
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
+}
+
 #[relm4::component(pub)]
 impl SimpleComponent for Dialog {
     type Init = ();
 
     type Input = DialogInput;
-    /// Nothing here touches the document, so there is nothing to report back.
-    type Output = ();
+    type Output = DialogOutput;
 
     view! {
         #[root]
@@ -147,7 +155,10 @@ impl SimpleComponent for Dialog {
             // of those two behaviours, and a window that refuses to close is
             // the worse of the other two.
             DialogInput::Close => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::UpdatePackage(package) => {
                 self.package = package;

@@ -113,6 +113,17 @@ pub enum PairingsInput {
     DeletePairing(collomatique_state_colloscopes::PairingRuleId),
     EditPairing(collomatique_state_colloscopes::PairingRuleId),
     AddPairing,
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum PairingsOutput {
+    UpdateOp(PairingsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -134,7 +145,7 @@ pub struct Pairings {
 #[relm4::component(pub)]
 impl Component for Pairings {
     type Input = PairingsInput;
-    type Output = PairingsUpdateOp;
+    type Output = PairingsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -202,6 +213,7 @@ impl Component for Pairings {
                 pairing_params::DialogOutput::Accepted(rule) => {
                     PairingsInput::PairingParamsSelected(rule)
                 }
+                pairing_params::DialogOutput::PresentParent => PairingsInput::PresentParent,
             });
 
         let model = Pairings {
@@ -252,7 +264,9 @@ impl Component for Pairings {
 
             PairingsInput::DeletePairing(rule_id) => {
                 sender
-                    .output(PairingsUpdateOp::DeletePairingRule(rule_id))
+                    .output(PairingsOutput::UpdateOp(
+                        PairingsUpdateOp::DeletePairingRule(rule_id),
+                    ))
                     .unwrap();
             }
             PairingsInput::EditPairing(rule_id) => {
@@ -305,15 +319,22 @@ impl Component for Pairings {
                 match self.pairing_params_selection_reason {
                     PairingParamsSelectionReason::Edit(rule_id) => {
                         sender
-                            .output(PairingsUpdateOp::UpdatePairingRule(rule_id, rule))
+                            .output(PairingsOutput::UpdateOp(
+                                PairingsUpdateOp::UpdatePairingRule(rule_id, rule),
+                            ))
                             .unwrap();
                     }
                     PairingParamsSelectionReason::New => {
                         sender
-                            .output(PairingsUpdateOp::AddNewPairingRule(rule))
+                            .output(PairingsOutput::UpdateOp(
+                                PairingsUpdateOp::AddNewPairingRule(rule),
+                            ))
                             .unwrap();
                     }
                 }
+            }
+            PairingsInput::PresentParent => {
+                sender.output(PairingsOutput::PresentParent).unwrap();
             }
         }
     }

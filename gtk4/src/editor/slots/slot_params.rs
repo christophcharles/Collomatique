@@ -56,6 +56,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::slots::Slot),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -371,13 +374,19 @@ impl SimpleComponent for Dialog {
                 self.update_data_from_params(&params);
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.build_params_from_data()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.build_params_from_data()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateSelectedTeacher(teacher_selected) => {
                 self.teacher_selected = teacher_selected;

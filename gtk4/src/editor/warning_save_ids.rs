@@ -18,6 +18,9 @@ pub enum DialogInput {
 pub enum DialogOutput {
     Compact,
     Cancel,
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -126,12 +129,18 @@ impl SimpleComponent for Dialog {
                 self.move_front = true;
             }
             DialogInput::Compact => {
-                self.hidden = true;
-                sender.output(DialogOutput::Compact).unwrap()
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Compact).unwrap()
+                }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancel).unwrap()
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancel).unwrap()
+                }
             }
         }
     }

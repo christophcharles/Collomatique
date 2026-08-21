@@ -34,6 +34,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(std::collections::BTreeMap<collomatique_state_colloscopes::StudentId, u32>),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -165,13 +168,19 @@ impl SimpleComponent for Dialog {
                 self.update_factory();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.groups_for_students.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.groups_for_students.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateStudentGroup(student_id, selected) => {
                 match Self::selected_to_group_opt(selected) {

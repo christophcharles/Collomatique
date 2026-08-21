@@ -218,6 +218,9 @@ pub enum AdvancedToolsInput {
     InstallPackageClicked,
     ExportMpsClicked,
     CompactIdsClicked,
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -225,6 +228,9 @@ pub enum AdvancedToolsOutput {
     RunPythonScriptClicked,
     ExportMpsClicked,
     CompactIdsClicked,
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl AdvancedTools {
@@ -491,7 +497,7 @@ impl Component for AdvancedTools {
     fn init(
         _params: Self::Init,
         root: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // `root` is this panel, not a window: relm4 resolves the toplevel late,
         // once the widget tree is built, which is how every other panel here
@@ -499,7 +505,9 @@ impl Component for AdvancedTools {
         let install_package_dialog = install_package::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                install_package::DialogOutput::PresentParent => AdvancedToolsInput::PresentParent,
+            });
 
         let model = AdvancedTools {
             stats: Stats::default(),
@@ -540,6 +548,9 @@ impl Component for AdvancedTools {
                 sender
                     .output(AdvancedToolsOutput::CompactIdsClicked)
                     .unwrap();
+            }
+            AdvancedToolsInput::PresentParent => {
+                sender.output(AdvancedToolsOutput::PresentParent).unwrap();
             }
         }
     }

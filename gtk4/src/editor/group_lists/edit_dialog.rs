@@ -76,6 +76,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::group_lists::GroupList),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -386,16 +389,22 @@ impl SimpleComponent for Dialog {
                 self.update_group_entries();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
-                    self.generate_params(),
-                    self.generate_filling(),
-                )
-                .expect("dialog maintains group count and student uniqueness by construction");
-                sender.output(DialogOutput::Accepted(group_list)).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+                        self.generate_params(),
+                        self.generate_filling(),
+                    )
+                    .expect("dialog maintains group count and student uniqueness by construction");
+                    sender.output(DialogOutput::Accepted(group_list)).unwrap();
+                }
             }
             DialogInput::UpdateSelectedName(name) => {
                 if self.selected_name == name {

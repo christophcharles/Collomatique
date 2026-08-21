@@ -84,11 +84,17 @@ pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
     ToggleDebug(bool),
     ReportError(String),
     SpawnError(String),
+    /// One of this window's own dialogs just closed: bring this window back to
+    /// the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput<B: UsableData, E: UsableData> {
     NewConfig(ConfigData<InternalVar<B, E>>),
+    /// This window just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 /// Outputs of the dialog's background commands.
@@ -471,13 +477,16 @@ where
         let error_dialog = error_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                error_dialog::DialogOutput::PresentParent => DialogInput::Present,
+            });
 
         let warning_running = warning_running::Dialog::builder()
             .transient_for(&root)
             .launch(settings.cancel_warning)
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
+                warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let warning_validate = warning_running::Dialog::builder()
@@ -487,6 +496,7 @@ where
             )
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Accept,
+                warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let strategy_frames = FactoryVecDeque::builder()
@@ -683,7 +693,10 @@ where
                 }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 self.is_running = false;
                 self.run_end = Some(Instant::now());
                 if let Some(subprocess) = self.subprocess.take() {
@@ -785,7 +798,10 @@ where
                     .unwrap();
             }
             DialogInput::Accept => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 self.is_running = false;
                 if let Some(subprocess) = self.subprocess.take() {
                     subprocess.kill();
@@ -795,6 +811,9 @@ where
                         .output(DialogOutput::NewConfig(solution.config))
                         .unwrap();
                 }
+            }
+            DialogInput::Present => {
+                self.move_front = true;
             }
         }
     }

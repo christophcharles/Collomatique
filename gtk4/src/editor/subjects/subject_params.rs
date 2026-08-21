@@ -86,6 +86,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::SubjectParameters),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -781,43 +784,49 @@ impl SimpleComponent for Dialog {
                 self.synchronize_block_factory();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                self.interrogation_params.periodicity = match self.periodicity_panel {
-                    PeriodicityPanel::ExactlyPeriodic => {
-                        collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
-                            periodicity_in_weeks: self.exactly_periodic_params,
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    self.interrogation_params.periodicity = match self.periodicity_panel {
+                        PeriodicityPanel::ExactlyPeriodic => {
+                            collomatique_state_colloscopes::SubjectPeriodicity::ExactlyPeriodic {
+                                periodicity_in_weeks: self.exactly_periodic_params,
+                            }
                         }
-                    }
-                    PeriodicityPanel::OnceForEveryBlockOfWeeks => {
-                        collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
-                            weeks_per_block: self.once_for_every_block_of_weeks_params.block_size_in_weeks,
-                            minimum_week_separation: self.once_for_every_block_of_weeks_params.minimum_week_separation,
+                        PeriodicityPanel::OnceForEveryBlockOfWeeks => {
+                            collomatique_state_colloscopes::SubjectPeriodicity::OnceForEveryBlockOfWeeks {
+                                weeks_per_block: self.once_for_every_block_of_weeks_params.block_size_in_weeks,
+                                minimum_week_separation: self.once_for_every_block_of_weeks_params.minimum_week_separation,
+                            }
                         }
-                    }
-                    PeriodicityPanel::AmountInYear => {
-                        collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
-                            interrogation_count_in_year: NonEmptyRangeInclusive::new(self.amount_in_year_params.interrogation_count_in_year.clone()).expect("spinners clamp min <= max"),
-                            minimum_week_separation: self.amount_in_year_params.minimum_week_separation,
+                        PeriodicityPanel::AmountInYear => {
+                            collomatique_state_colloscopes::SubjectPeriodicity::AmountInYear {
+                                interrogation_count_in_year: NonEmptyRangeInclusive::new(self.amount_in_year_params.interrogation_count_in_year.clone()).expect("spinners clamp min <= max"),
+                                minimum_week_separation: self.amount_in_year_params.minimum_week_separation,
+                            }
                         }
-                    }
-                    PeriodicityPanel::AmountForEveryArbitraryBlock => {
-                        collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
-                            minimum_week_separation: self.amount_for_every_arbitrary_block_params.minimum_week_separation,
-                            blocks: self.amount_for_every_arbitrary_block_params.blocks.clone(),
+                        PeriodicityPanel::AmountForEveryArbitraryBlock => {
+                            collomatique_state_colloscopes::SubjectPeriodicity::AmountForEveryArbitraryBlock {
+                                minimum_week_separation: self.amount_for_every_arbitrary_block_params.minimum_week_separation,
+                                blocks: self.amount_for_every_arbitrary_block_params.blocks.clone(),
+                            }
                         }
-                    }
-                };
-                self.params.interrogation_parameters = if self.has_interrogations {
-                    Some(self.interrogation_params.clone())
-                } else {
-                    None
-                };
-                sender
-                    .output(DialogOutput::Accepted(self.params.clone()))
-                    .unwrap();
+                    };
+                    self.params.interrogation_parameters = if self.has_interrogations {
+                        Some(self.interrogation_params.clone())
+                    } else {
+                        None
+                    };
+                    sender
+                        .output(DialogOutput::Accepted(self.params.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateName(new_name) => {
                 if self.params.name == new_name {

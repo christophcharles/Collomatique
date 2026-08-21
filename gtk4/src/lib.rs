@@ -198,6 +198,7 @@ impl Component for AppModel {
                 }
                 editor::EditorOutput::StartOpenSaveDialog => AppInput::StartOpenSaveDialog,
                 editor::EditorOutput::EndOpenSaveDialog => AppInput::EndOpenSaveDialog,
+                editor::EditorOutput::PresentParent => AppInput::Present,
             },
         );
 
@@ -226,18 +227,23 @@ impl Component for AppModel {
         let file_error = dialogs::file_error::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .forward(sender.input_sender(), |_| AppInput::Ignore);
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::file_error::DialogOutput::PresentParent => AppInput::Present,
+            });
 
         let file_caveats = dialogs::file_caveats::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .forward(sender.input_sender(), |_| AppInput::Ignore);
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::file_caveats::DialogOutput::PresentParent => AppInput::Present,
+            });
 
         let warn_dirty = dialogs::warning_changed::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 dialogs::warning_changed::DialogOutput::Accept => AppInput::OkDirty,
+                dialogs::warning_changed::DialogOutput::PresentParent => AppInput::Present,
             });
 
         let development_warning = dialogs::development_warning::Dialog::builder()
@@ -249,6 +255,7 @@ impl Component for AppModel {
                 dialogs::development_warning::DialogOutput::Acknowledged(Some(version)) => {
                     AppInput::AcknowledgeDevelopmentVersion(version)
                 }
+                dialogs::development_warning::DialogOutput::PresentParent => AppInput::Present,
             });
 
         let controllers = AppControllers {

@@ -119,6 +119,17 @@ pub enum SlotPairingsInput {
     DeleteSlotPairing(collomatique_state_colloscopes::SlotPairingRuleId),
     EditSlotPairing(collomatique_state_colloscopes::SlotPairingRuleId),
     AddSlotPairing(collomatique_state_colloscopes::SubjectId),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum SlotPairingsOutput {
+    UpdateOp(SlotPairingsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -178,7 +189,7 @@ impl SlotPairings {
 #[relm4::component(pub)]
 impl Component for SlotPairings {
     type Input = SlotPairingsInput;
-    type Output = SlotPairingsUpdateOp;
+    type Output = SlotPairingsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -229,6 +240,9 @@ impl Component for SlotPairings {
             .forward(sender.input_sender(), |msg| match msg {
                 slot_pairing_params::DialogOutput::Accepted(rule) => {
                     SlotPairingsInput::SlotPairingParamsSelected(rule)
+                }
+                slot_pairing_params::DialogOutput::PresentParent => {
+                    SlotPairingsInput::PresentParent
                 }
             });
 
@@ -313,7 +327,9 @@ impl Component for SlotPairings {
 
             SlotPairingsInput::DeleteSlotPairing(rule_id) => {
                 sender
-                    .output(SlotPairingsUpdateOp::DeleteSlotPairingRule(rule_id))
+                    .output(SlotPairingsOutput::UpdateOp(
+                        SlotPairingsUpdateOp::DeleteSlotPairingRule(rule_id),
+                    ))
                     .unwrap();
             }
             SlotPairingsInput::EditSlotPairing(rule_id) => {
@@ -412,15 +428,22 @@ impl Component for SlotPairings {
                 match reason {
                     SlotPairingParamsSelectionReason::Edit(rule_id) => {
                         sender
-                            .output(SlotPairingsUpdateOp::UpdateSlotPairingRule(rule_id, rule))
+                            .output(SlotPairingsOutput::UpdateOp(
+                                SlotPairingsUpdateOp::UpdateSlotPairingRule(rule_id, rule),
+                            ))
                             .unwrap();
                     }
                     SlotPairingParamsSelectionReason::New(_subject_id) => {
                         sender
-                            .output(SlotPairingsUpdateOp::AddNewSlotPairingRule(rule))
+                            .output(SlotPairingsOutput::UpdateOp(
+                                SlotPairingsUpdateOp::AddNewSlotPairingRule(rule),
+                            ))
                             .unwrap();
                     }
                 }
+            }
+            SlotPairingsInput::PresentParent => {
+                sender.output(SlotPairingsOutput::PresentParent).unwrap();
             }
         }
     }

@@ -231,6 +231,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(export_config::ColloscopeConfig),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -596,20 +599,26 @@ impl SimpleComponent for Dialog {
                 );
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                // Rebuild extra_colors from state (only enabled entries)
-                self.config.extra_colors = self
-                    .extra_colors_state
-                    .iter()
-                    .filter(|(_, (enabled, _))| *enabled)
-                    .map(|(annotation, (_, color))| (annotation.clone(), color.clone()))
-                    .collect();
-                sender
-                    .output(DialogOutput::Accepted(self.config.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    // Rebuild extra_colors from state (only enabled entries)
+                    self.config.extra_colors = self
+                        .extra_colors_state
+                        .iter()
+                        .filter(|(_, (enabled, _))| *enabled)
+                        .map(|(annotation, (_, color))| (annotation.clone(), color.clone()))
+                        .collect();
+                    sender
+                        .output(DialogOutput::Accepted(self.config.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateSheetName(new_name) => {
                 if self.config.sheet_name == new_name {

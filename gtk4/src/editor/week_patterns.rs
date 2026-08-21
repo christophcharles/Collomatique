@@ -22,6 +22,17 @@ pub enum WeekPatternsInput {
     DeleteWeekPatternClicked(collomatique_state_colloscopes::WeekPatternId),
     AddWeekPatternClicked,
     WeekPatternEditResult(collomatique_state_colloscopes::week_patterns::WeekPattern),
+    /// A dialog of this panel just closed. The panel hosts no window of its
+    /// own, so it passes the request up to the editor.
+    PresentParent,
+}
+
+#[derive(Debug)]
+pub enum WeekPatternsOutput {
+    UpdateOp(WeekPatternsUpdateOp),
+    /// A dialog of this panel just closed: the window underneath should be
+    /// brought back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -44,7 +55,7 @@ pub struct WeekPatterns {
 #[relm4::component(pub)]
 impl Component for WeekPatterns {
     type Input = WeekPatternsInput;
-    type Output = WeekPatternsUpdateOp;
+    type Output = WeekPatternsOutput;
     type Init = ();
     type CommandOutput = ();
 
@@ -99,6 +110,7 @@ impl Component for WeekPatterns {
                 dialog::DialogOutput::Accepted(week_pattern) => {
                     WeekPatternsInput::WeekPatternEditResult(week_pattern)
                 }
+                dialog::DialogOutput::PresentParent => WeekPatternsInput::PresentParent,
             });
         let model = WeekPatterns {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
@@ -124,7 +136,9 @@ impl Component for WeekPatterns {
             }
             WeekPatternsInput::DeleteWeekPatternClicked(id) => {
                 sender
-                    .output(WeekPatternsUpdateOp::DeleteWeekPattern(id))
+                    .output(WeekPatternsOutput::UpdateOp(
+                        WeekPatternsUpdateOp::DeleteWeekPattern(id),
+                    ))
                     .unwrap();
             }
             WeekPatternsInput::EditWeekPatternClicked(id) => {
@@ -159,18 +173,23 @@ impl Component for WeekPatterns {
             }
             WeekPatternsInput::WeekPatternEditResult(week_pattern_data) => {
                 sender
-                    .output(match self.week_pattern_modification_reason {
-                        WeekPatternModificationReason::New => {
-                            WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern_data)
-                        }
-                        WeekPatternModificationReason::Edit(week_pattern_id) => {
-                            WeekPatternsUpdateOp::UpdateWeekPattern(
-                                week_pattern_id,
-                                week_pattern_data,
-                            )
-                        }
-                    })
+                    .output(WeekPatternsOutput::UpdateOp(
+                        match self.week_pattern_modification_reason {
+                            WeekPatternModificationReason::New => {
+                                WeekPatternsUpdateOp::AddNewWeekPattern(week_pattern_data)
+                            }
+                            WeekPatternModificationReason::Edit(week_pattern_id) => {
+                                WeekPatternsUpdateOp::UpdateWeekPattern(
+                                    week_pattern_id,
+                                    week_pattern_data,
+                                )
+                            }
+                        },
+                    ))
                     .unwrap();
+            }
+            WeekPatternsInput::PresentParent => {
+                sender.output(WeekPatternsOutput::PresentParent).unwrap();
             }
         }
     }

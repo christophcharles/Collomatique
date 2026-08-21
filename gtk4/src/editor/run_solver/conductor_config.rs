@@ -85,6 +85,9 @@ pub enum DialogInput {
 pub enum DialogOutput {
     Cancelled,
     Accepted(ConductorStrategy),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -681,14 +684,20 @@ impl SimpleComponent for Dialog {
                 self.update_state_from_strategy(strategy);
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Accepted(self.strategy.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Accepted(self.strategy.clone()))
+                        .unwrap();
+                }
             }
             DialogInput::UpdateWorkerCount(value) => {
                 if self.worker_count == value {

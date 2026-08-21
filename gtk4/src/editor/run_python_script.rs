@@ -50,17 +50,26 @@ pub enum DialogInput {
     ProcessFinished,
     Cmd(Result<collomatique_rpc::CmdMsg, collomatique_rpc::RpcDecodeError>),
     Error(String),
+    /// One of this window's own dialogs just closed: bring this window back to
+    /// the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogCmdOutput {
     AdjustScrolling,
     DelayedRpcAnswer(ResultMsg),
+    /// One of the dialogs that answer over the command sender just closed: this
+    /// window has to come back to the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     NewData(AppState<Data, Desc>),
+    /// This window just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -205,13 +214,16 @@ impl Component for Dialog {
         let error_dialog = error_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
-            .detach();
+            .forward(sender.input_sender(), |msg| match msg {
+                error_dialog::DialogOutput::PresentParent => DialogInput::Present,
+            });
 
         let warning_running = warning_running::Dialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
                 warning_running::DialogOutput::Accept => DialogInput::Cancel,
+                warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
         let ok_dialog = ok_dialog::Dialog::builder()
@@ -221,6 +233,7 @@ impl Component for Dialog {
                 ok_dialog::DialogOutput::Ok => DialogCmdOutput::DelayedRpcAnswer(
                     ResultMsg::AckGui(collomatique_rpc::GuiAnswer::OkDialogClosed),
                 ),
+                ok_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
             });
 
         let confirm_dialog = confirm_dialog::Dialog::builder()
@@ -233,6 +246,7 @@ impl Component for Dialog {
                 confirm_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
                     ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(false)),
                 ),
+                confirm_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
             });
 
         let input_dialog = input_dialog::Dialog::builder()
@@ -245,6 +259,7 @@ impl Component for Dialog {
                 input_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
                     ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(None)),
                 ),
+                input_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
             });
 
         let debug_view = DebugView::builder().launch(()).detach();
@@ -336,7 +351,10 @@ impl Component for Dialog {
                 }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 // Dropping the worker kills the subprocess if it is still running.
                 self.worker = None;
             }
@@ -388,7 +406,10 @@ impl Component for Dialog {
                 }
             },
             DialogInput::Accept => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 let app_session = self
                     .app_session
                     .take()
@@ -413,6 +434,9 @@ impl Component for Dialog {
                     .sender()
                     .send(error_dialog::DialogInput::Show(error))
                     .unwrap();
+            }
+            DialogInput::Present => {
+                self.move_front = true;
             }
         }
     }
@@ -440,6 +464,9 @@ impl Component for Dialog {
             }
             DialogCmdOutput::DelayedRpcAnswer(result_msg) => {
                 self.send_response(result_msg);
+            }
+            DialogCmdOutput::Present => {
+                self.move_front = true;
             }
         }
     }

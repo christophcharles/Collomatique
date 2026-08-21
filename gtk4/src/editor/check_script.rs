@@ -21,6 +21,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Run(PathBuf, String),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -116,13 +119,19 @@ impl SimpleComponent for Dialog {
                 self.text = text;
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Run => {
-                self.hidden = true;
-                sender
-                    .output(DialogOutput::Run(self.path.clone(), self.text.clone()))
-                    .unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender
+                        .output(DialogOutput::Run(self.path.clone(), self.text.clone()))
+                        .unwrap();
+                }
             }
         }
     }

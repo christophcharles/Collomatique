@@ -37,6 +37,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     ModelReady(ConfiguredColloscopeModel, ConductorPayload<Var>),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 /// Build the incremental epoch payload from the freshly-built model: every `StudentInGroup` base
@@ -230,12 +233,16 @@ impl Component for Dialog {
                 // log lines and its eventual result no-ops. The worker thread itself cannot be
                 // interrupted — it runs to completion off-screen and its model is dropped.
                 self.build_seq += 1;
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Close => {
                 // Only dismissable once the build has failed; ignored while a build is in flight.
-                if self.error.is_some() {
+                if self.error.is_some() && !self.hidden {
                     self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
                 }
             }
         }
@@ -256,7 +263,10 @@ impl Component for Dialog {
         }
         match result {
             Ok(model) => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 let payload = build_incremental_payload(&model);
                 sender
                     .output(DialogOutput::ModelReady(model, payload))

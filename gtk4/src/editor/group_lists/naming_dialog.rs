@@ -72,6 +72,9 @@ pub enum DialogOutput {
         ConductorPayload<Var>,
     ),
     Cancelled,
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[derive(Debug)]
@@ -364,8 +367,11 @@ impl Component for Dialog {
                 }
             }
             DialogInput::Cancel => {
-                self.hidden = true;
-                sender.output(DialogOutput::Cancelled).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
+                }
             }
             DialogInput::Accept => {
                 // "Valider" is insensitive until the model exists, so a missing model here can
@@ -390,7 +396,10 @@ impl Component for Dialog {
                     },
                 };
 
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
                 sender
                     .output(DialogOutput::Accepted(plan, names, model, payload))
                     .unwrap();

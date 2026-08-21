@@ -46,6 +46,9 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Accepted(collomatique_state_colloscopes::week_patterns::WeekPattern),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 #[relm4::component(pub)]
@@ -235,24 +238,30 @@ impl SimpleComponent for Dialog {
                 self.update_factory();
             }
             DialogInput::Cancel => {
-                self.hidden = true;
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                }
             }
             DialogInput::Accept => {
-                self.hidden = true;
-                // Fold the positional bits back into the sparse exclusion set.
-                let excluded_weeks = self
-                    .weeks_state
-                    .walk(&self.periods)
-                    .zip(self.weeks.iter())
-                    .filter_map(|((_period_id, week_id, _week), active)| {
-                        (!*active).then_some(week_id)
-                    })
-                    .collect();
-                let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
-                    name: self.name.clone(),
-                    excluded_weeks,
-                };
-                sender.output(DialogOutput::Accepted(week_pattern)).unwrap();
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    // Fold the positional bits back into the sparse exclusion set.
+                    let excluded_weeks = self
+                        .weeks_state
+                        .walk(&self.periods)
+                        .zip(self.weeks.iter())
+                        .filter_map(|((_period_id, week_id, _week), active)| {
+                            (!*active).then_some(week_id)
+                        })
+                        .collect();
+                    let week_pattern = collomatique_state_colloscopes::week_patterns::WeekPattern {
+                        name: self.name.clone(),
+                        excluded_weeks,
+                    };
+                    sender.output(DialogOutput::Accepted(week_pattern)).unwrap();
+                }
             }
             DialogInput::UpdateName(new_name) => {
                 if self.name == new_name {

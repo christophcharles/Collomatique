@@ -23,6 +23,9 @@ pub enum DialogOutput {
     Quit,
     /// `Some(version)` when the user asked not to be warned about it again
     Acknowledged(Option<Version>),
+    /// The dialog just closed: whoever owns the window underneath should bring
+    /// it back to the front, because Windows will not do it on its own.
+    PresentParent,
 }
 
 impl Dialog {
@@ -161,15 +164,20 @@ impl SimpleComponent for Dialog {
             }
             DialogInput::SetSilence(silence) => self.silence = silence,
             DialogInput::Acknowledge => {
-                self.hidden = true;
-                let silenced = self.silence.then(|| self.version.clone());
-                sender.output(DialogOutput::Acknowledged(silenced)).unwrap()
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::PresentParent).unwrap();
+                    let silenced = self.silence.then(|| self.version.clone());
+                    sender.output(DialogOutput::Acknowledged(silenced)).unwrap()
+                }
             }
             // Quitting records nothing, even with the box ticked: the user
             // never got past the warning.
             DialogInput::Quit => {
-                self.hidden = true;
-                sender.output(DialogOutput::Quit).unwrap()
+                if !self.hidden {
+                    self.hidden = true;
+                    sender.output(DialogOutput::Quit).unwrap()
+                }
             }
         }
     }
