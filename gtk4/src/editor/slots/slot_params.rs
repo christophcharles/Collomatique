@@ -7,6 +7,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     /// Subject of the slot being edited/created, echoed back on Accept
     /// (a slot cannot change subject).
@@ -163,7 +164,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -332,6 +333,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             subject_id: None,
             subject_name: String::new(),
@@ -355,9 +357,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(subject_name, teachers, week_patterns, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.subject_name = subject_name;
                 self.teachers = teachers;
@@ -396,6 +400,12 @@ impl SimpleComponent for Dialog {
             DialogInput::UpdateExtraInfo(extra_info) => {
                 self.extra_info = extra_info;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

@@ -12,6 +12,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
@@ -120,7 +121,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -258,6 +259,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
@@ -279,9 +281,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(subjects, week_patterns, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.subjects = subjects;
                 self.week_patterns = week_patterns;
@@ -338,6 +342,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

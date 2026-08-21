@@ -8,6 +8,7 @@ use collomatique_state_colloscopes::export_config;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     sheet_display_name: String,
     config: export_config::PerStudentGroupsConfig,
@@ -62,7 +63,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -155,6 +156,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             sheet_display_name: params,
             config: export_config::PerStudentGroupsConfig::default_all_groups(),
@@ -167,10 +169,12 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(config) => {
                 self.config = config;
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
             }
             DialogInput::Cancel => {
@@ -206,6 +210,12 @@ impl SimpleComponent for Dialog {
                 }
                 self.config.show_tel = show_tel;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

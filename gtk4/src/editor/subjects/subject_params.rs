@@ -13,6 +13,7 @@ use std::num::NonZeroU32;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     params: collomatique_state_colloscopes::SubjectParameters,
     has_interrogations: bool,
@@ -287,7 +288,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -734,6 +735,7 @@ impl SimpleComponent for Dialog {
 
         let mut model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             params: params.clone(),
             interrogation_params: Self::interrogation_params_from_params(&params),
@@ -759,9 +761,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(global_first_week, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.periodicity_panel = Self::periodicity_panel_from_params(&params);
                 self.exactly_periodic_params = Self::periodicity_from_params(&params);
@@ -999,6 +1003,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

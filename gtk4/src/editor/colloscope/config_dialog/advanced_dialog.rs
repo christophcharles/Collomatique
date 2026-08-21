@@ -7,6 +7,7 @@ use collomatique_constraints_colloscopes::SolveConfig;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     /// Whether the cross-fixed-period constraints are softened (objectified) rather than kept hard.
     objectify_enabled: bool,
@@ -43,7 +44,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -158,6 +159,7 @@ impl SimpleComponent for Dialog {
         let defaults = SolveConfig::default();
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             objectify_enabled: defaults.objectify_cross_fixed_period.is_some(),
             objectify_weight: defaults.objectify_cross_fixed_period.unwrap_or(0.),
@@ -171,9 +173,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(objectify, l1_anchor_weight) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 match objectify {
                     Some(weight) => {
@@ -218,6 +222,12 @@ impl SimpleComponent for Dialog {
                 }
                 self.l1_anchor_weight = value;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

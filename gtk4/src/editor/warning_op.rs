@@ -15,6 +15,7 @@ pub struct WarningLine {
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     warnings: TypedListView<WarningLine, gtk::NoSelection>,
 }
 
@@ -127,6 +128,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             warnings,
         };
 
@@ -138,9 +140,11 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(warnings) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.warnings.clear();
                 self.warnings.extend_from_iter(warnings);
             }
@@ -152,6 +156,12 @@ impl SimpleComponent for Dialog {
                 self.hidden = true;
                 sender.output(DialogOutput::Cancel).unwrap()
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.dialog.present();
         }
     }
 }

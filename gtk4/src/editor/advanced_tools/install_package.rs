@@ -17,6 +17,7 @@ use super::python_packages::InstallCommand;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// What the entry holds.
     ///
     /// Kept in the model because a `SimpleComponent`'s `update` cannot reach
@@ -52,7 +53,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (600, 400),
             set_resizable: true,
@@ -119,6 +120,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             package: String::new(),
             debug_view,
             process: None,
@@ -130,12 +132,14 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             // The log is deliberately not cleared: each install announces
             // itself with its own line, so keeping it means a second install
             // does not erase what the first one said.
             DialogInput::Show => {
                 self.hidden = false;
+                self.move_front = true;
             }
             // Closing does not kill anything: the window hides while pip
             // finishes, and reopening shows the same log with "Installer" still
@@ -224,6 +228,12 @@ impl SimpleComponent for Dialog {
                     }));
                 }
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

@@ -7,6 +7,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     info_text: String,
     placeholder_text: String,
@@ -36,7 +37,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: false,
             #[watch]
@@ -98,6 +99,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             info_text: String::new(),
             placeholder_text: String::new(),
@@ -111,9 +113,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(info_text, placeholder_text) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.info_text = info_text;
                 self.placeholder_text = placeholder_text;
@@ -136,6 +140,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             widgets.entry.grab_focus();
         }

@@ -14,6 +14,7 @@ use crate::tools::messages::MessageRow;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     subject_name: String,
     ordered_slots: Vec<(collomatique_state_colloscopes::SlotId, String)>,
@@ -195,7 +196,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -361,6 +362,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             subject_name: String::new(),
             ordered_slots: Vec::new(),
@@ -387,6 +389,7 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(
                 subject_name,
@@ -396,6 +399,7 @@ impl SimpleComponent for Dialog {
                 rule,
             ) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.subject_name = subject_name;
                 self.ordered_slots = ordered_slots;
@@ -438,6 +442,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);

@@ -5,6 +5,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     version: Version,
     silence: bool,
 }
@@ -139,6 +140,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             version: Version::new(0, 0, 0),
             silence: false,
         };
@@ -149,11 +151,13 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(version) => {
                 self.version = version;
                 self.silence = false;
                 self.hidden = false;
+                self.move_front = true;
             }
             DialogInput::SetSilence(silence) => self.silence = silence,
             DialogInput::Acknowledge => {
@@ -167,6 +171,12 @@ impl SimpleComponent for Dialog {
                 self.hidden = true;
                 sender.output(DialogOutput::Quit).unwrap()
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.dialog.present();
         }
     }
 }

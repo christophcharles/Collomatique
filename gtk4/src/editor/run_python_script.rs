@@ -23,6 +23,7 @@ mod warning_running;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     path: PathBuf,
     script: String,
     end_with_error: bool,
@@ -72,7 +73,7 @@ impl Component for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (700, 400),
             set_resizable: true,
@@ -254,6 +255,7 @@ impl Component for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             path: PathBuf::new(),
             script: String::new(),
             end_with_error: false,
@@ -278,9 +280,11 @@ impl Component for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         self.adjust_scrolling = false;
+        self.move_front = false;
         match msg {
             DialogInput::Run(path, script, app_state) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.path = path;
                 self.script = script;
                 self.app_session = Some(AppSession::new(app_state));
@@ -414,6 +418,9 @@ impl Component for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.adjust_scrolling {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(adj.upper());
@@ -426,6 +433,7 @@ impl Component for Dialog {
         _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        self.move_front = false;
         match message {
             DialogCmdOutput::AdjustScrolling => {
                 self.adjust_scrolling = true;

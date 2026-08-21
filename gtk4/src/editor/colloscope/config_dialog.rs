@@ -20,6 +20,7 @@ use crate::editor::run_solver::conductor_config;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// The parameters the assembled [`SolveConfig`] will build its model from, set on `Show`.
     params: Parameters,
     /// The problem/solver configuration this window is assembling. For now only the conductor
@@ -236,7 +237,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -490,6 +491,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
@@ -511,9 +513,11 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(config, strategy, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.params = params;
                 self.strategy = strategy;
                 self.set_data_from_config(config);
@@ -582,6 +586,12 @@ impl SimpleComponent for Dialog {
                     ))
                     .unwrap();
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

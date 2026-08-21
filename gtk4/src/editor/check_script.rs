@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     path: PathBuf,
     text: String,
 }
@@ -31,7 +32,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (700, 700),
             set_resizable: true,
@@ -95,6 +96,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             path: PathBuf::new(),
             text: String::new(),
         };
@@ -105,9 +107,11 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(path, text) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.path = path;
                 self.text = text;
             }
@@ -120,6 +124,12 @@ impl SimpleComponent for Dialog {
                     .output(DialogOutput::Run(self.path.clone(), self.text.clone()))
                     .unwrap();
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

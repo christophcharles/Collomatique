@@ -19,6 +19,7 @@ pub enum PrefillMode {
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
 
     // Left pane: the general parameters
@@ -106,7 +107,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -334,6 +335,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             selected_name: String::new(),
             selected_students_per_group_minimum: 1,
@@ -361,9 +363,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(group_list_data, filtered_students) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.filtered_students = filtered_students;
                 self.prefill_mode = match group_list_data.filling() {
@@ -459,6 +463,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         if self.should_redraw {
             widgets.params_scrolled_window.vadjustment().set_value(0.);
             widgets.prefill_scrolled_window.vadjustment().set_value(0.);

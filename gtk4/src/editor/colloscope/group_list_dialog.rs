@@ -8,6 +8,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     students: collomatique_state_colloscopes::students::Students,
     group_list: collomatique_state_colloscopes::group_lists::GroupList,
@@ -64,7 +65,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -130,6 +131,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             students: collomatique_state_colloscopes::students::Students::default(),
             group_list: collomatique_state_colloscopes::group_lists::GroupList::default(),
@@ -147,9 +149,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(students, group_list, groups_for_students) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.students = students;
                 self.group_list = group_list;
@@ -186,6 +190,9 @@ impl SimpleComponent for Dialog {
         if self.should_redraw {
             let adj = widgets.scrolled_window.vadjustment();
             adj.set_value(0.);
+        }
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

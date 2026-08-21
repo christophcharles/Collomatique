@@ -16,6 +16,7 @@ const SEED_CANONICAL_MAX: u32 = 3;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     should_redraw: bool,
     /// Weight of the "share as few pairs as possible" objective term.
     w_pairs: f64,
@@ -75,7 +76,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -235,6 +236,7 @@ impl SimpleComponent for Dialog {
         let defaults = ObjectiveWeights::default();
         let model = Dialog {
             hidden: true,
+            move_front: false,
             should_redraw: false,
             w_pairs: defaults.w_pairs,
             w_template: defaults.w_template,
@@ -250,9 +252,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.should_redraw = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(weights, canonical_range) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.should_redraw = true;
                 self.w_pairs = weights.w_pairs;
                 self.w_template = weights.w_template;
@@ -308,6 +312,12 @@ impl SimpleComponent for Dialog {
                 }
                 self.canonical_max = value;
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

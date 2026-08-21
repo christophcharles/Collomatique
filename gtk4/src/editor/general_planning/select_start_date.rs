@@ -7,6 +7,7 @@ use relm4::{adw, gtk};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     start_date: collomatique_time::WeekStart,
     current_selected_date: chrono::NaiveDate,
     update_date: bool,
@@ -66,7 +67,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: false,
             #[watch]
@@ -144,6 +145,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             start_date: collomatique_time::WeekStart::new(
                 chrono::NaiveDate::from_ymd_opt(2025, 09, 01).unwrap(),
             )
@@ -159,9 +161,11 @@ impl SimpleComponent for Dialog {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.update_date = false;
+        self.move_front = false;
         match msg {
             DialogInput::Show(date) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.start_date = date;
                 self.current_selected_date = *self.start_date.monday();
                 self.update_date = true;
@@ -183,6 +187,9 @@ impl SimpleComponent for Dialog {
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
+        }
         widgets.calendar.clear_marks();
         if self.start_date.monday().month0() == self.current_selected_date.month0() {
             widgets.calendar.mark_day(self.start_date.monday().day());

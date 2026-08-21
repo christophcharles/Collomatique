@@ -6,6 +6,7 @@ use std::path::PathBuf;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     path: PathBuf,
     caveats: BTreeSet<collomatique_storage::Caveat>,
 }
@@ -106,6 +107,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             path: PathBuf::new(),
             caveats: BTreeSet::new(),
         };
@@ -116,13 +118,21 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(path, caveats) => {
                 self.path = path;
                 self.caveats = caveats;
                 self.hidden = false;
+                self.move_front = true;
             }
             DialogInput::Hide => self.hidden = true,
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.dialog.present();
         }
     }
 }

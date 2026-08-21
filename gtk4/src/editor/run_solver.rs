@@ -36,6 +36,7 @@ pub struct DialogSettings {
 
 pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     hidden: bool,
+    move_front: bool,
     is_running: bool,
     // True while the (slow, off-thread) `StrategySubprocess::spawn` is in flight; the view shows
     // a dedicated "Initialisation..." screen and hides the normal solve content meanwhile.
@@ -131,7 +132,7 @@ where
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_default_size: (700, 400),
             set_resizable: true,
@@ -513,6 +514,7 @@ where
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             is_running: false,
             initializing: false,
             end_with_error: false,
@@ -547,9 +549,11 @@ where
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.move_front = false;
         match msg {
             DialogInput::Run(strategy, model, payload) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.is_running = true;
                 self.initializing = true;
                 self.end_with_error = false;
@@ -801,6 +805,7 @@ where
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        self.move_front = false;
         match msg {
             DialogCommandOutput::Tick(epoch) => {
                 // Drop stale ticks from a previous run and let the loop die once the solve has
@@ -830,6 +835,12 @@ where
                     Err(_e) => {} // Ignore message if the dialog was hidden during init
                 }
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

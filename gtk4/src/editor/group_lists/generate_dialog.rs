@@ -22,6 +22,7 @@ use crate::editor::run_solver::conductor_config;
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// The parameters the request is assembled against, set on `Show` and echoed back on
     /// `Accepted` so the rest of the chain builds its model from exactly these.
     params: Parameters,
@@ -329,7 +330,7 @@ impl SimpleComponent for Dialog {
 
     view! {
         #[root]
-        adw::Window {
+        root_window = adw::Window {
             set_modal: true,
             set_resizable: true,
             #[watch]
@@ -596,6 +597,7 @@ impl SimpleComponent for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             params: Parameters::default(),
             strategy: ConductorStrategy::with_parallelism_defaults(),
             conductor_config_dialog,
@@ -617,9 +619,11 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(strategy, weights, canonical_range, params) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.params = params;
                 self.strategy = strategy;
                 self.weights = weights;
@@ -683,6 +687,12 @@ impl SimpleComponent for Dialog {
                     ))
                     .unwrap();
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

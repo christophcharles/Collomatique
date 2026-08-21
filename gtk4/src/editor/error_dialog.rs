@@ -4,6 +4,7 @@ use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     error_msg: String,
 }
 
@@ -86,6 +87,7 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let model = Dialog {
             hidden: true,
+            move_front: false,
             error_msg: String::new(),
         };
         let widgets = view_output!();
@@ -94,12 +96,20 @@ impl SimpleComponent for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(text) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.error_msg = text;
             }
             DialogInput::Hide => self.hidden = true,
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.dialog.present();
         }
     }
 }

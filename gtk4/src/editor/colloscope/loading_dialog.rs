@@ -17,6 +17,7 @@ use crate::widgets::debug_view::{DebugView, DebugViewInput};
 /// switches to an in-place error state, dismissed with "Fermer".
 pub struct Dialog {
     hidden: bool,
+    move_front: bool,
     /// `None` while building; `Some(message)` once the build has failed (error state).
     error: Option<String>,
     /// Discards log lines and build results from a superseded `Show` (or from after a cancel).
@@ -81,7 +82,7 @@ impl Component for Dialog {
 
     view! {
         #[root]
-        gtk::Window {
+        root_window = gtk::Window {
             set_modal: true,
             set_default_size: (600, 450),
             #[watch]
@@ -182,6 +183,7 @@ impl Component for Dialog {
 
         let model = Dialog {
             hidden: true,
+            move_front: false,
             error: None,
             build_seq: 0,
             debug_view,
@@ -193,9 +195,11 @@ impl Component for Dialog {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.move_front = false;
         match msg {
             DialogInput::Show(config, params, colloscope) => {
                 self.hidden = false;
+                self.move_front = true;
                 self.error = None;
                 // Any build still running from a previous opening is now stale.
                 self.build_seq += 1;
@@ -243,6 +247,7 @@ impl Component for Dialog {
         sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
+        self.move_front = false;
         let DialogCommandOutput::Built(seq, result) = msg;
         // A stale result: the build was cancelled, or superseded by a later `Show`, while it was
         // running. Drop it.
@@ -260,6 +265,12 @@ impl Component for Dialog {
             Err(e) => {
                 self.error = Some(e);
             }
+        }
+    }
+
+    fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if self.move_front {
+            widgets.root_window.present();
         }
     }
 }

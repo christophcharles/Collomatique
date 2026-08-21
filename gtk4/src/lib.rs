@@ -63,6 +63,7 @@ pub struct AppModel {
     state: GlobalState,
     next_warn_msg: Option<AppInput>,
     update_about: Option<()>,
+    present_window: Option<()>,
     main_window_sensitive: bool,
 }
 
@@ -80,6 +81,9 @@ impl AppModel {
 #[derive(Debug)]
 pub enum AppInput {
     Ignore,
+    /// Bring the main window to the front. Sent at startup, because merely
+    /// showing a window does not make Windows give it the foreground.
+    Present,
     AcknowledgeDevelopmentVersion(collomatique_settings::Version),
     WarnDirty,
     OkDirty,
@@ -356,10 +360,12 @@ impl Component for AppModel {
             next_warn_msg: None,
             actions,
             update_about: None,
+            present_window: None,
             main_window_sensitive: true,
         };
         let widgets = view_output!();
 
+        sender.input(AppInput::Present);
         sender.input(if params.new {
             AppInput::NewColloscope(params.file_name.clone())
         } else {
@@ -376,6 +382,9 @@ impl Component for AppModel {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
+            }
+            AppInput::Present => {
+                self.present_window = Some(());
             }
             AppInput::AcknowledgeDevelopmentVersion(version) => {
                 collomatique_settings::development_warning::acknowledge(&version);
@@ -611,6 +620,7 @@ impl Component for AppModel {
     ) {
         self.update(message, sender.clone(), root);
         self.update_about_dialog(widgets);
+        self.update_present_window(widgets);
         self.update_view(widgets, sender);
     }
 
@@ -636,6 +646,12 @@ impl AppModel {
     fn update_about_dialog(&mut self, widgets: &mut <Self as Component>::Widgets) {
         if self.update_about.take().is_some() {
             widgets.about_dialog.present(Some(&widgets.root_window));
+        }
+    }
+
+    fn update_present_window(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if self.present_window.take().is_some() {
+            widgets.root_window.present();
         }
     }
 }
