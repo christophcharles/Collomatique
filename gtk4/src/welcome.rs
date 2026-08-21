@@ -9,6 +9,9 @@ use std::path::PathBuf;
 
 use collomatique_settings::recent_files::{self, Entry};
 
+/// How wide the welcome screen is, buttons and list of recent files alike
+const WELCOME_WIDTH: i32 = 400;
+
 pub struct WelcomePanel {
     recents: FactoryVecDeque<RecentRow>,
 }
@@ -69,6 +72,14 @@ impl SimpleComponent for WelcomePanel {
                 set_valign: gtk::Align::Center,
                 set_hexpand: true,
                 set_vexpand: true,
+                // The column is this wide whatever is in it, so that the two
+                // buttons keep one size: without it they are as wide as their
+                // own labels on a first run and as wide as the list of files
+                // afterwards, and the welcome screen changes shape under the
+                // user as they use it. The clamp on the list below is the other
+                // half of the promise -- this is a floor, and a long file name
+                // would walk straight through it.
+                set_width_request: WELCOME_WIDTH,
 
                 gtk::Button::with_label("Commencer un nouveau colloscope") {
                     set_margin_all: 5,
@@ -85,6 +96,10 @@ impl SimpleComponent for WelcomePanel {
                     set_orientation: gtk::Orientation::Vertical,
                     set_margin_top: 30,
                     set_spacing: 10,
+                    // The margin the buttons above carry, so that the list ends
+                    // where they end.
+                    set_margin_start: 5,
+                    set_margin_end: 5,
                     // Nothing opened yet, nothing to show: a first run gets the
                     // two buttons alone, as before.
                     #[watch]
@@ -95,11 +110,21 @@ impl SimpleComponent for WelcomePanel {
                         set_label: "Fichiers récents",
                         set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                     },
-                    #[local_ref]
-                    recents_widget -> gtk::ListBox {
-                        add_css_class: "boxed-list",
-                        set_selection_mode: gtk::SelectionMode::None,
-                        set_width_request: 400,
+                    // A row asks for as much width as its text would like,
+                    // however long that is, and nothing above would refuse it:
+                    // the column sits centered in a window with room to spare.
+                    // The clamp is the refusal, and it is what keeps the width
+                    // of the welcome screen from following the length of a file
+                    // name -- the rows stay put and their text ellipsizes.
+                    adw::Clamp {
+                        set_maximum_size: WELCOME_WIDTH,
+
+                        #[wrap(Some)]
+                        #[local_ref]
+                        set_child = recents_widget -> gtk::ListBox {
+                            add_css_class: "boxed-list",
+                            set_selection_mode: gtk::SelectionMode::None,
+                        },
                     },
                 },
             },
@@ -202,6 +227,15 @@ impl FactoryComponent for RecentRow {
             set_use_markup: false,
             set_title: &self.title(),
             set_subtitle: &self.subtitle(),
+            // One line each, cut short with an ellipsis rather than wrapped:
+            // a row is a glance, and the whole of it is a hover away.
+            set_title_lines: 1,
+            set_subtitle_lines: 1,
+            // Which is this tooltip. It is the full path with the file name and
+            // its extension -- the two lines above show neither in full, and for
+            // a file that has moved away it is the only thing left saying where
+            // it used to be.
+            set_tooltip_text: Some(&self.entry.display.to_string_lossy()),
             set_activatable: self.available,
             set_sensitive: self.available,
             connect_activated[sender, path = self.entry.access.clone()] => move |_| {
