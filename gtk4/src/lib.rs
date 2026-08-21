@@ -372,7 +372,7 @@ impl Component for AppModel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match message {
             AppInput::Ignore => {
                 // This message exists only to be ignored (as its name suggests)
@@ -428,8 +428,9 @@ impl Component for AppModel {
             }
             AppInput::OpenExistingColloscopeWithDialog => {
                 sender.input(AppInput::StartOpenSaveDialog);
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::open_dialog().await {
+                    match tools::open_save::open_dialog(parent).await {
                         Some(path) => AppCommandOutput::OpenFileSelected(path),
                         None => AppCommandOutput::OpenFileNotSelected,
                     }

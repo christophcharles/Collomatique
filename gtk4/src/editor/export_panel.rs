@@ -605,7 +605,7 @@ impl Component for ExportPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         match message {
             ExportPanelInput::Update(config, file_name, annotations) => {
                 self.export_config = config;
@@ -623,8 +623,9 @@ impl Component for ExportPanel {
                         format!("{}.xlsx", super::DEFAULT_FILE_STEM).into(),
                     ),
                 };
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_xlsx_dialog(default).await {
+                    match tools::open_save::save_xlsx_dialog(parent, default).await {
                         Some(path) => ExportPanelCommandOutput::FileChosen(path),
                         None => ExportPanelCommandOutput::FileNotChosen,
                     }

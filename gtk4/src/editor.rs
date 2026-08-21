@@ -1024,7 +1024,7 @@ impl Component for EditorPanel {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         self.show_particular_panel = None;
         match message {
             EditorInput::Ignore => {}
@@ -1056,13 +1056,17 @@ impl Component for EditorPanel {
             EditorInput::SaveAsClicked => {
                 let default_path = self.file_name.path().cloned();
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_collomatique_dialog(match default_path {
-                        Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path),
-                        None => tools::open_save::DefaultSaveFile::SuggestedName(
-                            format!("{DEFAULT_FILE_STEM}.collomatique").into(),
-                        ),
-                    })
+                    match tools::open_save::save_collomatique_dialog(
+                        parent,
+                        match default_path {
+                            Some(path) => tools::open_save::DefaultSaveFile::ExistingFile(path),
+                            None => tools::open_save::DefaultSaveFile::SuggestedName(
+                                format!("{DEFAULT_FILE_STEM}.collomatique").into(),
+                            ),
+                        },
+                    )
                     .await
                     {
                         Some(path) => EditorCommandOutput::FileChosen(path),
@@ -1244,8 +1248,9 @@ impl Component for EditorPanel {
             }
             EditorInput::RunScriptClicked => {
                 sender.output(EditorOutput::StartOpenSaveDialog).unwrap();
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::open_python_dialog().await {
+                    match tools::open_save::open_python_dialog(parent).await {
                         Some(path) => EditorCommandOutput::ScriptChosen(path),
                         None => EditorCommandOutput::ScriptNotChosen,
                     }
@@ -1296,8 +1301,9 @@ impl Component for EditorPanel {
                         format!("{DEFAULT_FILE_STEM}.mps").into(),
                     ),
                 };
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
-                    match tools::open_save::save_mps_dialog(default).await {
+                    match tools::open_save::save_mps_dialog(parent, default).await {
                         Some(path) => EditorCommandOutput::MpsFileChosen(path),
                         None => EditorCommandOutput::MpsFileNotChosen,
                     }

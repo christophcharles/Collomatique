@@ -276,7 +276,7 @@ impl Component for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
         self.adjust_scrolling = false;
         match msg {
             DialogInput::Run(path, script, app_state) => {
@@ -350,7 +350,7 @@ impl Component for Dialog {
                         self.send_response(ResultMsg::generate_data_msg(data));
                     }
                     CmdMsg::GuiRequest(gui_cmd) => {
-                        self.handle_gui_request(sender, gui_cmd);
+                        self.handle_gui_request(sender, root, gui_cmd);
                     }
                     CmdMsg::SetData(data_stream) => {
                         let app_session = self
@@ -466,11 +466,16 @@ impl Dialog {
     fn handle_gui_request(
         &mut self,
         sender: ComponentSender<Self>,
+        root: &<Self as Component>::Root,
         gui_cmd: collomatique_rpc::cmd_msg::GuiMsg,
     ) {
         match gui_cmd {
             collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
                 let path = self.path.clone();
+                // These dialogs belong to this window: the script asks for them
+                // over RPC, but they are shown by the GUI process, on top of the
+                // script runner's own window.
+                let parent = crate::tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -479,6 +484,7 @@ impl Dialog {
                         .collect();
 
                     let file_name = crate::tools::open_save::generic_open_dialog(
+                        parent,
                         &params.title,
                         &ext_vec[..],
                         Some(path.as_path()),
@@ -493,6 +499,7 @@ impl Dialog {
                 });
             }
             collomatique_rpc::cmd_msg::GuiMsg::SaveFileDialog(params) => {
+                let parent = crate::tools::open_save::ParentWindowHandle::from_widget(root);
                 sender.oneshot_command(async move {
                     let ext_vec: Vec<_> = params
                         .list
@@ -501,6 +508,7 @@ impl Dialog {
                         .collect();
 
                     let file_name = crate::tools::open_save::generic_save_dialog(
+                        parent,
                         &params.title,
                         &ext_vec[..],
                         params.suggested_name.as_deref(),

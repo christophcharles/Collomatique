@@ -401,10 +401,12 @@ dependencies = [
  "collomatique-time",
  "collomatique-ui-text",
  "collomatique-xlsx",
+ "gdk4-win32",
  "glib-build-tools",
  "gtk4",
  "libadwaita",
  "non-empty-string",
+ "raw-window-handle",
  "relm4",
  "rfd",
  "tokio",
@@ -1225,6 +1227,31 @@ dependencies = [
  "libc",
  "pango-sys",
  "pkg-config",
+ "system-deps",
+]
+
+[[package]]
+name = "gdk4-win32"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e54beb3e19bff7ccc05153e043bf0eea9cf76c07a3387fb0151bfa0fbfce9df0"
+dependencies = [
+ "gdk4",
+ "gdk4-win32-sys",
+ "gio",
+ "glib",
+ "libc",
+]
+
+[[package]]
+name = "gdk4-win32-sys"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d554341f26b2f6191aaf2ecb4d0089f3696a40cadb2dba75dad03e48a6dc0eb9"
+dependencies = [
+ "gdk4-sys",
+ "glib-sys",
+ "libc",
  "system-deps",
 ]
 
