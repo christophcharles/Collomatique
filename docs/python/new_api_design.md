@@ -398,6 +398,13 @@ worker-killing `panic!`s:
   carrying the structured error data. The mapping is generated structurally from
   the (serde-able) `UpdateError` type, not matched arm by arm — a new Rust error
   variant must become a new Python-visible case, never a panic.
+- `UpdateError` itself, unparameterized, for the coarse door: what
+  `replace_all` was refused over is the whole document and not one family's
+  business, so it raises the base class, carrying the model's own sentence —
+  which names every invariant the tree broke, not just the first (§8). Message
+  only, and deliberately: a structured payload like the families' can be added
+  if scripts turn out to want one, and an alpha scripting surface is a place to
+  find that out.
 - `StaleHandleError` for access through a dead handle, `ValueError`-family
   conversion errors for invalid value contents (empty strings, bad ranges, sealed
   constructor violations such as a pairing rule whose antecedent equals its
@@ -405,9 +412,11 @@ worker-killing `panic!`s:
 - Document-plumbing errors (§9): `NoDocument` (nothing to open), `Cancelled` (the
   user dismissed a dialog), `DialogUnavailable` (a dialog asked for on a machine that
   cannot show one, §9.3), `NotHosted` (a host-only call made standalone),
-  `NoOrigin` (`save()` with nowhere to write), `IdCeilingExceeded` (a save the file
-  format cannot represent), `CaveatedOverwrite` (a bare `save()` back over a file that
-  was loaded with caveats). Both of the last two carry an instruction rather than just
+  `NoOrigin` (`save()` with nowhere to write), `ExportError` (an export could not be
+  produced or written — a workbook that could not be built and a file that could not
+  be written arrive alike, since to a script they mean the same thing, §9.4),
+  `IdCeilingExceeded` (a save the file format cannot represent), `CaveatedOverwrite`
+  (a bare `save()` back over a file that was loaded with caveats). Both of the last two carry an instruction rather than just
   a diagnosis: `IdCeilingExceeded` names `compacted()` as the way out (§9.5), and
   `CaveatedOverwrite` lists what was lost and names `ignore_caveats=True` (§9.2). Both
   are `SaveError`s, so a script that only cares that the write failed catches one
@@ -448,16 +457,31 @@ doc.replace_all(tree, "Rebuilt from scratch")   # one GlobalUpdate, one undo slo
 an invalid tree raises with the invariant diagnostics. `DocumentData` is built from
 the same `*Data` dataclasses, so the two interfaces share one vocabulary.
 
+The surface it landed with (`4c3ba5eb`): `label` is optional and defaults to
+« Mise à jour globale », the name the application's own global updates carry;
+the answer is an `OpResult` whose `warnings` is always empty, because a global
+update lands as given or is refused whole and so has nothing to repair; and,
+being an ordinary write, it folds into an open `doc.transaction(...)` like
+everything else. A refused tree changes nothing at all — the document is left
+bit-identical — and raises the base `UpdateError`, whose message itemizes
+*every* invariant the tree broke rather than stopping at the first, so a script
+fixing its tree does not do it one round trip at a time (§6).
+
 `snapshot()` is built — it landed with the values (§13.3), because it is a pure
 read and because it is what forces the values to be entity-complete (§2). The
 orders are carried by the containers themselves (dicts keep insertion order),
 and the sparse sections hold the stored rows only. What `replace_all` inherits
 is a question the snapshot never has to answer: a tree names its entities by id,
 and ids have no constructor (§2), so a script can rename, delete and rewire a
-snapshot, but cannot *add* an entity to one. Whether ids gain a document-scoped
-minting call, or a tree may key a new entry by something that means "give it a
-fresh id", or `replace_all` is simply the door for transformations that add
-nothing — step 4 decides; handing trees out forecloses none of the three.
+snapshot, but cannot *add* an entity to one. The three ways out were a
+document-scoped minting call on ids, a tree keying a new entry by something that
+means "give it a fresh id", and `replace_all` simply being the door for
+transformations that add nothing. The third is the one that landed: creating an
+entity is the incremental ops' business and stays theirs. Nothing enforces that
+on top of what is already there — every id in a tree is resolved against the
+receiving document by the argument convention (§5), and one that names nothing
+in it is refused like any other dead reference, which is exactly the rule. The
+other two remain addable later; choosing this forecloses neither.
 
 ## 9. Documents, dialogs and maintenance operations
 
@@ -883,12 +907,16 @@ first.
    doors it gates out (`group_lists.add_generated`, `colloscope.install`) land
    with step 5 below.
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
-   document plumbing of §9 — **the plumbing is done except export**, and it
-   came early rather than last: `load`/`save` with the caveat guard, the
-   `Origin` rule and `compacted()` landed right after the crate split
+   document plumbing of §9 — **done except `export_mps`**. The plumbing came
+   early rather than last: `load`/`save` with the caveat guard, the `Origin`
+   rule and `compacted()` landed right after the crate split
    (`12f9d959`…`20e4a7ca`), the hosted handoff in `8fd457f8`, the dialogs in
-   `6bc64975` and `f5ddc152`, and `default_document` in `8138f50d`. What
-   remains of this step is `replace_all` and the two exports of §9.4.
+   `6bc64975` and `f5ddc152`, and `default_document` in `8138f50d`. The rest
+   waited for the ops mirror: `replace_all` landed with the §8 decision it was
+   holding open (`4c3ba5eb`), and `doc.export_xlsx` with the `ExportError` of §6
+   (`b9dcd6a7`). What remains of this step is `export_mps` alone — it takes the
+   `ColloscopeSolveConfig` of §10 as its argument, so it lands once that
+   vocabulary is settled rather than fronting it.
 5. Solver (last), including the engine-location mechanism. The two landing
    doors are gated out of the ops mirror and land here with it —
    `group_lists.add_generated` and `colloscope.install` — since their payloads
