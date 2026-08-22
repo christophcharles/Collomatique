@@ -2796,6 +2796,197 @@ fn the_assignments_are_written_one_student_a_row_and_a_period_at_a_time() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The week patterns are added, rewritten and removed from python
+///
+/// The tenth family of the ops mirror, and the one whose removal *keeps* what
+/// pointed at it: a slot follows a pattern to know which weeks it runs on and
+/// an incompatibility follows one to know which weeks it applies on, and both
+/// hold it in a field whose empty value is the legal « toutes les semaines ».
+/// So the cascade clears the reference and the two rows survive, running every
+/// week from then on — the divergence from the legacy cleaning that `ops/` pins
+/// from the other side, said here from a script's.
+///
+/// The `update` cascades the other way about, into the colloscope: excluding a
+/// week makes interrogations impossible on it for every slot following the
+/// pattern, so the colles already written there go. The example has no
+/// colloscope and the write surface has no way to make one yet — that family is
+/// a later piece — so this runs in two stages, with rust writing the one colle
+/// in between, the way [a_cascade_reports_every_repair_and_what_needed_it]
+/// does.
+///
+/// Nothing else needs a fixture of its own: the example holds two patterns with
+/// one slot each, which is what the removal is about, and no incompatibility
+/// follows a pattern, which the script fixes for itself through `doc.incompats`
+/// — a published mutator, and the write whose undo slot carries another
+/// family's name.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// two patterns the example did not have are the two the script asked for,
+/// field by field.
+#[test]
+fn week_patterns_are_added_rewritten_and_removed() {
+    use collomatique_ops::{
+        ColloscopeUpdateOp, IncompatibilitiesUpdateOp, UpdateOp, WeekPatternsUpdateOp,
+    };
+    use collomatique_state_colloscopes::week_patterns::WeekPattern;
+
+    let dir = workspace("week-patterns-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let pattern_ids: Vec<_> = params.week_patterns.week_pattern_map.keys().collect();
+    assert!(
+        pattern_ids.len() >= 2,
+        "the script removes one pattern and narrows another"
+    );
+
+    // The slots following each pattern. The script finds them for itself, by
+    // reading `slot.week_pattern`; what rust asserts is that there is exactly
+    // one to find, since that is what the script's counting leans on.
+    let followers = |pattern| {
+        params
+            .slots
+            .all_slots()
+            .filter(move |(_id, slot)| slot.week_pattern == Some(pattern))
+            .map(|(id, _slot)| *id)
+            .collect::<Vec<_>>()
+    };
+    for pattern in &pattern_ids {
+        assert_eq!(
+            followers(*pattern).len(),
+            1,
+            "every pattern of the example is followed by exactly one slot"
+        );
+    }
+    assert!(
+        params
+            .incompats
+            .incompat_map
+            .values()
+            .all(|incompat| incompat.week_pattern_id.is_none()),
+        "no incompatibility of the example follows a pattern, so the script points one at it"
+    );
+
+    // The pattern the script removes, and the one it narrows in the second
+    // stage. Handed over as places in the patterns' own order, since a script
+    // reads its own ids off the document and rust cannot mint one for it.
+    let followed_index = 0usize;
+    let cell_pattern_index = 1usize;
+    let cell_pattern = pattern_ids[cell_pattern_index];
+    let cell_slot = followers(cell_pattern)[0];
+
+    // The cell rust writes between the stages: the first week that slot is
+    // really active on, which is where a colle may be written at all.
+    let (cell_week_index, cell_week) = params
+        .week_ids()
+        .enumerate()
+        .find(|(_index, week)| params.is_interrogation_possible(cell_slot, *week))
+        .expect("the slot is active on at least one week of its pattern");
+
+    // The first two weeks, which the script's `add` switches off, and the third,
+    // which its first rewrite switches off instead.
+    let early_weeks: Vec<_> = params.week_ids().take(3).collect();
+    assert_eq!(
+        early_weeks.len(),
+        3,
+        "the script names the first three weeks"
+    );
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: WeekPatternsUpdateOp| op.get_desc().1;
+    let some_pattern = pattern_ids[0];
+    let blank = WeekPattern {
+        name: String::new(),
+        excluded_weeks: BTreeSet::new(),
+    };
+    let add_label = label(WeekPatternsUpdateOp::AddNewWeekPattern(blank.clone()));
+    let update_label = label(WeekPatternsUpdateOp::UpdateWeekPattern(
+        some_pattern,
+        blank.clone(),
+    ));
+    let remove_label = label(WeekPatternsUpdateOp::DeleteWeekPattern(some_pattern));
+
+    // The one write of another family the script makes: the incompatibility it
+    // points at the doomed pattern, so that the removal has both of its kinds of
+    // site to repair.
+    let (some_incompat, incompat) = params
+        .incompats
+        .incompat_map
+        .iter()
+        .next()
+        .expect("the example holds incompatibilities");
+    let incompat_label = IncompatibilitiesUpdateOp::UpdateIncompat(some_incompat, incompat.clone())
+        .get_desc()
+        .1;
+
+    run_stages(
+        &[
+            include_str!("scripts/week_patterns_write_before.py"),
+            include_str!("scripts/week_patterns_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("followed_index", followed_index)?;
+            globals.set_item("cell_pattern_index", cell_pattern_index)?;
+            globals.set_item("cell_week_index", cell_week_index)?;
+            globals.set_item("add_label", &add_label)?;
+            globals.set_item("update_label", &update_label)?;
+            globals.set_item("remove_label", &remove_label)?;
+            globals.set_item("incompat_label", &incompat_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "prepared",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                    cell_slot,
+                    cell_week,
+                    BTreeSet::from([0]),
+                )),
+            );
+        },
+    );
+
+    // What the script's two adds asked for, as they stood when it saved: the
+    // first was rewritten twice after being created, the second never touched.
+    let written_out = vec![
+        WeekPattern {
+            name: "Semaines de rentrée".to_owned(),
+            excluded_weeks: BTreeSet::from([early_weeks[0], early_weeks[1]]),
+        },
+        blank,
+    ];
+
+    // The document the script saved holds everything it opened with, plus the
+    // two patterns it wrote — and those two are what it asked for.
+    let written = reload(&target);
+    let after = &written
+        .get_inner_data()
+        .params
+        .week_patterns
+        .week_pattern_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _pattern)| !pattern_ids.contains(id))
+        .map(|(_id, pattern)| pattern.clone())
+        .collect();
+
+    assert_eq!(added, written_out);
+    assert_eq!(after.len(), pattern_ids.len() + 2);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with

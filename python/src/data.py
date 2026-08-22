@@ -251,8 +251,8 @@ class SubjectData:
 class WeekPatternData:
     """A week pattern, detached from the document.
 
-    `doc.week_patterns[...].to_data()` hands one back, and the pattern mutators
-    will take one:
+    `doc.week_patterns[...].to_data()` hands one back, and
+    `doc.week_patterns.add` and `doc.week_patterns.update` take one:
 
         clm.WeekPatternData("Semaines paires", excluded_weeks={w1, w3})
 
@@ -272,6 +272,11 @@ class WeekPatternData:
     A week that runs no interrogations of its own may perfectly well be in the
     set. The model keeps the two apart, so that switching such a week back on
     brings back the pattern it had.
+
+    Adding a week to the set through `doc.week_patterns.update` is a write that
+    reaches the colloscope: a slot following the pattern holds no interrogation
+    on a week the pattern switches off, so the colles already written in those
+    cells go and the result reports it.
     """
 
     name: str
