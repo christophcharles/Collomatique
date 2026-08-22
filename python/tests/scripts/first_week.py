@@ -15,10 +15,11 @@ assert doc.periods is not doc.periods
 
 result = periods.set_first_week(monday)
 assert isinstance(result, collomatique.OpResult)
-# Setting a date creates nothing and breaks nothing, so there is nothing to
-# report — but the result says so rather than the call saying nothing at all.
-assert result.new_id is None
+# Setting a date breaks nothing, so there is nothing to report — but the result
+# says so rather than the call saying nothing at all.
 assert result.warnings == []
+# The op creates nothing, so the result carries nothing but its warnings.
+assert not hasattr(result, "new_id")
 
 got = doc.periods.first_week
 assert isinstance(got, datetime.date)

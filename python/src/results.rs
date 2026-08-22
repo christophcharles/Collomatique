@@ -10,8 +10,13 @@ use pyo3::prelude::*;
 /// What one write returned
 ///
 /// `warnings` are the repairs the cascade applied beyond what the call itself
-/// asked for. An empty list is the ordinary case, and a script that does not
-/// care about them can ignore the whole object.
+/// asked for, and they are the whole of it: a write that creates nothing hands
+/// back nothing else. An empty list is the ordinary case, and a script that
+/// does not care about them can ignore the whole object.
+///
+/// A write that *does* create something answers the `AddResult` subclass
+/// instead, which carries the handle of what it made beside the same warnings
+/// (`docs/python/ops_migration.md`). It lands with the first creating op.
 #[pyclass(module = "collomatique", frozen)]
 pub struct OpResult {
     warnings: Vec<Py<Warning>>,
@@ -26,17 +31,6 @@ impl OpResult {
 
 #[pymethods]
 impl OpResult {
-    /// The id the write created, or `None` when it created nothing
-    ///
-    /// Always `None` today: the only writes that exist are the two first-week
-    /// ones, and neither creates anything. It is here from the start so that
-    /// the shape of a result does not change under scripts when the write
-    /// surface brings creating ops with it.
-    #[getter]
-    fn new_id(&self) -> Option<Py<PyAny>> {
-        None
-    }
-
     /// The repairs the write had to apply, in the order it applied them
     #[getter]
     fn warnings(&self, py: Python<'_>) -> Vec<Py<Warning>> {
@@ -48,7 +42,7 @@ impl OpResult {
 
     fn __repr__(&self) -> String {
         format!(
-            "OpResult(new_id=None, warnings=[{}])",
+            "OpResult(warnings=[{}])",
             self.warnings
                 .iter()
                 .map(|warning| warning.get().__repr__())
