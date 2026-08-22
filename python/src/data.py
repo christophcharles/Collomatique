@@ -480,8 +480,8 @@ class PairingRuleSideData:
 class PairingRuleData:
     """A pairing rule, detached from the document.
 
-    `doc.pairings[...].to_data()` hands one back, and the pairing rule
-    mutators will take one:
+    `doc.pairings[...].to_data()` hands one back, and `doc.pairings.add` and
+    `doc.pairings.update` take one:
 
         clm.PairingRuleData(clm.PairingRuleSideData(maths),
                             clm.PairingRuleSideData(physics))

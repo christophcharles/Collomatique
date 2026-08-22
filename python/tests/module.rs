@@ -1523,6 +1523,126 @@ fn incompatibilities_are_added_rewritten_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The pairing rules are added, rewritten and removed from python
+///
+/// The second family of the ops mirror, and the twin of
+/// [incompatibilities_are_added_rewritten_and_removed]: nothing points at a
+/// pairing rule either, so a write of this family repairs nothing and the three
+/// ops are again wiring rather than model.
+///
+/// What this family has and the incompatibilities' has not is a refusal of its
+/// own — a rule about a subject that runs no interrogations is vacuous — so
+/// this is also the first family test that meets its own `PairingsError` and
+/// reads the op, the case and the subject the model named off it. The example
+/// holds subjects of both kinds, which is why the write test reads it rather
+/// than [pairings_document], the fixture the read test needed for lack of any
+/// rule at all.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// one rule the example did not have is the one the script asked for, field by
+/// field.
+#[test]
+fn pairing_rules_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::pairings::{PairingRule, RulePart};
+
+    let dir = workspace("pairings-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.pairings.pairing_rule_map.keys().collect();
+
+    // The subjects the script names, in the order it walks them: the three
+    // first that run colles, and the first that runs none. Both kinds have to
+    // be there — the second is the whole of what `PairingsError` is asserted on
+    // — so the fixture is checked before the script leans on it.
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 3,
+        "the script names three subjects that run colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+
+    // What the script's last accepted write asked for, built here so that the
+    // comparison is with the rule a reader of this test can see written out.
+    let written_out = PairingRule::new(
+        RulePart {
+            subject_id: with_colles[2],
+            should_have: false,
+        },
+        RulePart {
+            subject_id: with_colles[0],
+            should_have: true,
+        },
+        BTreeSet::from([first_period]),
+        true,
+    )
+    .expect("the antecedent and the consequent name different subjects");
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::PairingsUpdateOp| op.get_desc().1;
+    let some_rule = unsafe { collomatique_state_colloscopes::PairingRuleId::new(1) };
+    let add_label = label(collomatique_ops::PairingsUpdateOp::AddNewPairingRule(
+        written_out.clone(),
+    ));
+    let update_label = label(collomatique_ops::PairingsUpdateOp::UpdatePairingRule(
+        some_rule,
+        written_out.clone(),
+    ));
+    let remove_label = label(collomatique_ops::PairingsUpdateOp::DeletePairingRule(
+        some_rule,
+    ));
+
+    run(include_str!("scripts/pairings_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds everything it opened with, plus the
+    // one pairing rule it wrote — and that one is what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.pairings.pairing_rule_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _rule)| !before.contains(id))
+        .map(|(_id, rule)| rule.clone())
+        .collect();
+
+    assert_eq!(added, vec![written_out]);
+    assert_eq!(after.len(), before.len() + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with
