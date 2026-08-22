@@ -1772,6 +1772,128 @@ fn slot_pairing_rules_are_added_rewritten_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The limits are set, overridden and un-overridden from python
+///
+/// The fourth family of the ops mirror, and the first whose entities are not
+/// entities at all: the global entry and the per-student overrides are records
+/// the document holds one of, so the three ops are whole-entry writes and there
+/// is nothing to add or to count. What the script pins on that is the
+/// whole-entry rule itself — a field left at `None` in an override *disables*
+/// the global limit rather than inheriting it — read back through the resolved
+/// view it holds across every write.
+///
+/// The family keeps one refusal for the model, and it is the one op whose
+/// address may be right and whose request may still be wrong: removing an
+/// override a student does not have. That is what the script's `SettingsError`
+/// assertions read the op, the case and the student off; a student this
+/// document does not hold never reaches the model at all.
+///
+/// The example is what [the_settings_read_back_entry_by_entry] reads too: one
+/// override (Hermione's) and one student without one (Harry), which is the
+/// whole resolution shape and exactly what the two writes need.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// global entry it installed, the override it gave Harry, and Hermione's own,
+/// which no write of the script ever named.
+#[test]
+fn the_limits_are_set_overridden_and_un_overridden() {
+    use collomatique_state_colloscopes::settings::{Limits, SoftParam};
+
+    let dir = workspace("settings-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same students the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let student_named = |surname: &str| {
+        params
+            .students
+            .student_map
+            .iter()
+            .find(|(_id, student)| student.desc.surname == surname)
+            .unwrap_or_else(|| panic!("the example has {surname}"))
+            .0
+    };
+    let harry = student_named("Potter");
+    let hermione = student_named("Granger");
+
+    // The one override the example ships, and the one student without one:
+    // the fixture is checked before the script leans on it.
+    let hermione_before = params
+        .settings
+        .students
+        .get(&hermione)
+        .expect("Hermione has an override")
+        .clone();
+    assert!(
+        params.settings.students.get(&harry).is_none(),
+        "the script needs a student inheriting the global entry"
+    );
+    let before = params.settings.students.len();
+
+    // What the script's two last accepted writes asked for, built here so that
+    // the comparison is with the entries a reader of this test can see written
+    // out. Both leave fields at `None`, which is the whole-entry rule: they
+    // disable those limits rather than inheriting them.
+    let new_global = Limits {
+        interrogations_per_week_min: None,
+        interrogations_per_week_max: Some(SoftParam {
+            soft: false,
+            value: 3,
+        }),
+        max_interrogations_per_day: None,
+    };
+    let harry_override = Limits {
+        interrogations_per_week_min: Some(SoftParam {
+            soft: false,
+            value: 1,
+        }),
+        interrogations_per_week_max: None,
+        max_interrogations_per_day: Some(SoftParam {
+            soft: true,
+            value: std::num::NonZeroU32::new(2).expect("two is not zero"),
+        }),
+    };
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::SettingsUpdateOp| op.get_desc().1;
+    let global_label = label(collomatique_ops::SettingsUpdateOp::UpdateGlobalLimits(
+        new_global.clone(),
+    ));
+    let student_label = label(collomatique_ops::SettingsUpdateOp::UpdateStudentLimits(
+        harry,
+        harry_override.clone(),
+    ));
+    let remove_label = label(collomatique_ops::SettingsUpdateOp::RemoveStudentLimits(
+        harry,
+    ));
+
+    run(include_str!("scripts/settings_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("global_label", &global_label)?;
+        globals.set_item("student_label", &student_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds the two entries it wrote, and the one
+    // it never named is untouched.
+    let written = reload(&target);
+    let settings = &written.get_inner_data().params.settings;
+
+    assert_eq!(settings.global, new_global);
+    assert_eq!(settings.students.get(&harry), Some(&harry_override));
+    assert_eq!(settings.students.get(&hermione), Some(&hermione_before));
+    assert_eq!(settings.students.len(), before + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with

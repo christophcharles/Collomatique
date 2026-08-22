@@ -13,10 +13,25 @@
 //! three ways to get one differ in exactly that — the global entry never goes
 //! stale, a resolved view tracks an override appearing or vanishing, and a raw
 //! override view goes stale when the override is removed.
+//!
+//! Written through `set_global_limits`, `set_student_limits` and
+//! `remove_student_limits` — three whole-entry writes, since the entries
+//! themselves are wholes. Nothing in the document points at a limits entry —
+//! the per-student table is keyed by the student and names *them* — so no write
+//! of this family ever makes the cascade repair anything.
+//!
+//! The family keeps one refusal for the model, and it reaches a script as
+//! `SettingsError`: a student with no override of their own has nothing to
+//! remove, and `remove_student_limits` says so rather than quietly doing
+//! nothing. That the student is one this document holds is caught above the op,
+//! by the argument convention ([crate::handles::argument]), where the message
+//! can say which argument was wrong; and what a `LimitsData` carries is the
+//! value boundary's business.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyTuple};
 
+use collomatique_ops::{SettingsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::StudentId as RawStudentId;
 use collomatique_state_colloscopes::settings::Limits as RawLimits;
@@ -29,6 +44,7 @@ use crate::data::Value as _;
 use crate::errors::StaleHandleError;
 use crate::handles::{Handle, argument};
 use crate::ids::{IdClass, StudentId};
+use crate::results::OpResult;
 use crate::values::{Limit, limit, nonzero_limit};
 
 /// The settings of one document
@@ -128,9 +144,105 @@ impl Settings {
         PyTuple::new(py, rows)
     }
 
+    /// Rewrites the document-wide limits
+    ///
+    /// Takes a `LimitsData` and installs it whole: what the value says is what
+    /// the global entry becomes, and a field left at `None` disables that limit
+    /// for every student who has no override of their own.
+    ///
+    /// ```python
+    /// doc.settings.set_global_limits(collomatique.LimitsData(
+    ///     interrogations_per_week_max=collomatique.Limit(
+    ///         2, collomatique.Enforcement.STRICT)))
+    /// ```
+    ///
+    /// The global entry names no entity, so the model has nothing to object to
+    /// here: what the value carries is answered for when it is read, and the
+    /// write itself always goes through.
+    fn set_global_limits(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5). A `LimitsData` names none, but
+        // the order is the boundary's and not each value's.
+        let limits = LimitsData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Settings(SettingsUpdateOp::UpdateGlobalLimits(limits)),
+        )
+    }
+
+    /// Gives one student limits of their own, or rewrites the ones they have
+    ///
+    /// The override replaces the global entry **verbatim** for that student: a
+    /// field left at `None` disables the corresponding global limit rather than
+    /// inheriting it. That is the model's whole-entry rule, and this write
+    /// carries the value across untouched.
+    ///
+    /// ```python
+    /// doc.settings.set_student_limits(student, collomatique.LimitsData(
+    ///     interrogations_per_week_min=collomatique.Limit(
+    ///         4, collomatique.Enforcement.OBJECTIVE)))
+    /// ```
+    ///
+    /// Takes a [Student] handle or a [StudentId], as every argument of this api
+    /// does; one this document does not hold raises `StaleHandleError`. The
+    /// student is resolved before the value is read, so a call that is wrong
+    /// about both says which student it could not find rather than what was
+    /// wrong with a value meant for nobody.
+    fn set_student_limits(
+        &self,
+        py: Python<'_>,
+        student: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let student = argument::<Student>(&self.doc, student)?;
+        let limits = LimitsData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Settings(SettingsUpdateOp::UpdateStudentLimits(student, limits)),
+        )
+    }
+
+    /// Takes one student's override away, so that they inherit the global entry
+    /// again
+    ///
+    /// The student must have an override to begin with: removing one that is
+    /// not there is refused with a `SettingsError` rather than quietly doing
+    /// nothing, since a script asking for it is wrong about the document.
+    /// `doc.settings.override_for(student)` is how to ask whether there is one.
+    ///
+    /// The [Limits] view `override_for` handed out is bound to the entry, so it
+    /// goes stale here; the resolved view of `limits_for` lives on and falls
+    /// back to the global entry, which is the point of its being a view.
+    fn remove_student_limits(
+        &self,
+        py: Python<'_>,
+        student: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let student = argument::<Student>(&self.doc, student)?;
+
+        self.write(
+            py,
+            UpdateOp::Settings(SettingsUpdateOp::RemoveStudentLimits(student)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         let count = self.with_data(py, |data| data.params.settings.students.len());
         format!("<collomatique.Settings overrides={count}>")
+    }
+}
+
+impl Settings {
+    /// Writes through the document the view came from
+    ///
+    /// The whole family ends here: none of its three ops creates anything, so
+    /// none of them needs [crate::results::created]'s second half.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

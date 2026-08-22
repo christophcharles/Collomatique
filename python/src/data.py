@@ -589,7 +589,8 @@ class LimitsData:
     """The limits a student's interrogation schedule is held to, detached.
 
     `doc.settings.global_limits.to_data()` and the `Limits` sub-views hand one
-    back, and the settings mutators will take one:
+    back, and `doc.settings.set_global_limits` and
+    `doc.settings.set_student_limits` take one:
 
         clm.LimitsData(
             interrogations_per_week_min=clm.Limit(2, clm.Enforcement.STRICT))
