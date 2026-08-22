@@ -10,20 +10,39 @@
 //! The two ends are the [SlotPairingRuleSide] sub-views, bound to
 //! `(document, rule_id, side)` like their subject-level cousins, and they go
 //! stale with their rule.
+//!
+//! Written through `add`, `update` and `remove`, exactly as the subject-level
+//! pairings are. The family sits at the leaf of the reference graph — nothing
+//! in the document points at a slot pairing rule — so a removal takes nothing
+//! with it and no write of this family ever makes the cascade repair anything.
+//!
+//! Like its cousin, it keeps one refusal for the model, and that one reaches a
+//! script as `SlotPairingsError`: the two slots of a rule must belong to the
+//! same subject, since a document that pairs slots of two subjects is not one
+//! the model holds. Which subject a slot sits in is a statement about the
+//! document rather than about the value,
+//! which is why [crate::data::SlotPairingRuleData] leaves it to the write.
+//! What the model could otherwise object to is caught on this side, where the
+//! message can say which argument was wrong: a dead rule is the argument
+//! convention's business ([crate::handles::argument]), and a dead slot or a
+//! dead excluded period is the value boundary's.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
-use collomatique_state_colloscopes::InnerData;
+use collomatique_ops::{SlotPairingsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::SlotPairingRuleId as RawSlotPairingRuleId;
 use collomatique_state_colloscopes::slot_pairings::SlotRulePart;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::periods::Period;
 use crate::collections::slots::Slot;
+use crate::data::{SlotPairingRuleData, Value as _};
 use crate::errors::StaleHandleError;
-use crate::handles::{Handle, RuleSide, handle_iterator, named, no_such, quoted};
+use crate::handles::{Handle, RuleSide, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, SlotPairingRuleId};
+use crate::results::{AddResult, OpResult};
 
 /// The slot pairing rules of one document, in id order
 ///
@@ -101,8 +120,95 @@ impl SlotPairings {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a slot pairing rule, and hands back the handle of the new one
+    ///
+    /// Takes a `SlotPairingRuleData` — the whole of what a rule is, since the
+    /// entity and the op payload are the same type here — and answers an
+    /// `AddResult`, whose `created` is the `SlotPairingRule` the document just
+    /// minted.
+    ///
+    /// ```python
+    /// doc.slot_pairings.add(collomatique.SlotPairingRuleData(
+    ///     collomatique.SlotPairingRuleSideData(first_slot),
+    ///     collomatique.SlotPairingRuleSideData(second_slot, should_have=False)))
+    /// ```
+    ///
+    /// Both slots must belong to one subject, and the model refuses a rule
+    /// across two of them with a `SlotPairingsError`. That the two ends name
+    /// *different* slots is the value's own invariant, and it is refused a step
+    /// earlier, when the `SlotPairingRuleData` is read.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let rule = SlotPairingRuleData::from_py(&self.doc, data)?;
+
+        crate::results::created::<SlotPairingRule>(
+            py,
+            &self.doc,
+            UpdateOp::SlotPairings(SlotPairingsUpdateOp::AddNewSlotPairingRule(rule)),
+            |new_id| match new_id {
+                NewId::SlotPairingRuleId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a slot pairing rule whole
+    ///
+    /// The op carries the whole value, so this replaces every field at once:
+    /// what the `SlotPairingRuleData` says is what the rule becomes, both ends
+    /// included. The id stays, and so does every handle naming it — but the
+    /// `SlotPairingRuleSide` views keep reading the rule's *current* ends,
+    /// which is the point of their being views.
+    ///
+    /// The rule is resolved before the value is read, so a call that is wrong
+    /// about both says which rule it could not find rather than what was wrong
+    /// with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<SlotPairingRule>(&self.doc, key)?;
+        let rule = SlotPairingRuleData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::SlotPairings(SlotPairingsUpdateOp::UpdateSlotPairingRule(id, rule)),
+        )
+    }
+
+    /// Removes a slot pairing rule
+    ///
+    /// Nothing in the document points at a slot pairing rule, so the removal
+    /// takes nothing with it and the warnings are always empty. Handles naming
+    /// it go stale, like every other removal's, and so do the two side views it
+    /// handed out.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<SlotPairingRule>(&self.doc, key)?;
+
+        self.write(
+            py,
+            UpdateOp::SlotPairings(SlotPairingsUpdateOp::DeleteSlotPairingRule(id)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.SlotPairings count={}>", self.__len__(py))
+    }
+}
+
+impl SlotPairings {
+    /// Writes through the document the view came from
+    ///
+    /// The two mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

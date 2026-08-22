@@ -544,8 +544,8 @@ class SlotPairingRuleSideData:
 class SlotPairingRuleData:
     """A slot pairing rule, detached from the document.
 
-    `doc.slot_pairings[...].to_data()` hands one back, and the slot pairing
-    rule mutators will take one:
+    `doc.slot_pairings[...].to_data()` hands one back, and
+    `doc.slot_pairings.add` and `doc.slot_pairings.update` take one:
 
         clm.SlotPairingRuleData(clm.SlotPairingRuleSideData(first_slot),
                                 clm.SlotPairingRuleSideData(second_slot))

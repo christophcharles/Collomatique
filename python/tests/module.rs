@@ -1643,6 +1643,135 @@ fn pairing_rules_are_added_rewritten_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The slot pairing rules are added, rewritten and removed from python
+///
+/// The third family of the ops mirror, and the twin of
+/// [pairing_rules_are_added_rewritten_and_removed] one level down: nothing
+/// points at a slot pairing rule either, so a write of this family repairs
+/// nothing, and the family keeps exactly one refusal for the model — the two
+/// slots of a rule must be on the same subject, which is what the script's
+/// `SlotPairingsError` assertions read the op, the case and the two slots off.
+///
+/// The example is what both this and [the_slot_pairing_rules_read_back_rule_by_rule]
+/// read: it carries slot pairing rules of its own, so the foreign-handle
+/// refusal here is sharper than the subject-level one could be — the rule
+/// `other` hands out carries an id this document really does hold, and it is
+/// refused all the same.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// one rule the example did not have is the one the script asked for, field by
+/// field.
+#[test]
+fn slot_pairing_rules_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::slot_pairings::{SlotPairingRule, SlotRulePart};
+
+    let dir = workspace("slot-pairings-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.slot_pairings.slot_pairing_rule_map.keys().collect();
+
+    // The slots the script names, picked the way it picks them: the first three
+    // of the first subject that runs at least three. A slot of some other
+    // subject has to exist too — it is the whole of what `SlotPairingsError` is
+    // asserted on — so the fixture is checked before the script leans on it.
+    let slots_of = |subject_id| -> Vec<_> {
+        params
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+            .map(|(slot_id, _slot)| *slot_id)
+            .collect()
+    };
+    let subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .find(|subject_id| slots_of(*subject_id).len() >= 3)
+        .expect("the script needs a subject running three slots");
+    let slots = slots_of(subject);
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .keys()
+            .any(|other| other != subject && !slots_of(other).is_empty()),
+        "the script needs a slot of another subject"
+    );
+
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+
+    // What the script's last accepted write asked for, built here so that the
+    // comparison is with the rule a reader of this test can see written out.
+    let written_out = SlotPairingRule::new(
+        SlotRulePart {
+            slot_id: slots[2],
+            should_have: false,
+        },
+        SlotRulePart {
+            slot_id: slots[0],
+            should_have: true,
+        },
+        BTreeSet::from([first_period]),
+        true,
+    )
+    .expect("the antecedent and the consequent name different slots");
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::SlotPairingsUpdateOp| op.get_desc().1;
+    let some_rule = unsafe { collomatique_state_colloscopes::SlotPairingRuleId::new(1) };
+    let add_label =
+        label(collomatique_ops::SlotPairingsUpdateOp::AddNewSlotPairingRule(written_out.clone()));
+    let update_label = label(
+        collomatique_ops::SlotPairingsUpdateOp::UpdateSlotPairingRule(
+            some_rule,
+            written_out.clone(),
+        ),
+    );
+    let remove_label =
+        label(collomatique_ops::SlotPairingsUpdateOp::DeleteSlotPairingRule(some_rule));
+
+    run(include_str!("scripts/slot_pairings_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds everything it opened with, plus the
+    // one slot pairing rule it wrote — and that one is what it asked for.
+    let written = reload(&target);
+    let after = &written
+        .get_inner_data()
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _rule)| !before.contains(id))
+        .map(|(_id, rule)| rule.clone())
+        .collect();
+
+    assert_eq!(added, vec![written_out]);
+    assert_eq!(after.len(), before.len() + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with
