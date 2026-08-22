@@ -548,6 +548,304 @@ fn the_first_week_is_written_read_back_and_cleared() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The periods and the weeks are added, resized, cut, merged and removed
+///
+/// The fifteenth and last family of the ops mirror, and the calendar every
+/// other family stands on: `doc.periods` gains `add`, `set_week_count`,
+/// `remove_with_weeks`, `cut` and `merge_with_previous` beside the first-week
+/// pair that opened the mirror, and `doc.weeks` gains `set_status` and
+/// `set_annotation`.
+///
+/// The example holds no colle at all, so the three the cascades need are
+/// written by the script itself, through the surface piece 13 published — one
+/// on a week whose colles it switches off, one on a week the cut hands over,
+/// and one on a week a shrink drops. What rust asserts here is that the example
+/// really carries the shapes the script leans on: three periods, weeks enough
+/// in the second to cut it after the sixth, a week each pattern pair leaves out
+/// exactly once, and a subject with an enrolment row on the third period and no
+/// group list there — the one the script excludes, so that the removal cascade
+/// has an exclusion to repair beside its rows and its associations.
+///
+/// Rust reads back the file the script saved after the cut and the merge, and
+/// before the removal: the year the script left, period by period and week by
+/// week. The second period's own week ids, in their own order, are what says the
+/// cut and the merge really cancelled out.
+#[test]
+fn periods_and_weeks_are_added_resized_cut_merged_and_removed() {
+    use collomatique_ops::{ColloscopeUpdateOp, GeneralPlanningUpdateOp, SubjectsUpdateOp};
+    use collomatique_state_colloscopes::weeks::WeekDesc;
+    use collomatique_state_colloscopes::{PeriodId, WeekId};
+
+    let dir = workspace("calendar-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let weeks_of = |params: &collomatique_state_colloscopes::colloscope_params::Parameters,
+                    period: PeriodId| {
+        params
+            .weeks
+            .weeks_for_period(period)
+            .into_iter()
+            .flatten()
+            .map(|(week_id, _week)| *week_id)
+            .collect::<Vec<_>>()
+    };
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert_eq!(period_ids.len(), 3, "the script names three periods");
+    let original: Vec<Vec<WeekId>> = period_ids
+        .iter()
+        .map(|period| weeks_of(params, *period))
+        .collect();
+    assert!(
+        original[1].len() > 7,
+        "the script cuts the second period after its sixth week, and needs a tail"
+    );
+
+    // Every week of the example is left out by exactly one of its two patterns,
+    // which is what makes each week the script drops free exactly one exclusion
+    // — the assertion its `pattern_skipping` makes on its own side.
+    for week in params.week_ids() {
+        assert_eq!(
+            params
+                .week_patterns
+                .week_pattern_map
+                .values()
+                .filter(|pattern| pattern.excluded_weeks.contains(&week))
+                .count(),
+            1,
+            "exactly one of the example's patterns should skip each week"
+        );
+    }
+
+    // A colle can only be written where the model allows one *and* the slot's
+    // subject uses a group list with a group to name — the script's
+    // `writable_cell`, and the predicate the shrink point below is read off.
+    let writable = |week: WeekId| {
+        let Some((period, _position)) = params.weeks.week_position(week) else {
+            return false;
+        };
+        params.slots.subjects_with_slots().any(|subject| {
+            let bound = params
+                .group_lists
+                .subjects_associations
+                .get(&(period, subject))
+                .and_then(|group_list| params.group_lists.group_list_map.get(group_list))
+                .map(|group_list| group_list.params().group_names.len())
+                .unwrap_or(0);
+            bound > 0
+                && params
+                    .slots
+                    .slots_for_subject(subject)
+                    .into_iter()
+                    .flatten()
+                    .any(|(slot, _slot_desc)| params.is_interrogation_possible(*slot, week))
+        })
+    };
+
+    // The script shrinks the third period to just before the last week a colle
+    // can stand on, so that the colle it wrote there goes with the weeks.
+    let kept = original[2]
+        .iter()
+        .rposition(|week| writable(*week))
+        .expect("the third period holds a week a colle can be written on");
+    assert!(
+        original[2].len() - kept > 1,
+        "the shrink drops more than one week, so the removals' order shows"
+    );
+    assert!(
+        original[1].iter().take(6).any(|week| writable(*week))
+            && original[1].iter().skip(6).any(|week| writable(*week)),
+        "the second period holds a writable week on each side of the cut"
+    );
+
+    // The subject the script takes off the third period: one the example gives
+    // an enrolment row there and no group list, so its exclusion drops the row
+    // and nothing else — and the period removal that follows has an exclusion
+    // to repair beside its rows and its associations.
+    let spare = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .find(|subject| {
+            params
+                .assignments
+                .students(period_ids[2], *subject)
+                .is_some()
+                && !params
+                    .group_lists
+                    .subjects_associations
+                    .contains(&(period_ids[2], *subject))
+        })
+        .expect("the example gives a subject a row on the third period and no group list");
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .all(|subject| subject.excluded_periods.is_empty()),
+        "no subject of the example excludes a period, so the script's is the only one"
+    );
+
+    // The french labels this family's operations carry, so that the script's
+    // undo assertions pin the operations' own names and not merely some
+    // strings. Only the variant is read, so the payloads below are the nearest
+    // ones to hand — and the two ops that name their own direction get one
+    // label each way.
+    let label = |op: GeneralPlanningUpdateOp| op.get_desc().1;
+    let some_period = period_ids[0];
+    let add_label = label(GeneralPlanningUpdateOp::AddNewPeriod(1));
+    let week_count_label = label(GeneralPlanningUpdateOp::UpdatePeriodWeekCount(
+        some_period,
+        1,
+    ));
+    let remove_label = label(GeneralPlanningUpdateOp::DeletePeriodAndWeeks(some_period));
+    let cut_label = label(GeneralPlanningUpdateOp::CutPeriod(some_period, 1));
+    let merge_label = label(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(
+        some_period,
+    ));
+    let status_off_label = label(GeneralPlanningUpdateOp::UpdateWeekStatus(
+        some_period,
+        0,
+        false,
+    ));
+    let annotate_label = label(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+        some_period,
+        0,
+        Some(
+            "Vacances"
+                .to_owned()
+                .try_into()
+                .expect("a word is not the empty string"),
+        ),
+    ));
+    let clear_annotation_label = label(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+        some_period,
+        0,
+        None,
+    ));
+
+    // The two writes of other families the script makes, each carrying its own
+    // family's name: the colles the cascades need, and the exclusion the
+    // removal repairs.
+    let colle_label = ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+        params
+            .slots
+            .subjects_with_slots()
+            .flat_map(|subject| {
+                params
+                    .slots
+                    .slots_for_subject(subject)
+                    .into_iter()
+                    .flatten()
+            })
+            .map(|(slot, _slot_desc)| *slot)
+            .next()
+            .expect("the example holds slots"),
+        original[0][0],
+        BTreeSet::new(),
+    )
+    .get_desc()
+    .1;
+    let exclude_label = SubjectsUpdateOp::UpdatePeriodStatus(spare, period_ids[2], false)
+        .get_desc()
+        .1;
+
+    run(include_str!("scripts/calendar_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("week_count_label", &week_count_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        globals.set_item("cut_label", &cut_label)?;
+        globals.set_item("merge_label", &merge_label)?;
+        globals.set_item("status_off_label", &status_off_label)?;
+        globals.set_item("annotate_label", &annotate_label)?;
+        globals.set_item("clear_annotation_label", &clear_annotation_label)?;
+        globals.set_item("colle_label", &colle_label)?;
+        globals.set_item("exclude_label", &exclude_label)?;
+        Ok(())
+    });
+
+    // The year the script left: the three periods it opened with, then the one
+    // it added and the empty one after it.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params;
+    let after_periods: Vec<_> = after.periods.period_ids().collect();
+
+    assert_eq!(after_periods.len(), period_ids.len() + 2);
+    assert_eq!(after_periods[..3], period_ids[..]);
+    assert_eq!(weeks_of(after, after_periods[0]), original[0]);
+    assert_eq!(
+        weeks_of(after, after_periods[1]),
+        original[1],
+        "the cut and the merge cancelled out, week for week and in order",
+    );
+    assert_eq!(weeks_of(after, after_periods[2]), original[2][..kept]);
+
+    // The period the script grew to five weeks and shrank back to three: the
+    // two it kept are the ones it was made with, and the third is the one it
+    // annotated and switched the colles off on.
+    let fresh = weeks_of(after, after_periods[3]);
+    assert_eq!(fresh.len(), 3);
+    assert!(fresh.iter().all(|week| !original.concat().contains(week)));
+    assert_eq!(
+        after
+            .weeks
+            .weeks_desc_vec_for_period(after_periods[3])
+            .expect("the added period holds weeks"),
+        vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc {
+                interrogations: false,
+                annotation: Some(
+                    "Vacances"
+                        .to_owned()
+                        .try_into()
+                        .expect("a word is not the empty string")
+                ),
+            },
+        ],
+    );
+    assert!(weeks_of(after, after_periods[4]).is_empty());
+
+    // Two of the three colles are still there — the third stood on a week the
+    // shrink dropped — and the one the cut handed over and the merge brought
+    // back is on the tail of the second period, where it was written.
+    let cells: Vec<_> = written.get_inner_data().colloscope.iter().collect();
+    assert_eq!(cells.len(), 2);
+    assert!(cells.iter().all(
+        |((_slot, week), groups)| *groups == &BTreeSet::from([0]) && original[1].contains(week)
+    ));
+    assert!(
+        cells
+            .iter()
+            .any(|((_slot, week), _groups)| original[1][6..].contains(week)),
+        "the colle the cut carried is on a week of the tail",
+    );
+
+    // The exclusion the script made is what the file holds, and the row it
+    // dropped is gone with it.
+    assert_eq!(
+        after
+            .subjects
+            .ordered_subject_list
+            .get(&spare)
+            .expect("the subject is still there")
+            .excluded_periods,
+        BTreeSet::from([period_ids[2]]),
+    );
+    assert!(after.assignments.students(period_ids[2], spare).is_none());
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// Writes are taken back one at a time, and put back again
 ///
 /// The undone document is compared with the file it was loaded from: three

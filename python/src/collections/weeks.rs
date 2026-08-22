@@ -4,19 +4,38 @@
 //! A week belongs to a period, carries whether interrogations happen on it and
 //! an optional annotation, and — when the document has a start date — falls on
 //! a datable monday.
+//!
+//! Written through `set_status` and `set_annotation`, which are the two things
+//! a week says about itself. There is no `add` and no `remove` here: a week is
+//! created and destroyed by what happens to its period, so
+//! [crate::collections::periods] holds those — `add`, `set_week_count`,
+//! `remove_with_weeks` and `cut`.
+//!
+//! The model's own week ops address a week as a period and a position within
+//! it. The surface takes the `Week` handle instead — a script names a week the
+//! way it reads one — and the mutators translate, which is also why neither of
+//! them can meet the two refusals those ops carry: an unknown period and a
+//! position past the end are both about coordinates the mutator read off the
+//! document itself. What is left is the argument convention, where a week this
+//! document does not hold is caught before the op is built
+//! ([crate::handles::argument]).
 
 use chrono::{Days, NaiveDate};
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyTuple};
 
+use collomatique_ops::{GeneralPlanningUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::InnerData;
+use collomatique_state_colloscopes::PeriodId as RawPeriodId;
 use collomatique_state_colloscopes::WeekId as RawWeekId;
 
 use crate::Document;
 use crate::collections::periods::Period;
 use crate::errors::Error;
-use crate::handles::{Handle, handle_iterator, named, no_such};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such};
 use crate::ids::{IdClass, WeekId};
+use crate::results::OpResult;
 
 /// The weeks of one document, in global week order
 ///
@@ -47,6 +66,26 @@ impl Weeks {
         let id = named::<Week>(&self.doc, key)?;
         self.with_data(py, |data| Week::exists(data, id))
             .then_some(id)
+    }
+
+    /// The `(period, position in that period)` pair the week ops address a week
+    /// by
+    ///
+    /// The translation the two mutators share. The argument convention has just
+    /// found the week and nothing has called into python since, so the document
+    /// still holds it and it still has a position.
+    fn coordinates(&self, py: Python<'_>, id: RawWeekId) -> (RawPeriodId, usize) {
+        self.with_data(py, |data| data.params.weeks.week_position(id))
+            .expect("the argument convention has just found this week")
+    }
+
+    /// Writes through the document the view came from
+    ///
+    /// Neither mutator creates anything — a week is created by what happens to
+    /// its period — so neither needs [crate::results::created]'s second half.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 
@@ -80,6 +119,86 @@ impl Weeks {
 
     fn __contains__(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> bool {
         self.resolve(py, key).is_some()
+    }
+
+    /// Switches the colles of one week on or off
+    ///
+    /// A week that holds no interrogations is a week of the year the colles
+    /// skip — a holiday, the week of a mock exam — and it still exists, still
+    /// counts in the order, and still has its date. This is the flag
+    /// `week.interrogations` reads.
+    ///
+    /// ```python
+    /// doc.weeks.set_status(week, False)
+    /// ```
+    ///
+    /// Switching the colles off takes the ones already written on that week:
+    /// they cannot stand on a week that holds none, and the `OpResult` says
+    /// which went. Switching them back on only ever widens what the document
+    /// allows, so there is nothing to repair — and nothing comes back either:
+    /// the colles a week lost are gone, and turning it on again does not
+    /// remember them. Undo does.
+    fn set_status(
+        &self,
+        py: Python<'_>,
+        week: &Bound<'_, PyAny>,
+        active: bool,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Week>(&self.doc, week)?;
+        let (period_id, position) = self.coordinates(py, id);
+
+        self.write(
+            py,
+            UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::UpdateWeekStatus(
+                period_id, position, active,
+            )),
+        )
+    }
+
+    /// Annotates one week, or clears its annotation
+    ///
+    /// « Rentrée », « Vacances de Noël » — free text the application shows
+    /// beside the week, and `None` clears it. Nothing in the document reads an
+    /// annotation, so this repairs nothing and its `warnings` is always empty.
+    ///
+    /// ```python
+    /// doc.weeks.set_annotation(week, "Vacances")
+    /// doc.weeks.set_annotation(week, None)
+    /// ```
+    ///
+    /// The empty string is refused with a `ValueError` rather than taken as a
+    /// clear: the model types the field as an optional non-empty string, and a
+    /// week that says nothing is `None` here as it is everywhere else in this
+    /// api.
+    #[pyo3(signature = (week, annotation))]
+    fn set_annotation(
+        &self,
+        py: Python<'_>,
+        week: &Bound<'_, PyAny>,
+        annotation: Option<String>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Week>(&self.doc, week)?;
+        let (period_id, position) = self.coordinates(py, id);
+
+        // Written out rather than through a `?` on a `TryFrom`: the model's
+        // string type is foreign — it comes from `non_empty_string` — and this
+        // crate names it nowhere, so what fixes the type is the op field the
+        // value lands in.
+        let annotation = match annotation {
+            None => None,
+            Some(text) => Some(text.try_into().map_err(|_| {
+                PyValueError::new_err(
+                    "a week's annotation is a non-empty string or None, and '' is neither",
+                )
+            })?),
+        };
+
+        self.write(
+            py,
+            UpdateOp::GeneralPlanning(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+                period_id, position, annotation,
+            )),
+        )
     }
 
     fn __repr__(&self, py: Python<'_>) -> String {
