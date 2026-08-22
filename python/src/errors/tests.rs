@@ -1,5 +1,7 @@
 use super::*;
 
+use pyo3::types::PyDict;
+
 /// The interpreter these tests build their objects in
 ///
 /// `Python::initialize` is idempotent and the tests of a file share a process,

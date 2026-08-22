@@ -1,11 +1,12 @@
-//! The structural walk from one model error to python data
+//! The structural walk from one model value to python data
 //!
-//! `collomatique_ops::UpdateError` is a tree of externally-tagged enums —
-//! family, then op, then case — and it derives `Serialize`. So the walk over it
+//! The model describes what it refused (`collomatique_ops::UpdateError`) and
+//! what it repaired (`collomatique_state_colloscopes::Fix`) with trees of
+//! externally-tagged enums, and both derive `Serialize`. So the walk over them
 //! is a serde [Serializer] whose output is python objects rather than text:
-//! serde already knows the shape, and asking it means nothing here names an
-//! error variant. That is §6's constraint
-//! (`docs/python/new_api_design.md`): a case added in `ops/` reaches a script
+//! serde already knows the shape, and asking it means nothing here names a
+//! variant. That is §6's constraint (`docs/python/new_api_design.md`): a case
+//! added in `ops/`, or a repair added in `state-colloscopes/`, reaches a script
 //! on its own.
 //!
 //! What comes out:
@@ -15,14 +16,15 @@
 //!   a tuple or newtype variant is always a tuple, so a case that carries one
 //!   thing and a case that carries two look alike to the caller;
 //! - a struct variant is a one-key dict of a dict. No error in `ops/` has one
-//!   today; the walk must not fall over the first;
+//!   today, and every repair in `state-colloscopes/` is one;
 //! - a *named* newtype struct is the id class when its name is one of the
 //!   eleven (`crate::ids::from_serde`), and its inner value otherwise;
 //! - everything else is the obvious python equivalent — numbers, strings,
 //!   `None`, lists, dicts.
 //!
-//! It is `errors::from_data` that reads the three levels back off that
-//! shape.
+//! Two readers take that shape apart, and both start with [peel]: a refusal has
+//! three levels of it (`crate::errors::from_data`), and a repair has one
+//! ([repair], for `crate::results::Warning`).
 
 use pyo3::IntoPyObjectExt;
 use pyo3::prelude::*;
@@ -32,12 +34,31 @@ use serde::{Serialize, Serializer, ser};
 #[cfg(test)]
 mod tests;
 
-/// The python data one refused write's error becomes
-pub(crate) fn to_py<'py>(
+/// The python data one serde-able model value becomes
+pub(crate) fn to_py<'py, T: ?Sized + Serialize>(
     py: Python<'py>,
-    error: &collomatique_ops::UpdateError,
+    value: &T,
 ) -> Result<Bound<'py, PyAny>, Failed> {
-    error.serialize(PyData { py })
+    value.serialize(PyData { py })
+}
+
+/// One level of an externally-tagged enum, as the walk above wrote it
+///
+/// A variant is `{"CutPeriod": (…,)}`, and a unit variant is the bare name,
+/// which carries the empty tuple. Anything else is a shape the rust side has
+/// grown since, and a reader stops there rather than guessing.
+pub(crate) fn peel<'py>(data: &Bound<'py, PyAny>) -> Option<(String, Bound<'py, PyAny>)> {
+    if let Ok(name) = data.extract::<String>() {
+        return Some((name, PyTuple::empty(data.py()).into_any()));
+    }
+
+    let dict = data.cast::<PyDict>().ok()?;
+    if dict.len() != 1 {
+        return None;
+    }
+
+    let (name, payload) = dict.iter().next()?;
+    Some((name.extract::<String>().ok()?, payload))
 }
 
 /// A walk that could not be made

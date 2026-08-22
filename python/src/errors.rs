@@ -12,16 +12,14 @@
 //! general one keeps catching all of them. They are not written out one by
 //! one: the class comes from the family name the model's own error carries,
 //! and everything under it — which op, which case, which entities — is walked
-//! structurally (`payload`), so an error variant added in `ops/` reaches a
+//! structurally ([crate::payload]), so an error variant added in `ops/` reaches a
 //! script with no change here. A family this module has never heard of lands
 //! on the base [UpdateError] rather than on a panic.
 
 use pyo3::create_exception;
 use pyo3::exceptions::PyException;
 use pyo3::prelude::*;
-use pyo3::types::{PyDict, PyTuple, PyType};
-
-mod payload;
+use pyo3::types::{PyTuple, PyType};
 
 #[cfg(test)]
 mod tests;
@@ -120,7 +118,7 @@ create_exception!(
 /// Declares the fifteen per-family write errors, and the table that finds one
 ///
 /// The names on the left are `collomatique_ops::UpdateError`'s own variants,
-/// spelled as serde writes them — `payload` reads one off the error and this is
+/// spelled as serde writes them — the walk reads one off the error and this is
 /// what turns it into a class. It is the only hand-written part of the mapping:
 /// below the family level nothing here knows the vocabulary, so an op or a case
 /// added in `ops/` reaches a script with no change on this side.
@@ -184,7 +182,7 @@ family_errors! {
 pub(crate) fn refused(py: Python<'_>, error: &collomatique_ops::UpdateError) -> PyErr {
     let message = error.to_string();
 
-    match payload::to_py(py, error) {
+    match crate::payload::to_py(py, error) {
         Ok(data) => from_data(py, message, &data),
         // Nothing in `ops/` can fail to serialize — the error types are derived
         // over numbers and ids — but serde's contract allows it, and the
@@ -203,7 +201,7 @@ fn from_data(py: Python<'_>, message: String, data: &Bound<'_, PyAny>) -> PyErr 
     let mut case = None;
     let mut details = data.clone();
 
-    if let Some((family, payload)) = peel(data) {
+    if let Some((family, payload)) = crate::payload::peel(data) {
         class = family_class(py, &family);
         details = payload.clone();
 
@@ -222,34 +220,15 @@ fn from_data(py: Python<'_>, message: String, data: &Bound<'_, PyAny>) -> PyErr 
     build(class, message, op, case, details)
 }
 
-/// One level of an externally-tagged enum, as `payload` wrote it
-///
-/// A variant is `{"CutPeriod": (…,)}`, and a unit variant is the bare name,
-/// which carries the empty tuple. Anything else is a shape the rust side has
-/// grown since, and the walk stops there rather than guessing.
-fn peel<'py>(data: &Bound<'py, PyAny>) -> Option<(String, Bound<'py, PyAny>)> {
-    if let Ok(name) = data.extract::<String>() {
-        return Some((name, PyTuple::empty(data.py()).into_any()));
-    }
-
-    let dict = data.cast::<PyDict>().ok()?;
-    if dict.len() != 1 {
-        return None;
-    }
-
-    let (name, payload) = dict.iter().next()?;
-    Some((name.extract::<String>().ok()?, payload))
-}
-
 /// The level below a wrapper variant, peeled in its turn
 fn descend<'py>(payload: &Bound<'py, PyAny>) -> Option<(String, Bound<'py, PyAny>)> {
-    peel(&inside(payload)?)
+    crate::payload::peel(&inside(payload)?)
 }
 
 /// What a wrapper variant wraps
 ///
 /// The upper two levels of `UpdateError` each hold one thing — the family holds
-/// its family error, which holds its op error — and `payload` writes every
+/// its family error, which holds its op error — and [crate::payload] writes every
 /// payload as a tuple, so descending is taking the only element.
 fn inside<'py>(payload: &Bound<'py, PyAny>) -> Option<Bound<'py, PyAny>> {
     let tuple = payload.cast::<PyTuple>().ok()?;
