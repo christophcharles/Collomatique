@@ -183,10 +183,12 @@ Consistency *of the public API* is the rule:
   not mechanical, and this list settles it),
   `ExportConfigData` (and its sub-configs), `ColloscopeData`, `DocumentData`.
 - Copy-out: `handle.to_data()` returns the matching `*Data`.
-- Collection methods: `add(data) -> handle`, `update(id_or_handle, data)`,
+- Collection methods: `add(data)`, `update(id_or_handle, data)`,
   `remove(id_or_handle)` for entities; `set_*` for cells, toggles and singleton
   configs (`set_period_status`, `set_interrogation`, `set_global_limits`);
-  `move_up`/`move_down` where user-visible order exists.
+  `move_up`/`move_down` where user-visible order exists. Every mutator answers
+  an `OpResult`; an `add` answers an `AddResult`, the subclass that also
+  carries the created handle on `.created` (§5).
 - Absent optional text is `None`, never `""`. The boundary rejects empty strings
   where the model requires non-empty (`tel`, `email`, week annotations, group
   names) instead of silently conflating them. A *boundary* rule, not a dataclass
@@ -310,12 +312,22 @@ door (§8) already cover everything.
 
 ### Warnings
 
-Every mutator returns an `OpResult`:
+Every mutator returns an `OpResult`; an `add` returns an `AddResult`, the
+subclass that also carries the created entity's **handle**. Different answers
+are different types, structured the same: a write that creates nothing has no
+id field holding `None`, and `isinstance(r, OpResult)` holds for both, so code
+that only reads warnings treats them alike. A handle and not an id, for §4's
+own reason — it is strictly more useful, and the id is one attribute away.
+(The one exception is `group_lists.add_generated`, which creates many lists
+and answers a plain `OpResult`; a script reaches the lists through the
+associations they were installed at.)
 
 ```python
-r = doc.teachers.remove(tid)
-r.new_id        # for add-type ops, else None
+r = doc.teachers.remove(tid)     # OpResult
 r.warnings      # list[Warning] — the cascade repairs that were applied
+
+r = doc.students.add(d)          # AddResult
+r.created       # the new Student handle
 ```
 
 A `Warning` carries the structured `Fix` information and the rendered French text
@@ -864,12 +876,20 @@ first.
    `git show 3ae29f8d:docs/python/values.md`; the refinements it recorded over
    this document's §2, §3 and §5 are folded in above, and `doc.snapshot()` came
    with it (§8). The ops mirror that remains is a mapping exercise with no
-   vocabulary left to invent.
+   vocabulary left to invent; its split into commits — and where the typed
+   errors of §6 and the two `OpResult` stubs land — is
+   `docs/python/ops_migration.md`.
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
-   document plumbing of §9:
-   `default_document`, `save`/`send_to_host`, dialogs, export and maintenance (with
-   the Rust prerequisites of §11 as they are needed).
-5. Solver (last), including the engine-location mechanism.
+   document plumbing of §9 — **the plumbing is done except export**, and it
+   came early rather than last: `load`/`save` with the caveat guard, the
+   `Origin` rule and `compacted()` landed right after the crate split
+   (`12f9d959`…`20e4a7ca`), the hosted handoff in `8fd457f8`, the dialogs in
+   `6bc64975` and `f5ddc152`, and `default_document` in `8138f50d`. What
+   remains of this step is `replace_all` and the two exports of §9.4.
+5. Solver (last), including the engine-location mechanism. The two landing
+   doors are gated out of the ops mirror and land here with it —
+   `group_lists.add_generated` and `colloscope.install` — since their payloads
+   only exist once a solve produces them.
 6. Migrate the three contract scripts to the new API (user-validated) — they gain an
    explicit `doc.save()`. Retire `python-old/` and its registration, and with it the
    engine's automatic send-back (§11).
@@ -895,12 +915,12 @@ with doc.transaction("Import CSV"):
             duration=60,
             periodicity=clm.EveryNWeeks(2),
         ),
-    ))
+    )).created
     t = doc.teachers.add(clm.TeacherData("Emmy", "Noether",
-                                         subjects={maths.id}))
+                                         subjects={maths.id})).created
     for row in rows:
         s = doc.students.add(clm.StudentData(row.firstname, row.surname,
-                                             email=row.email or None))
+                                             email=row.email or None)).created
         doc.assignments.set(period, maths, s, True)
 
 doc.save()      # back to the origin: the host, or the file it came from
