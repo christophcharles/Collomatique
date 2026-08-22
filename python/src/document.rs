@@ -19,8 +19,8 @@ use crate::collections::{
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
-    Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
-    NothingToUndo, SaveError, UpdateError,
+    Cancelled, CaveatedOverwrite, Error, ExportError, IdCeilingExceeded, LoadError, NoDocument,
+    NoOrigin, NothingToUndo, SaveError, UpdateError,
 };
 use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
@@ -994,5 +994,69 @@ impl Document {
 
         std::fs::write(&target, content)
             .map_err(|e| SaveError::new_err(format!("{}: {e}", target.display())))
+    }
+
+    /// Writes the colloscope out as a spreadsheet
+    ///
+    /// ```python
+    /// doc.export_xlsx("colloscope.xlsx")
+    ///
+    /// config = doc.export_config.to_data()
+    /// config.per_group_list_enabled = False
+    /// doc.export_xlsx("colles.xlsx", config)
+    /// ```
+    ///
+    /// The same workbook the application's own export produces, built by the
+    /// same writer: which sheets it holds, how they are coloured and how they
+    /// are laid out on the page all come from an export configuration. With no
+    /// `config`, the document's own is used — the one `doc.export_config`
+    /// reads and its mutators write. With one, that one is used *for this call
+    /// only*: nothing is stored, and the document is not written to at all, so
+    /// an export takes no undo slot.
+    ///
+    /// `config` is an `ExportConfigData`, the tree `doc.export_config.to_data()`
+    /// hands out, so the usual way to build one is to take that tree and change
+    /// what should differ.
+    ///
+    /// This is not `save()`: it writes a spreadsheet for people to read, and
+    /// nothing reads one back. A document is saved with `save()`.
+    ///
+    /// A path that cannot be written, and a workbook that cannot be built,
+    /// both raise `ExportError`.
+    #[pyo3(signature = (path, config=None))]
+    fn export_xlsx(
+        slf: Py<Self>,
+        py: Python<'_>,
+        path: PathBuf,
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it: reading a
+        // python object calls back into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`
+        // (`docs/python/new_api_design.md` §5).
+        let given = match config {
+            Some(config) => Some(crate::data::ExportConfigData::from_py(&slf, config)?),
+            None => None,
+        };
+
+        // Copied out of the borrow, both of them: the write below runs with the
+        // GIL released, and it must not hold the document while another thread
+        // could be handed it.
+        let (inner, raw_config) = {
+            let doc = slf.borrow(py);
+            let inner = doc.data().get_inner_data();
+            let raw_config = given.unwrap_or_else(|| inner.export_config.clone());
+            (inner.clone(), raw_config)
+        };
+
+        let xlsx_config = collomatique_xlsx::Config::from(&raw_config);
+
+        // Released for the duration: building a workbook out of a whole
+        // colloscope and writing it is long enough to be worth not blocking
+        // the interpreter over (`host.rs`, `dialogs.rs`).
+        py.detach(|| collomatique_xlsx::write_xlsx(&inner, &path, &xlsx_config))
+            .map_err(|e| ExportError::new_err(format!("{}: {e}", path.display())))
     }
 }

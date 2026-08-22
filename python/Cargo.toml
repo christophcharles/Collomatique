@@ -13,6 +13,10 @@ collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 # The entity renderers the pairing-rule reprs name a rule with.
 collomatique-ui-text = { path = "../ui-text" }
+# The spreadsheet writer `doc.export_xlsx` hands the document to
+# (`docs/python/new_api_design.md` §9.4) — the same one the application's own
+# export button calls, so a script and a click write the same workbook.
+collomatique-xlsx = { path = "../xlsx" }
 chrono.workspace = true
 # `chrono`: `datetime.date` <-> `chrono::NaiveDate`, for the first week of the
 # colles.

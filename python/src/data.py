@@ -923,6 +923,8 @@ class ExportConfigData:
     one: a `DocumentData` holds one of these, so `doc.replace_all` writes a
     whole export configuration at once. No export op takes it — the eleven
     mutators each patch one field of the document's own configuration.
+    `doc.export_xlsx(path, config)` takes one as well, and stores nothing: it
+    says how to write that one workbook, and the document keeps its own.
 
     The tree mirrors the model's own shape: the settings shared by every sheet
     in `global_config`, then the five switches that say which sheets are part

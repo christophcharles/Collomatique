@@ -1922,6 +1922,8 @@ impl Value for ExportGroupListConfigData {
 /// `DocumentData` holds. No op takes it: the eleven export mutators each patch
 /// one field of the document's own configuration, so the coarse door is what
 /// consumes a whole one: it rides into `replace_all` inside [DocumentData].
+/// `doc.export_xlsx` takes one too, and stores nothing — there it says how to
+/// write one workbook, for that call only.
 pub struct ExportConfigData;
 
 impl Value for ExportConfigData {

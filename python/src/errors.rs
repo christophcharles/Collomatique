@@ -61,6 +61,13 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    ExportError,
+    Error,
+    "An export could not be produced or written."
+);
+
+create_exception!(
+    collomatique,
     NothingToUndo,
     Error,
     "undo() or redo() was called with nothing left in that direction."
@@ -270,6 +277,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("SaveError", py.get_type::<SaveError>())?;
     m.add("NoOrigin", py.get_type::<NoOrigin>())?;
     m.add("UpdateError", py.get_type::<UpdateError>())?;
+    m.add("ExportError", py.get_type::<ExportError>())?;
     m.add("NothingToUndo", py.get_type::<NothingToUndo>())?;
     m.add("StaleHandleError", py.get_type::<StaleHandleError>())?;
     m.add("NotHosted", py.get_type::<NotHosted>())?;

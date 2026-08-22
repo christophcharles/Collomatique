@@ -486,6 +486,7 @@ dependencies = [
  "collomatique-storage",
  "collomatique-time",
  "collomatique-ui-text",
+ "collomatique-xlsx",
  "pyo3",
  "rfd",
  "serde",

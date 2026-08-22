@@ -13592,3 +13592,53 @@ fn a_whole_tree_goes_back_in_as_one_step() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// The document goes out as a spreadsheet, the document's way or the caller's
+///
+/// The workbook itself is the xlsx crate's business and is tested there; what
+/// this says is that python reaches that writer, with the right data and the
+/// right configuration, and that a failure on the way arrives as an
+/// `ExportError` naming the file.
+#[test]
+fn a_document_exports_to_a_spreadsheet() {
+    let dir = workspace("export_xlsx");
+    let source = example_copy(&dir, "source.collomatique");
+    let own_target = dir.join("own.xlsx");
+    let full_target = dir.join("full.xlsx");
+    let bad_target = dir.join("refused.xlsx");
+
+    let globals = run(include_str!("scripts/export_xlsx.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("own_target", &own_target)?;
+        globals.set_item("full_target", &full_target)?;
+        globals.set_item("bad_target", &bad_target)?;
+        Ok(())
+    });
+
+    // An xlsx is a zip, so both files start with a local file header — they are
+    // workbooks and not some bytes that happen to be there.
+    for target in [&own_target, &full_target] {
+        let bytes = std::fs::read(target).expect("the script wrote this file");
+        assert_eq!(&bytes[..4], b"PK\x03\x04");
+    }
+
+    // The bare export used the document's own configuration, cut down to one
+    // sheet, and the second one used the caller's, which asks for the group
+    // sheets as well. An export that read the same configuration both times —
+    // the document's for both calls, or the default for both — would write two
+    // files of the same size.
+    let size = |target: &Path| {
+        std::fs::metadata(target)
+            .expect("the script wrote this file")
+            .len()
+    };
+    assert!(size(&own_target) < size(&full_target));
+
+    // The refusals: nothing was written where the configuration was not one,
+    // and the path that could not be written is what the message opens with.
+    assert!(!bad_target.exists());
+    let failure = global::<String>(&globals, "failure");
+    assert!(failure.contains("no-such-directory"));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
