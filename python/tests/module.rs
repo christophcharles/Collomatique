@@ -2587,6 +2587,215 @@ fn students_are_added_rewritten_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The assignments are written one student, one row and one period at a time
+///
+/// The ninth family of the ops mirror, and the only one with no value class at
+/// all: a row is the three ids it is made of, so `set`, `set_all` and
+/// `duplicate_previous_period` are argument-convention wiring and nothing else.
+/// Nothing in the document points *at* a row either, so every one of those
+/// writes answers an empty warning list — which is what this test says of each
+/// of them, family by family being the point at which such a claim is worth
+/// making.
+///
+/// The three refusals the model keeps are all here. Two are reachable from the
+/// write surface as it stands — a student the period excludes, and the first
+/// period having nothing before it — and the third is not: a subject stops
+/// running on a period through the subjects family, which is a later piece. So
+/// this runs in two stages, with rust switching that period off in between, the
+/// way [a_refused_write_names_its_family_its_op_and_its_case] does.
+///
+/// The example is picked over a fixture of its own because it already holds
+/// what this needs: three periods, a row for every (period, subject) pair on
+/// the first two of them, and subjects that only some of the students take.
+/// Each of those is checked here before the script leans on it.
+///
+/// Rust reads back the file the script saved after its last accepted write, and
+/// compares the whole assignments table with one it computes itself from the
+/// document the script opened.
+#[test]
+fn the_assignments_are_written_one_student_a_row_and_a_period_at_a_time() {
+    use collomatique_ops::{AssignmentsUpdateOp, StudentsUpdateOp, SubjectsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::students::Student;
+    use collomatique_state_colloscopes::{PeriodId, StudentId, SubjectId};
+
+    let dir = workspace("assignments-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert!(
+        period_ids.len() >= 3,
+        "the script writes on two periods and leaves a third for the second stage"
+    );
+    let first_period = period_ids[0];
+    let second_period = period_ids[1];
+    let last_period = *period_ids.last().expect("the example has periods");
+
+    let students: BTreeSet<_> = params.students.student_map.keys().collect();
+    let subject_ids: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+
+    // The row at one address, absent rows included — an absent row is the empty
+    // one, which is exactly what python reads there.
+    let row = |period, subject| {
+        params
+            .assignments
+            .students(period, subject)
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    // The subject the script rewrites: some students take it on the first
+    // period and some do not, so both directions of `set` have something to do
+    // there.
+    let (partial_index, partial) = subject_ids
+        .iter()
+        .enumerate()
+        .map(|(index, subject)| (index, *subject))
+        .find(|(_index, subject)| {
+            let members = row(first_period, *subject);
+            !members.is_empty() && members.len() < students.len()
+        })
+        .expect("the example has a subject not every student takes");
+
+    // `duplicate_previous_period` rewrites the rows the period already has, so
+    // the script's whole-table assertion needs one everywhere on both periods.
+    for subject in &subject_ids {
+        assert!(
+            !row(first_period, *subject).is_empty(),
+            "every subject has a row on the first period"
+        );
+        assert!(
+            !row(second_period, *subject).is_empty(),
+            "every subject has a row on the second period"
+        );
+    }
+
+    // The student the script excludes from the second period: one the partial
+    // row holds there, so that the exclusion has something to take away and the
+    // copy afterwards has something to leave alone.
+    let (excluded_index, excluded) = params
+        .students
+        .student_map
+        .keys()
+        .enumerate()
+        .find(|(_index, student)| row(second_period, partial).contains(student))
+        .expect("the partial row of the second period holds somebody");
+
+    // The french labels the operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings.
+    // Only the variant and the flag are read, so the ids below are the nearest
+    // ones to hand.
+    let label = |op: AssignmentsUpdateOp| op.get_desc().1;
+    let assign_label = label(AssignmentsUpdateOp::Assign(
+        first_period,
+        excluded,
+        partial,
+        true,
+    ));
+    let unassign_label = label(AssignmentsUpdateOp::Assign(
+        first_period,
+        excluded,
+        partial,
+        false,
+    ));
+    let assign_all_label = label(AssignmentsUpdateOp::AssignAll(first_period, partial, true));
+    let unassign_all_label = label(AssignmentsUpdateOp::AssignAll(first_period, partial, false));
+    let duplicate_label = label(AssignmentsUpdateOp::DuplicatePreviousPeriod(second_period));
+    // The one write of another family the script makes: the exclusion it needs
+    // before it can be refused over an absent student.
+    let student_update_label = StudentsUpdateOp::UpdateStudent(excluded, Student::default())
+        .get_desc()
+        .1;
+
+    run_stages(
+        &[
+            include_str!("scripts/assignments_write_before.py"),
+            include_str!("scripts/assignments_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("partial_index", partial_index)?;
+            globals.set_item("excluded_index", excluded_index)?;
+            globals.set_item("assign_label", &assign_label)?;
+            globals.set_item("unassign_label", &unassign_label)?;
+            globals.set_item("assign_all_label", &assign_all_label)?;
+            globals.set_item("unassign_all_label", &unassign_all_label)?;
+            globals.set_item("duplicate_label", &duplicate_label)?;
+            globals.set_item("student_update_label", &student_update_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                        partial,
+                        last_period,
+                        false,
+                    )),
+                )
+                .expect("a subject of the example can stop running on a period");
+        },
+    );
+
+    // What the script asked for, as it stood when it saved: the first period's
+    // partial row holds every student, the second period's rows are the first
+    // period's minus the one student it excluded there, and the third period is
+    // untouched.
+    let mut written_out: BTreeMap<(PeriodId, SubjectId), BTreeSet<StudentId>> = params
+        .assignments
+        .iter()
+        .map(|(period, subject, members)| ((period, subject), members.clone()))
+        .collect();
+    written_out.insert((first_period, partial), students.clone());
+    for subject in &subject_ids {
+        let mut copied = written_out
+            .get(&(first_period, *subject))
+            .cloned()
+            .unwrap_or_default();
+        copied.remove(&excluded);
+        assert!(
+            !copied.is_empty(),
+            "a copied row keeps students, so none of them is stored as absent"
+        );
+        written_out.insert((second_period, *subject), copied);
+    }
+
+    let written = reload(&target);
+    let after: BTreeMap<_, _> = written
+        .get_inner_data()
+        .params
+        .assignments
+        .iter()
+        .map(|(period, subject, members)| ((period, subject), members.clone()))
+        .collect();
+
+    assert_eq!(after, written_out);
+
+    // And the exclusion the script wrote through the students family, which is
+    // what made the second period's rows differ from the first's.
+    assert_eq!(
+        written
+            .get_inner_data()
+            .params
+            .students
+            .student_map
+            .get(&excluded)
+            .expect("the excluded student is still in the document")
+            .excluded_periods,
+        BTreeSet::from([second_period]),
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with

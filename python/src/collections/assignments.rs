@@ -15,12 +15,37 @@
 //!
 //! Whether a subject *runs* in a period is not this table's question —
 //! `subject.excluded_periods` answers it.
+//!
+//! Written through `set`, `set_all` and `duplicate_previous_period`. There is
+//! no value class here and no `add`: a row is nothing but the three ids it is
+//! made of, so the whole family is argument-convention wiring, and none of it
+//! creates an entity. It never removes one either — an emptied row is stored
+//! as no row at all, but that is the model's canonical form and not a
+//! removal — so no handle ever goes stale of a write made here.
+//!
+//! Nothing in the document points *at* a row: a row names a period, a subject
+//! and its students, and nothing names it back. So no write of this family
+//! ever gives the cascade anything to repair, and every `OpResult` it hands
+//! back carries an empty `warnings`. What a colloscope holds is untouched too
+//! — the model relates a placement to the group list it is in, never to the
+//! assignment row of the same coordinates.
+//!
+//! The family keeps three refusals for the model, and they all reach a script
+//! as `AssignmentsError`: a subject that does not run on a period holds
+//! nobody there (`set` and `set_all`), a student who takes no part in a period
+//! cannot be assigned in it (`set`), and the first period has no previous one
+//! to copy from (`duplicate_previous_period`). All three are statements about
+//! the document rather than about an argument's shape — which is what tells
+//! them from the argument convention, where a period, a subject or a student
+//! this document does not hold is caught before the op is even built, and
+//! where the message can say which argument was wrong.
 
 use std::collections::BTreeSet;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
+use collomatique_ops::{AssignmentsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::PeriodId as RawPeriodId;
 use collomatique_state_colloscopes::StudentId as RawStudentId;
@@ -31,6 +56,7 @@ use crate::collections::periods::Period;
 use crate::collections::students::Student;
 use crate::collections::subjects::Subject;
 use crate::handles::{Handle, argument, shown};
+use crate::results::OpResult;
 
 /// The assignments of one document
 ///
@@ -119,12 +145,127 @@ impl Assignments {
         AssignmentIter::new(self.doc.clone_ref(py), self.rows(py))
     }
 
+    /// Assigns one student to one subject for one period, or takes them off it
+    ///
+    /// `assigned` says what the row must hold afterwards rather than toggling
+    /// anything: `True` for a student who is already assigned is accepted and
+    /// changes nothing, and so is `False` for one who was never there. The
+    /// three addresses are handles or ids, interchangeably, as every argument
+    /// of this api is.
+    ///
+    /// ```python
+    /// doc.assignments.set(period, maths, student, True)
+    /// ```
+    ///
+    /// The row is addressed here in the order the read above uses — the
+    /// `(period, subject)` key, then the student inside it — so that the same
+    /// row is named the same way whether it is being read or written.
+    ///
+    /// Two things the model refuses, both as `AssignmentsError`: a subject
+    /// that does not run on the period holds nobody there, and a student who
+    /// takes no part in the period cannot be assigned in it. Neither is about
+    /// the arguments' shape — one this document does not hold raises
+    /// `StaleHandleError` before the op is built.
+    fn set(
+        &self,
+        py: Python<'_>,
+        period: &Bound<'_, PyAny>,
+        subject: &Bound<'_, PyAny>,
+        student: &Bound<'_, PyAny>,
+        assigned: bool,
+    ) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+        let subject_id = argument::<Subject>(&self.doc, subject)?;
+        let student_id = argument::<Student>(&self.doc, student)?;
+
+        // The op spells its three ids `(period, student, subject)`; the
+        // surface keeps the reads' order and this is where the two meet.
+        self.write(
+            py,
+            UpdateOp::Assignments(AssignmentsUpdateOp::Assign(
+                period_id, student_id, subject_id, assigned,
+            )),
+        )
+    }
+
+    /// Assigns every student to one subject for one period, or empties the row
+    ///
+    /// The whole row in one write, and one undo slot: `True` assigns every
+    /// student the period does not exclude — a student who takes no part in
+    /// the period is skipped rather than making the write fail — and `False`
+    /// leaves nobody assigned at all.
+    ///
+    /// ```python
+    /// doc.assignments.set_all(period, maths, True)
+    /// ```
+    ///
+    /// A subject that does not run on the period holds nobody there, and the
+    /// model refuses both directions of the write with an `AssignmentsError`:
+    /// there is no row to empty either.
+    fn set_all(
+        &self,
+        py: Python<'_>,
+        period: &Bound<'_, PyAny>,
+        subject: &Bound<'_, PyAny>,
+        assigned: bool,
+    ) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+        let subject_id = argument::<Subject>(&self.doc, subject)?;
+
+        self.write(
+            py,
+            UpdateOp::Assignments(AssignmentsUpdateOp::AssignAll(
+                period_id, subject_id, assigned,
+            )),
+        )
+    }
+
+    /// Copies the previous period's assignments into this one
+    ///
+    /// The whole point of the op is the second period of a year looking like
+    /// the first: every subject that has a row on `period` takes the
+    /// membership the *previous* period gives it. A subject with no row on
+    /// `period` is not given one, and neither is one the previous period
+    /// leaves empty — this rewrites the rows that are there rather than
+    /// rebuilding the table.
+    ///
+    /// A student either of the two periods excludes is left exactly as they
+    /// are: they cannot be assigned in a period they take no part in, and what
+    /// the period they missed says about them is no reason to change what this
+    /// one does.
+    ///
+    /// The first period has nothing before it, and asking anyway is refused
+    /// with an `AssignmentsError` rather than quietly doing nothing.
+    fn duplicate_previous_period(
+        &self,
+        py: Python<'_>,
+        period: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+
+        self.write(
+            py,
+            UpdateOp::Assignments(AssignmentsUpdateOp::DuplicatePreviousPeriod(period_id)),
+        )
+    }
+
     /// The view itself — `<collomatique.Assignments>`
     ///
     /// Deliberately without a row count: this collection has no `len`, and a
     /// repr that counted rows would contradict the one statement it makes.
     fn __repr__(&self) -> String {
         "<collomatique.Assignments>".to_owned()
+    }
+}
+
+impl Assignments {
+    /// Writes through the document the view came from
+    ///
+    /// The whole family ends here: none of its three ops creates anything, so
+    /// none of them needs [crate::results::created]'s second half.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 
