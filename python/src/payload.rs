@@ -61,6 +61,45 @@ pub(crate) fn peel<'py>(data: &Bound<'py, PyAny>) -> Option<(String, Bound<'py, 
     Some((name.extract::<String>().ok()?, payload))
 }
 
+/// The field a repair carries for the op, not for the reader
+const REBUILT: &str = "rebuilt";
+
+/// The name and the coordinates of one repair
+///
+/// The `rebuilt` field is dropped. It is the whole-value argument the
+/// elementary op needs — `Fix`'s own docs say the semantic fields beside it
+/// "are what a consumer describes the repair with" and that the two are
+/// redundant on purpose, and `ops::warning_text` renders all its sentences
+/// without reading one. Showing it would also put the model's storage shape in
+/// front of a script: a rebuilt `GroupList` is its private serde mirror, a
+/// rebuilt `WeekPattern` is the exclusion set it is stored as, and §2 built the
+/// `*Data` classes to keep those out of sight. A script that wants what the
+/// entity holds now reads it off the document the write just left.
+///
+/// Dropped here by name rather than skipped in `state-colloscopes`, so that a
+/// variant grown later carries no payload here either — and so that `Fix`'s own
+/// `Serialize` stays whole for every other reader.
+pub(crate) fn repair<'py>(
+    py: Python<'py>,
+    fix: &collomatique_state_colloscopes::Fix,
+) -> Result<(Option<String>, Bound<'py, PyAny>), Failed> {
+    let data = to_py(py, fix)?;
+
+    let Some((kind, fields)) = peel(&data) else {
+        // A shape the walk cannot follow: keep what it reached, the way
+        // `crate::errors::from_data` does, rather than guessing.
+        return Ok((None, data));
+    };
+
+    if let Ok(dict) = fields.cast::<PyDict>()
+        && dict.contains(REBUILT)?
+    {
+        dict.del_item(REBUILT)?;
+    }
+
+    Ok((Some(kind), fields))
+}
+
 /// A walk that could not be made
 ///
 /// Serde's contract asks for an error type, and python's own failures — a dict

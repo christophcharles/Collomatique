@@ -83,3 +83,84 @@ fn a_case_that_carries_nothing_is_its_name() {
         );
     });
 }
+
+/// The whole-value argument a repair carries for the op does not reach python
+///
+/// Thirteen `Fix` variants carry a `rebuilt` entity beside their coordinates,
+/// so `FixOp::to_annotated_op` can stay a pure translation. It is the model's
+/// storage shape, and none of the twenty-five french sentences reads it — a
+/// script gets the coordinates and reads the entity itself off the document the
+/// write just left.
+#[test]
+fn a_rebuilt_payload_does_not_reach_python() {
+    attach(|py| {
+        let teacher_id = unsafe { <collomatique_state_colloscopes::TeacherId as Id>::new(2) };
+        let subject_id = unsafe { <collomatique_state_colloscopes::SubjectId as Id>::new(3) };
+        let fix = collomatique_state_colloscopes::Fix::RemoveTeacherSubject {
+            teacher: teacher_id,
+            subject: subject_id,
+            rebuilt: collomatique_state_colloscopes::teachers::Teacher::default(),
+        };
+
+        let (kind, details) = repair(py, &fix).expect("the model's repairs serialize");
+
+        assert_eq!(kind.as_deref(), Some("RemoveTeacherSubject"));
+
+        let details = details
+            .cast::<PyDict>()
+            .expect("a repair names its coordinates by field name");
+        assert!(
+            !details.contains(REBUILT).expect("a lookup should not fail"),
+            "the rebuilt teacher should not be among the coordinates, but got {details}"
+        );
+        assert_eq!(details.len(), 2, "the two coordinates, and nothing else");
+        assert_eq!(
+            details
+                .get_item("teacher")
+                .expect("a lookup should not fail")
+                .expect("the repair names the teacher")
+                .repr()
+                .unwrap()
+                .to_string(),
+            "<TeacherId 2>"
+        );
+        assert_eq!(
+            details
+                .get_item("subject")
+                .expect("a lookup should not fail")
+                .expect("the repair names the subject")
+                .repr()
+                .unwrap()
+                .to_string(),
+            "<SubjectId 3>"
+        );
+    });
+}
+
+/// A repair that carries only coordinates comes through as it is
+///
+/// The other half of the rule: dropping `rebuilt` takes nothing else with it,
+/// and an id among the coordinates keeps its class the way a refusal's does.
+#[test]
+fn a_repair_that_carries_only_coordinates_is_unchanged() {
+    attach(|py| {
+        let slot_id = unsafe { <collomatique_state_colloscopes::SlotId as Id>::new(7) };
+        let fix = collomatique_state_colloscopes::Fix::DeleteSlot { slot: slot_id };
+
+        let (kind, details) = repair(py, &fix).expect("the model's repairs serialize");
+
+        assert_eq!(kind.as_deref(), Some("DeleteSlot"));
+
+        let details = details
+            .cast::<PyDict>()
+            .expect("a repair names its coordinates by field name");
+        assert_eq!(details.len(), 1, "the one coordinate this repair has");
+
+        let slot = details
+            .get_item("slot")
+            .expect("a lookup should not fail")
+            .expect("the repair names the slot");
+        assert!(slot.is_instance_of::<crate::ids::SlotId>());
+        assert_eq!(slot.repr().unwrap().to_string(), "<SlotId 7>");
+    });
+}

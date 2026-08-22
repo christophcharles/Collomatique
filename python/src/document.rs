@@ -22,7 +22,7 @@ use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
     NothingToUndo, SaveError,
 };
-use crate::results::{OpResult, Warning};
+use crate::results::OpResult;
 use crate::transaction::Transaction;
 
 /// Where a document came from, and where a bare `save()` writes
@@ -239,23 +239,11 @@ impl Document {
             .dry_apply(&self.state)
             .map_err(|e| crate::errors::refused(py, &e))?;
 
-        // Rendered here, while `self.state` is still the state the op was
-        // applied to: a warning names material this update may be about to
-        // remove, so the pre-state is the only one it can be read against
+        // Built here, while `self.state` is still the state the op was applied
+        // to: a warning names material this update may be about to remove, so
+        // the pre-state is the only one it can be read against
         // (`ops/src/cascade.rs`).
-        let warnings = result
-            .warnings
-            .iter()
-            .map(|warning| {
-                let text = warning.text(self.state.get_data()).map_err(|e| {
-                    Error::new_err(format!(
-                        "a repair named something the document does not hold ({e}); \
-                         this is a bug in collomatique, not something the script did"
-                    ))
-                })?;
-                Py::new(py, Warning::new(text))
-            })
-            .collect::<PyResult<Vec<_>>>()?;
+        let warnings = crate::results::from_cascade(py, &result.warnings, self.state.get_data())?;
 
         self.state = result.new_state;
 

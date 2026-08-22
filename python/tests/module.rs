@@ -204,6 +204,28 @@ fn refused_write(
         .expect("the exception should go into the namespace");
 }
 
+/// The result one applied write handed back, put where the script can see it
+///
+/// The mirror of [refused_write]. The write surface publishes no cascading op
+/// yet, so the test drives the door the families will drive — the raw
+/// `Document::update` — and hands the script the `OpResult` it answered.
+fn applied_write(
+    py: Python<'_>,
+    globals: &Bound<'_, PyDict>,
+    name: &str,
+    op: collomatique_ops::UpdateOp,
+) {
+    let doc = document_of(globals);
+    let result = doc
+        .borrow_mut(py)
+        .update(py, op)
+        .unwrap_or_else(|_| panic!("`{name}` is a write the model must accept"));
+
+    globals
+        .set_item(name, Py::new(py, result).expect("an OpResult converts"))
+        .expect("the result should go into the namespace");
+}
+
 /// One global, extracted into the rust shape the test compares against
 fn global<T>(globals: &Py<PyDict>, name: &str) -> T
 where
@@ -1305,6 +1327,82 @@ fn a_refused_write_names_its_family_its_op_and_its_case() {
                 "dead_subject",
                 collomatique_ops::UpdateOp::Subjects(
                     collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                ),
+            );
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A cascade hands back every repair it made, and what needed it
+///
+/// The piece §5 promises beyond the sentence: `kind` and `details` are the
+/// repair as structured data — the model's own name for it and its coordinates,
+/// as ids — and `parent` is the repair that needed this one, so the warning list
+/// reads as the tree it came from.
+///
+/// The write is applied from here rather than from the script because no python
+/// mutator cascades yet: the two first-week ops are the whole write surface.
+/// Deleting a subject of the example is the write that produces every shape at
+/// once — slots that go with it, teachers that stop interrogating in it (a
+/// repair carrying a `rebuilt` teacher the script must not see), and a slot
+/// pairing rule that goes because one of the slots did, which is the parent link.
+#[test]
+fn a_cascade_reports_every_repair_and_what_needed_it() {
+    let dir = workspace("cascade");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let paired: BTreeSet<_> = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .values()
+        .flat_map(|rule| [rule.antecedent().slot_id, rule.consequent().slot_id])
+        .collect();
+
+    // The subject whose removal exercises the whole shape: several slots, one of
+    // them named by a slot pairing rule that must go with it. Handed to the
+    // script as its place in the user order, since a script reads its own ids
+    // off the document and rust cannot mint one for it.
+    let (doomed_index, doomed) = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .enumerate()
+        .find(|(_index, subject)| {
+            let slots: Vec<_> = params
+                .slots
+                .slots_for_subject(*subject)
+                .into_iter()
+                .flatten()
+                .map(|(slot_id, _slot)| *slot_id)
+                .collect();
+            slots.len() > 1 && slots.iter().any(|slot| paired.contains(slot))
+        })
+        .expect("the example has a subject with several slots, one of them paired");
+
+    run_stages(
+        &[
+            include_str!("scripts/cascade_before.py"),
+            include_str!("scripts/cascade_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("doomed_index", doomed_index)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "result",
+                collomatique_ops::UpdateOp::Subjects(
+                    collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed),
                 ),
             );
         },
