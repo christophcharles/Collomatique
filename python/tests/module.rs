@@ -7897,6 +7897,265 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The colloscope is written row by row, erased, and refuses what cannot sit
+/// in it
+///
+/// The thirteenth family of the ops mirror: `doc.colloscope` gains
+/// `set_interrogation` and `set_group_list` for its two sparse tables, and
+/// `erase` and `erase_group_lists` for emptying them. The family's fifth op,
+/// `install`, stays gated out — it is the solver's landing door.
+///
+/// Nothing in the document points at a colloscope row, so no write here can
+/// break anything: every result the script reads carries an empty `warnings`,
+/// and there is no cascade to assert. What there is instead is the sparse
+/// shape on the write — an empty iterable and an empty mapping are the absent
+/// row, which is what clears one — and five of the six refusals the model
+/// keeps for this family.
+///
+/// The sixth needs a subject that skips a period, which is the subjects family
+/// and a later piece, so it runs in a second stage with rust doing that write
+/// in between — the way
+/// [group_lists_are_added_rewritten_associated_and_removed] does for the same
+/// reason.
+///
+/// The example carries no colloscope at all, so everything the script reads
+/// back is its own doing. The coordinate it writes on is the first cell a
+/// colle can really sit on whose subject holds a group list there, in the
+/// collections' own orders; rust finds it by the same rule and checks the two
+/// sides agree through the indices the script leaves behind.
+///
+/// Rust reads back the file the script saved once both tables held a row: the
+/// one cell, and the placement row of the automatic list the example did not
+/// have and the script added.
+#[test]
+fn the_colloscope_is_written_row_by_row_and_erased() {
+    use collomatique_ops::{ColloscopeUpdateOp, GroupListsUpdateOp, SubjectsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::group_lists::GroupListFilling;
+
+    let dir = workspace("colloscope-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let inner = data.get_inner_data();
+    let params = &inner.params;
+
+    assert_eq!(
+        inner.colloscope.iter().count(),
+        0,
+        "the script opens on a document with no colloscope at all"
+    );
+    assert_eq!(
+        inner.colloscope.group_lists_iter().count(),
+        0,
+        "the script opens on a document with no colloscope at all"
+    );
+    assert!(
+        params.students.student_map.len() >= 3,
+        "the script places two students and needs a third to be excluded"
+    );
+    assert!(
+        params
+            .walk_weeks()
+            .any(|(_period, _id, week)| !week.interrogations),
+        "the script needs a week no slot runs on"
+    );
+
+    // The coordinate the script writes on, found by the rule the script uses:
+    // the slots in `doc.slots` order, the weeks in theirs, and the first pair a
+    // colle can sit on whose subject holds a group list on that week's period —
+    // the list being what the group numbers are measured against.
+    let (cell_subject, cell_slot, cell_week) = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .flat_map(|subject_id| {
+            params
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+                .map(move |(slot_id, _slot)| (subject_id, *slot_id))
+        })
+        .flat_map(|(subject_id, slot_id)| {
+            params
+                .week_ids()
+                .map(move |week_id| (subject_id, slot_id, week_id))
+        })
+        .find(|(subject_id, slot_id, week_id)| {
+            params.is_interrogation_possible(*slot_id, *week_id)
+                && params
+                    .weeks
+                    .week_position(*week_id)
+                    .is_some_and(|(period_id, _pos)| {
+                        params
+                            .group_lists
+                            .subjects_associations
+                            .get(&(period_id, *subject_id))
+                            .is_some()
+                    })
+        })
+        .expect("the example has a slot active on a week its subject holds a list on");
+    let (cell_period, _pos) = params
+        .weeks
+        .week_position(cell_week)
+        .expect("the week was just walked");
+    let cell_list = *params
+        .group_lists
+        .subjects_associations
+        .get(&(cell_period, cell_subject))
+        .expect("the coordinate was chosen for holding an association");
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .get(&cell_list)
+            .expect("an association names a list the document holds")
+            .params()
+            .group_names
+            .len()
+            > 2,
+        "the script writes a cell naming group 2 in that list"
+    );
+
+    // The two students the placement row holds, and the one the added list
+    // excludes: the first three, in the students' own order.
+    let students: Vec<_> = params.students.student_map.keys().take(3).collect();
+
+    // The french labels the five operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings.
+    // Only the variant is read, so the payloads below are the nearest ones to
+    // hand.
+    let label = |op: ColloscopeUpdateOp| op.get_desc().1;
+    let set_interrogation_label = label(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+        cell_slot,
+        cell_week,
+        BTreeSet::new(),
+    ));
+    let set_group_list_label = label(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+        cell_list,
+        BTreeMap::new(),
+    ));
+    let erase_label = label(ColloscopeUpdateOp::EraseColloscope);
+    let erase_group_lists_label = label(ColloscopeUpdateOp::EraseGroupLists);
+    let add_group_list_label = GroupListsUpdateOp::AddNewGroupList(
+        params
+            .group_lists
+            .group_list_map
+            .get(&cell_list)
+            .expect("the list was just read off the table")
+            .clone(),
+    )
+    .get_desc()
+    .1;
+    // The one write rust makes itself, between the two stages: the second stage
+    // reads its label to say that the refusal it asserts cost no undo slot of
+    // its own.
+    let exclusion_label = SubjectsUpdateOp::UpdatePeriodStatus(cell_subject, cell_period, false)
+        .get_desc()
+        .1;
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/colloscope_write_before.py"),
+            include_str!("scripts/colloscope_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("set_interrogation_label", &set_interrogation_label)?;
+            globals.set_item("set_group_list_label", &set_group_list_label)?;
+            globals.set_item("erase_label", &erase_label)?;
+            globals.set_item("erase_group_lists_label", &erase_group_lists_label)?;
+            globals.set_item("add_group_list_label", &add_group_list_label)?;
+            globals.set_item("exclusion_label", &exclusion_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            // The subjects are a later piece of the mirror, so the one thing
+            // the second stage cannot say for itself is said here.
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                        cell_subject,
+                        cell_period,
+                        false,
+                    )),
+                )
+                .expect("a subject of the example can stop running on a period");
+        },
+    );
+
+    // The two sides really found the same coordinate: the script says which
+    // subject and which period it wrote on, in the collections' own order.
+    assert_eq!(
+        params
+            .subjects
+            .ordered_subject_list
+            .keys()
+            .nth(global::<usize>(&globals, "cell_subject_index")),
+        Some(cell_subject),
+    );
+    assert_eq!(
+        params
+            .periods
+            .period_ids()
+            .nth(global::<usize>(&globals, "cell_period_index")),
+        Some(cell_period),
+    );
+
+    // The document the script saved holds the two rows it had written by then,
+    // and nothing else: the example had no colloscope, so this is the whole of
+    // it.
+    let written = reload(&target);
+    let after = written.get_inner_data();
+
+    assert_eq!(
+        after
+            .colloscope
+            .iter()
+            .map(|(coord, groups)| (coord, groups.clone()))
+            .collect::<Vec<_>>(),
+        vec![((cell_slot, cell_week), BTreeSet::from([0, 2]))],
+    );
+
+    // The automatic list the script added — the example has none, and a
+    // prefilled list holds no placement row.
+    let added: Vec<_> = after
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .filter(|(id, _list)| !params.group_lists.group_list_map.contains(id))
+        .collect();
+    assert_eq!(added.len(), 1);
+    let (added_id, added_list) = added[0];
+    assert_eq!(added_list.params().name, "Colles automatiques");
+    assert_eq!(
+        added_list.filling(),
+        &GroupListFilling::Automatic {
+            excluded_students: BTreeSet::from([students[2]]),
+        }
+    );
+    assert_eq!(
+        after
+            .colloscope
+            .group_lists_iter()
+            .map(|(id, placements)| (id, placements.clone()))
+            .collect::<Vec<_>>(),
+        vec![(
+            added_id,
+            BTreeMap::from([(students[0], 0), (students[1], 2)])
+        )],
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A document written here rather than copied, holding pairing rules
 ///
 /// The example has no subject pairing rules at all — its only pairings are the

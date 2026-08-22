@@ -948,8 +948,10 @@ class ExportConfigData:
 class ColloscopeData:
     """The whole colloscope, detached.
 
-    `doc.colloscope.to_data()` hands one back, and the ops mirror's
-    `doc.colloscope.install` will take one when it lands:
+    `doc.colloscope.to_data()` hands one back, and `doc.colloscope.install`
+    will take one when the solver lands — the writes published today are
+    `doc.colloscope.set_interrogation` and `doc.colloscope.set_group_list`,
+    one row each:
 
         clm.ColloscopeData(
             interrogations={(first_slot, first_week): {0, 2}},
