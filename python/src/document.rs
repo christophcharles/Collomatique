@@ -9,7 +9,7 @@ use pyo3::types::PyFrozenSet;
 use collomatique_ops::{Desc, UpdateOp};
 use collomatique_state::SessionStack;
 use collomatique_state::traits::Manager;
-use collomatique_state_colloscopes::{Data, NewId};
+use collomatique_state_colloscopes::{Data, NewId, Op};
 use collomatique_storage::Caveat;
 
 use crate::collections::{
@@ -20,7 +20,7 @@ use crate::collections::{
 use crate::dialogs::FileRequest;
 use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
-    NothingToUndo, SaveError,
+    NothingToUndo, SaveError, UpdateError,
 };
 use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
@@ -657,8 +657,8 @@ impl Document {
     /// tables as dicts and lists whose order is the document's own user order,
     /// the colloscope and the export configuration as values of their own.
     /// The ids in it are the document's, so the tree is a read-modify-write
-    /// starting point — rename, delete, rewire — and step 4's `replace_all`
-    /// will take it back. This milestone only hands trees out.
+    /// starting point — rename, delete, rewire — and `replace_all` takes it
+    /// back.
     ///
     /// A pure read: it borrows the document, walks its data and builds the
     /// tree, so it cannot fail on a document that exists. A script that wants
@@ -672,6 +672,67 @@ impl Document {
         let inner = self.state.get_data().get_inner_data().clone();
 
         crate::data::DocumentData::to_py(py, &inner)
+    }
+
+    /// Puts a whole tree back, as one step
+    ///
+    /// ```python
+    /// tree = doc.snapshot()
+    /// ...                                  # arbitrary transformation
+    /// doc.replace_all(tree, "Rebuilt from scratch")
+    /// ```
+    ///
+    /// The coarse door of `docs/python/new_api_design.md` §8, and the way back
+    /// in for what `snapshot()` hands out: one `GlobalUpdate`, one undo slot,
+    /// whatever the tree changed. `label` names that slot and defaults to
+    /// « Mise à jour globale », the name the application's own global updates
+    /// carry.
+    ///
+    /// A tree can rename, delete and rewire, and it cannot **add**: it names
+    /// its entities by id, every id in it has to be one this document holds —
+    /// an id it does not raises `StaleHandleError`, as everywhere else — and
+    /// ids have no constructor. Creating something is the incremental ops'
+    /// business, and it stays theirs (§8).
+    ///
+    /// A refused tree changes nothing at all: the document is left exactly as
+    /// it was, and the `UpdateError` names every invariant the tree broke, not
+    /// just the first. The realistic case is a reference left dangling — a
+    /// tree that drops a subject but keeps its slots lists every one of those
+    /// slots.
+    ///
+    /// The answer is an `OpResult` whose `warnings` is always empty: unlike an
+    /// incremental op, a global update has nothing to repair. It lands as
+    /// given or it is refused whole.
+    #[pyo3(signature = (tree, label=None))]
+    fn replace_all(
+        slf: Py<Self>,
+        py: Python<'_>,
+        tree: &Bound<'_, PyAny>,
+        label: Option<String>,
+    ) -> PyResult<OpResult> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it: resolving the
+        // ids a tree names borrows the document to ask, and doing that under a
+        // `borrow_mut` is how a nested borrow becomes a `PanicException`
+        // (`docs/python/new_api_design.md` §5).
+        let inner = crate::data::DocumentData::from_py(&slf, tree)?;
+
+        let desc = (
+            collomatique_ops::OpCategory::None,
+            label.unwrap_or_else(|| String::from("Mise à jour globale")),
+        );
+
+        // `apply` and not the `write` funnel: `GlobalUpdate` is not an
+        // `UpdateOp` — it goes in below the ops layer, at the model's own
+        // trust boundary, which is where a whole tree is checked. So there is
+        // no cascade to hand back, and no repairs either.
+        let mut doc = slf.borrow_mut(py);
+        doc.state
+            .apply(Op::GlobalUpdate(inner), desc)
+            .map_err(|e| UpdateError::new_err(e.to_string()))?;
+
+        Ok(OpResult::new(Vec::new()))
     }
 
     /// Groups every write in a block into one undo slot

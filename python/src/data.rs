@@ -1918,12 +1918,10 @@ impl Value for ExportGroupListConfigData {
 
 /// The whole export configuration
 ///
-/// The tree `doc.export_config.to_data()` assembles, and the value §8's
-/// `DocumentData` will hold one of. No op takes it: the eleven export
-/// mutators each patch one field of the document's own configuration, so
-/// nothing in this milestone consumes one — its extraction has no caller
-/// until the coarse door lands, which is what the dataclass's docstring says
-/// rather than hiding.
+/// The tree `doc.export_config.to_data()` assembles, and the one §8's
+/// `DocumentData` holds. No op takes it: the eleven export mutators each patch
+/// one field of the document's own configuration, so the coarse door is what
+/// consumes a whole one: it rides into `replace_all` inside [DocumentData].
 pub struct ExportConfigData;
 
 impl Value for ExportConfigData {
@@ -2284,11 +2282,10 @@ type SlotRows = Vec<(RawId<Subject>, Vec<(RawId<Slot>, slots::Slot)>)>;
 ///
 /// The tree `doc.snapshot()` assembles (`new_api_design.md` §8):
 /// every section of `InnerData` as a field, with the user orders carried by
-/// the python containers themselves. No op takes one and nothing reads one
-/// back in this milestone — `replace_all`, the coarse door's other half, is
-/// step 4's, and it will take this same tree through `Data::from_inner_data` —
-/// but the value is full two-direction like every other, and the round-trip
-/// test drives the inbound half through the same public door.
+/// the python containers themselves. No op takes one: the coarse door's other
+/// half, `doc.replace_all`, takes this same tree through
+/// `Data::from_inner_data` instead, which is where a whole document is
+/// checked.
 pub struct DocumentData;
 
 impl Value for DocumentData {

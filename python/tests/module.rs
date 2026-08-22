@@ -13523,3 +13523,72 @@ fn the_snapshot_holds_the_whole_document() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// A whole tree goes back in, as one step
+///
+/// The coarse door of §8. The script's own assertions cover the shape of the
+/// call — the undo slot, the empty warnings, the refusals — and rust holds the
+/// two halves a script cannot see: that the document it saved really is the
+/// tree it handed over, field for field, and that a refused tree names *every*
+/// reference it left dangling rather than the first one it hit.
+#[test]
+fn a_whole_tree_goes_back_in_as_one_step() {
+    let dir = workspace("replace_all");
+    let source = example_copy(&dir, "source.collomatique");
+    let other_source = example_copy(&dir, "other.collomatique");
+    let target = dir.join("replaced.collomatique");
+
+    let before = reload(&source);
+    let before = before.get_inner_data();
+    let fold_label = "Import Pronote";
+
+    let globals = run(include_str!("scripts/replace_all.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("fold_label", fold_label)?;
+        Ok(())
+    });
+
+    // The document the script saved *is* the tree it handed to `replace_all`,
+    // read back through the same extraction the call itself used. Nothing is
+    // sampled here: a global update that dropped a section, reordered one or
+    // rewrote a field on the way through would fail this.
+    let written = reload(&target);
+    assert_eq!(
+        extracted::<DocumentData>(&globals, "tree"),
+        *written.get_inner_data()
+    );
+
+    // And the tree was not the document it started from, so the comparison
+    // above has something to say: one subject renamed, one incompatibility
+    // gone, everything else where it was.
+    let after = written.get_inner_data();
+    assert_ne!(*after, *before);
+    assert_eq!(
+        after.params.incompats.incompat_map.len(),
+        before.params.incompats.incompat_map.len() - 1,
+    );
+    let renamed = after
+        .params
+        .subjects
+        .ordered_subject_list
+        .values()
+        .next()
+        .expect("the example has subjects");
+    assert_eq!(
+        renamed.parameters.name.as_str(),
+        "Défense contre les forces du Mal"
+    );
+
+    // The refusal itemises the whole set. The tree dropped a teacher several
+    // slots still name, and the message carries one dangling reference for each
+    // of those slots — a message that stopped at the first would leave a script
+    // fixing its tree one round trip at a time.
+    let refusal = global::<String>(&globals, "refusal");
+    let orphan_count = global::<usize>(&globals, "orphan_count");
+    assert!(orphan_count >= 2);
+    assert_eq!(refusal.matches("dangling reference").count(), orphan_count);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}

@@ -919,10 +919,10 @@ class ExportGroupListConfigData:
 class ExportConfigData:
     """The whole export configuration, detached.
 
-    `doc.export_config.to_data()` hands one back, and the coarse door will
-    take one when it lands. No export op takes it: the eleven mutators each
-    patch one field of the document's own configuration, so a whole-tree value
-    has no write to go to in this milestone.
+    `doc.export_config.to_data()` hands one back, and the coarse door takes
+    one: a `DocumentData` holds one of these, so `doc.replace_all` writes a
+    whole export configuration at once. No export op takes it — the eleven
+    mutators each patch one field of the document's own configuration.
 
     The tree mirrors the model's own shape: the settings shared by every sheet
     in `global_config`, then the five switches that say which sheets are part
@@ -1070,10 +1070,11 @@ class DocumentData:
     The two junction tables hold the stored rows only: an absent row is
     simply not there, exactly as the model stores it.
 
-    The coarse door's `doc.replace_all(tree, label)` — step 4 of the
-    migration — will take one of these back. Nothing in this milestone does:
-    `snapshot()` is a read, and a tree only ever travels out of the document.
-    A script that wants one section still calls the handle's own `to_data()`.
+    The coarse door's `doc.replace_all(tree, label)` takes one of these back,
+    as a single undo step. A tree can rename, delete and rewire, but it cannot
+    add: every id in it has to name an entity the document already holds, and
+    ids have no constructor. A script that wants one section still calls the
+    handle's own `to_data()`.
     """
 
     first_week: datetime.date | None = None
