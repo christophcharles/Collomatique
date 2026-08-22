@@ -3,17 +3,39 @@
 //! Reached as `doc.teachers`. A teacher is a person — a name and, when they gave
 //! them, contact details — together with the set of subjects they interrogate
 //! in.
+//!
+//! Written through `add`, `update` and `remove`. This is the first family whose
+//! removal cascades: a slot names the teacher who holds it, and there is no
+//! teacher-less slot to fall back to, so removing a teacher takes their slots
+//! with it — and whatever those slots held in their turn, the colloscope cells
+//! in them and the slot pairing rules that related them. Every one of those
+//! repairs comes back on the `OpResult`, and a script that removes a teacher
+//! without reading them is throwing away the only account of what else moved.
+//!
+//! The family keeps one refusal for the model, and it reaches a script as
+//! `TeachersError`: a teacher may only be declared in a subject that holds
+//! interrogations — there are no colles to hold in one that does not — and the
+//! model refuses it for `add` and for `update` alike. Whether a subject runs
+//! interrogations is a statement about the document rather than about the
+//! value, which is why [crate::data::TeacherData] leaves it to the write. What
+//! the model could otherwise object to is caught on this side, where the
+//! message can say which argument was wrong: a dead teacher is the argument
+//! convention's business ([crate::handles::argument]), and a dead subject is
+//! the value boundary's.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
-use collomatique_state_colloscopes::InnerData;
+use collomatique_ops::{TeachersUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::TeacherId as RawTeacherId;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::subjects::Subject;
-use crate::handles::{Handle, handle_iterator, named, no_such, quoted};
+use crate::data::{TeacherData, Value as _};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, TeacherId};
+use crate::results::{AddResult, OpResult};
 
 /// The teachers of one document, in id order
 ///
@@ -82,8 +104,94 @@ impl Teachers {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a teacher, and hands back the handle of the new one
+    ///
+    /// Takes a `TeacherData` — the whole of what a teacher is, since the entity
+    /// and the op payload are the same type here — and answers an `AddResult`,
+    /// whose `created` is the `Teacher` the document just minted.
+    ///
+    /// ```python
+    /// doc.teachers.add(collomatique.TeacherData(
+    ///     "Emmy", "Noether", email="noether@lycee.fr", subjects={maths}))
+    /// ```
+    ///
+    /// Every subject the value names must run interrogations: nobody can be
+    /// declared to teach a subject that holds no colles, and the model refuses
+    /// it with a `TeachersError`. A teacher who interrogates in nothing at all
+    /// is perfectly ordinary, on the other hand — an empty `subjects` is what a
+    /// new teacher starts with.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let teacher = TeacherData::from_py(&self.doc, data)?;
+
+        crate::results::created::<Teacher>(
+            py,
+            &self.doc,
+            UpdateOp::Teachers(TeachersUpdateOp::AddNewTeacher(teacher)),
+            |new_id| match new_id {
+                NewId::TeacherId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a teacher whole
+    ///
+    /// The op carries the whole value, so this replaces every field at once:
+    /// what the `TeacherData` says is what the teacher becomes, the card and
+    /// the subjects together. The id stays, and so does every handle naming it.
+    ///
+    /// Dropping a subject from the set is a write like any other, and the
+    /// cascade repairs what it broke: the teacher's slots in that subject have
+    /// nobody to hold them any more, so they go, and the warnings say so.
+    ///
+    /// The teacher is resolved before the value is read, so a call that is
+    /// wrong about both says which teacher it could not find rather than what
+    /// was wrong with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Teacher>(&self.doc, key)?;
+        let teacher = TeacherData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Teachers(TeachersUpdateOp::UpdateTeacher(id, teacher)),
+        )
+    }
+
+    /// Removes a teacher
+    ///
+    /// A slot names the teacher who holds it and cannot do without one, so the
+    /// removal takes the teacher's slots with it, and whatever those slots held
+    /// in their turn. The `OpResult` carries every repair, each one linked to
+    /// the one that needed it. Handles naming the teacher go stale, and so do
+    /// the ones naming the slots that went.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Teacher>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Teachers(TeachersUpdateOp::DeleteTeacher(id)))
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.Teachers count={}>", self.__len__(py))
+    }
+}
+
+impl Teachers {
+    /// Writes through the document the view came from
+    ///
+    /// The two mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

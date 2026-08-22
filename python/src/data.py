@@ -108,8 +108,8 @@ def _every_other_week() -> Periodicity:
 class TeacherData:
     """A teacher, detached from the document.
 
-    `doc.teachers[...].to_data()` hands one back, and the teacher mutators will
-    take one:
+    `doc.teachers[...].to_data()` hands one back, and `doc.teachers.add` and
+    `doc.teachers.update` take one:
 
         clm.TeacherData("Emmy", "Noether", email="noether@lycee.fr",
                         subjects={maths})
@@ -131,7 +131,7 @@ class TeacherData:
 
     A teacher may only be declared in a subject that holds interrogations. That
     is a statement about the document rather than about this value, so it is the
-    write that refuses it, not this class.
+    write that refuses it, with a `TeachersError`, and not this class.
     """
 
     firstname: str

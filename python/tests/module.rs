@@ -2236,6 +2236,177 @@ fn the_export_configuration_is_rewritten_section_by_section() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The teachers are added, rewritten and removed from python
+///
+/// The seventh family of the ops mirror, and the first whose writes cascade: a
+/// slot names the teacher who holds it and cannot do without one, so both the
+/// `update` that drops a subject from a teacher's set and the `remove` that
+/// takes the teacher away leave slots with nobody to hold them, and the model
+/// deletes those slots. This is therefore the first family test that reads
+/// piece B's structured warnings off a family's own surface rather than off a
+/// removal rust made behind the script's back.
+///
+/// The example is picked over a fixture of its own because it already holds
+/// every shape this needs: teachers with slots in two subjects, a teacher two
+/// of whose slots are related by a slot pairing rule — the parent link — and
+/// subjects that run no colles at all, which is what `TeachersError` is
+/// asserted on. Each of those is checked here before the script leans on it.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// two teachers the example did not have are the two the script asked for,
+/// field by field.
+#[test]
+fn teachers_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::PersonWithContact;
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::teachers::Teacher;
+
+    let dir = workspace("teachers-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.teachers.teacher_map.keys().collect();
+
+    // The subjects the script names, in the order it walks them: the two first
+    // that run colles, and the first that runs none. Both kinds have to be
+    // there — the second is the whole of what `TeachersError` is asserted on.
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 2,
+        "the script names two subjects that run colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    let paired: BTreeSet<_> = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .values()
+        .flat_map(|rule| [rule.antecedent().slot_id, rule.consequent().slot_id])
+        .collect();
+
+    // What each teacher holds, as the script sees it: the subjects their slots
+    // sit in, and whether any of those slots is named by a slot pairing rule.
+    let slots_of = |teacher_id| {
+        params
+            .slots
+            .all_slots()
+            .filter(move |(_slot_id, slot)| slot.teacher_id == teacher_id)
+    };
+
+    // The teacher the script prunes: two subjects, slots in each, and none of
+    // those slots paired — so the `update` that drops one subject deletes
+    // exactly that subject's slots and the warning list is one flat row of
+    // `DeleteSlot`.
+    let (pruned_index, pruned) = params
+        .teachers
+        .teacher_map
+        .keys()
+        .enumerate()
+        .find(|(_index, teacher_id)| {
+            let held: BTreeSet<_> = slots_of(*teacher_id)
+                .map(|(_slot_id, slot)| slot.subject_id)
+                .collect();
+            held.len() >= 2 && slots_of(*teacher_id).all(|(id, _slot)| !paired.contains(id))
+        })
+        .expect("the example has a teacher holding slots in two subjects, none of them paired");
+
+    // The teacher the script removes: slots of their own, one of them named by
+    // a slot pairing rule that must go with it — the parent link the warning
+    // tree is asserted on. Never the pruned one, whose slots the script has
+    // already thinned by then.
+    let (doomed_index, _doomed) = params
+        .teachers
+        .teacher_map
+        .keys()
+        .enumerate()
+        .find(|(_index, teacher_id)| {
+            *teacher_id != pruned && slots_of(*teacher_id).any(|(id, _slot)| paired.contains(id))
+        })
+        .expect("the example has another teacher holding a paired slot");
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::TeachersUpdateOp| op.get_desc().1;
+    let some_teacher = unsafe { collomatique_state_colloscopes::TeacherId::new(1) };
+    let add_label = label(collomatique_ops::TeachersUpdateOp::AddNewTeacher(
+        Teacher::default(),
+    ));
+    let update_label = label(collomatique_ops::TeachersUpdateOp::UpdateTeacher(
+        some_teacher,
+        Teacher::default(),
+    ));
+    let remove_label = label(collomatique_ops::TeachersUpdateOp::DeleteTeacher(
+        some_teacher,
+    ));
+
+    run(include_str!("scripts/teachers_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("pruned_index", pruned_index)?;
+        globals.set_item("doomed_index", doomed_index)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // What the script's two adds asked for, as they stood when it saved: the
+    // first was rewritten twice after being created, the second never touched.
+    let written_out = vec![
+        Teacher {
+            desc: PersonWithContact {
+                surname: "Noether".to_owned(),
+                firstname: "Emmy".to_owned(),
+                tel: None,
+                email: None,
+            },
+            subjects: BTreeSet::from([with_colles[0]]),
+        },
+        Teacher {
+            desc: PersonWithContact {
+                surname: "Rusard".to_owned(),
+                firstname: "Argus".to_owned(),
+                tel: None,
+                email: None,
+            },
+            subjects: BTreeSet::new(),
+        },
+    ];
+
+    // The document the script saved holds everything it opened with, plus the
+    // two teachers it wrote — and those two are what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.teachers.teacher_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _teacher)| !before.contains(id))
+        .map(|(_id, teacher)| teacher.clone())
+        .collect();
+
+    assert_eq!(added, written_out);
+    assert_eq!(after.len(), before.len() + 2);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with
