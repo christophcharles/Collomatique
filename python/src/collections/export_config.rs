@@ -11,12 +11,24 @@
 //! here can go stale: the whole configuration is one atom, replaced wholesale
 //! — there is nothing to remove from under a view — so every view below is
 //! bound to the document alone and reads the current state on every access.
+//!
+//! Written through the eleven setters of [ExportConfig] — `set_global`, the
+//! five `set_*_enabled` toggles and the five `set_*_config` section writes.
+//! Each of them replaces one field of the configuration whole, since the
+//! sections themselves are wholes; none of them creates anything, and none of
+//! them can be refused by the document: the configuration is pure presentation
+//! data that names no entity, so there is nothing here for the cascade to
+//! repair and nothing for the model to object to. `ExportConfigUpdateError`
+//! has no variants at all, which is that same sentence written in rust — what
+//! a value carries is the value boundary's business, as ever, and that is the
+//! only refusal this family has.
 
 use std::collections::BTreeMap;
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyDict};
 
+use collomatique_ops::{ExportConfigUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::export_config::{
     ColloscopeConfig as RawColloscopeConfig, GlobalConfig as RawGlobalConfig,
@@ -30,6 +42,7 @@ use crate::data::{
     ExportColloscopeConfigData, ExportConfigData, ExportGlobalConfigData,
     ExportGroupListConfigData, ExportStudentGroupsConfigData,
 };
+use crate::results::OpResult;
 use crate::values::{Color, Orientation};
 
 /// The export configuration of one document
@@ -142,6 +155,201 @@ impl ExportConfig {
         ExportConfigData::to_py(py, &config)
     }
 
+    /// Rewrites the settings shared by every sheet of the export
+    ///
+    /// Takes an `ExportGlobalConfigData` and installs it whole: what the value
+    /// says is what the section becomes, field for field — there is no merging
+    /// with what was there, so a value built from scratch writes the model's
+    /// own defaults wherever it was left alone.
+    ///
+    /// ```python
+    /// doc.export_config.set_global(collomatique.ExportGlobalConfigData(
+    ///     stripes_color_enabled=False))
+    /// ```
+    ///
+    /// `doc.export_config.global_config.to_data()` is how a script gets the
+    /// section as it stands, to hand back with one field changed.
+    fn set_global(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5). No value of this family names
+        // one, but the order is the boundary's and not each value's.
+        let config = ExportGlobalConfigData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateGlobalConfig(config)),
+        )
+    }
+
+    /// Says whether the colloscope sheet is part of the export
+    ///
+    /// The flag sits beside the section it gates rather than inside it, so
+    /// switching the sheet off keeps everything `set_colloscope_config` wrote:
+    /// that is the interface's memory of what was chosen before, and switching
+    /// the sheet back on finds it as it was.
+    fn set_colloscope_enabled(&self, py: Python<'_>, enabled: bool) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateColloscopeEnabled(enabled)),
+        )
+    }
+
+    /// Says whether the all-groups sheet is part of the export
+    ///
+    /// The flag sits beside the section it gates, like every other one here:
+    /// what `set_all_groups_config` wrote outlives the sheet being switched
+    /// off.
+    fn set_all_groups_enabled(&self, py: Python<'_>, enabled: bool) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateAllGroupsEnabled(enabled)),
+        )
+    }
+
+    /// Says whether the automatic-groups sheet is part of the export
+    ///
+    /// The flag sits beside the section it gates, like every other one here:
+    /// what `set_automatic_groups_config` wrote outlives the sheet being
+    /// switched off.
+    fn set_automatic_groups_enabled(&self, py: Python<'_>, enabled: bool) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateAutomaticGroupsEnabled(enabled)),
+        )
+    }
+
+    /// Says whether the prefilled-groups sheet is part of the export
+    ///
+    /// The flag sits beside the section it gates, like every other one here:
+    /// what `set_prefilled_groups_config` wrote outlives the sheet being
+    /// switched off.
+    fn set_prefilled_groups_enabled(&self, py: Python<'_>, enabled: bool) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdatePrefilledGroupsEnabled(enabled)),
+        )
+    }
+
+    /// Says whether the per-group-list sheets are part of the export
+    ///
+    /// The flag sits beside the section it gates, like every other one here:
+    /// what `set_per_group_list_config` wrote outlives the sheets being
+    /// switched off.
+    fn set_per_group_list_enabled(&self, py: Python<'_>, enabled: bool) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdatePerGroupListEnabled(enabled)),
+        )
+    }
+
+    /// Rewrites the settings of the colloscope sheet
+    ///
+    /// Takes an `ExportColloscopeConfigData` and installs it whole, the
+    /// `extra_colors` map included: what the value holds is the whole of the
+    /// section afterwards, so a value whose map is empty leaves the sheet with
+    /// no extra colors at all.
+    ///
+    /// ```python
+    /// config = doc.export_config.colloscope_config.to_data()
+    /// config.extra_colors["Vacances"] = collomatique.Color(255, 240, 200)
+    /// doc.export_config.set_colloscope_config(config)
+    /// ```
+    ///
+    /// The sheet is written or not according to `set_colloscope_enabled`,
+    /// which this never touches: the flag is beside the section, not in it.
+    fn set_colloscope_config(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let config = ExportColloscopeConfigData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateColloscopeConfig(config)),
+        )
+    }
+
+    /// Rewrites the settings of the all-groups sheet
+    ///
+    /// Takes an `ExportStudentGroupsConfigData` and installs it whole. The
+    /// three sheets share one value class, and `sheet_name` is a field of it
+    /// like any other — what says *which* sheet is being written is the method
+    /// that is called, so handing
+    /// `ExportStudentGroupsConfigData.automatic_groups()` to this one is not
+    /// refused: it renames the all-groups sheet « Groupes automatiques », which
+    /// is what the value asked for.
+    ///
+    /// ```python
+    /// doc.export_config.set_all_groups_config(
+    ///     collomatique.ExportStudentGroupsConfigData(
+    ///         sheet_name="Groupes", show_emails=False))
+    /// ```
+    fn set_all_groups_config(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let config = ExportStudentGroupsConfigData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateAllGroupsConfig(config)),
+        )
+    }
+
+    /// Rewrites the settings of the automatic-groups sheet
+    ///
+    /// The twin of `set_all_groups_config`, for the other sheet: the value is
+    /// installed whole, and `sheet_name` is a field it carries rather than the
+    /// address it is written to.
+    fn set_automatic_groups_config(
+        &self,
+        py: Python<'_>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let config = ExportStudentGroupsConfigData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdateAutomaticGroupsConfig(config)),
+        )
+    }
+
+    /// Rewrites the settings of the prefilled-groups sheet
+    ///
+    /// The twin of `set_all_groups_config`, for the other sheet: the value is
+    /// installed whole, and `sheet_name` is a field it carries rather than the
+    /// address it is written to.
+    fn set_prefilled_groups_config(
+        &self,
+        py: Python<'_>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let config = ExportStudentGroupsConfigData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdatePrefilledGroupsConfig(config)),
+        )
+    }
+
+    /// Rewrites the settings of the per-group-list sheets
+    ///
+    /// Takes an `ExportGroupListConfigData` and installs it whole. One section
+    /// for every one of those sheets — they are written from one setting, as
+    /// the model holds them.
+    ///
+    /// ```python
+    /// doc.export_config.set_per_group_list_config(
+    ///     collomatique.ExportGroupListConfigData(center_vertically=True))
+    /// ```
+    fn set_per_group_list_config(
+        &self,
+        py: Python<'_>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let config = ExportGroupListConfigData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::ExportConfig(ExportConfigUpdateOp::UpdatePerGroupListConfig(config)),
+        )
+    }
+
     /// The view itself — `<collomatique.ExportConfig>`
     ///
     /// Deliberately without a field count: the view has five sections, and a
@@ -149,6 +357,17 @@ impl ExportConfig {
     /// configuration.
     fn __repr__(&self) -> String {
         "<collomatique.ExportConfig>".to_owned()
+    }
+}
+
+impl ExportConfig {
+    /// Writes through the document the view came from
+    ///
+    /// The whole family ends here: none of its eleven ops creates anything, so
+    /// none of them needs [crate::results::created]'s second half.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

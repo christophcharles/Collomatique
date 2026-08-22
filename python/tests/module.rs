@@ -2039,6 +2039,203 @@ fn the_balancing_options_are_set_overridden_and_un_overridden() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The export configuration is rewritten section by section from python
+///
+/// The sixth family of the ops mirror, and the last of its leaves: eleven
+/// setters over one atom of pure value data. Nothing here names an entity, so
+/// there is no argument convention to exercise and no refusal for the model to
+/// make — `ExportConfigUpdateError` has no variants at all — and the only way a
+/// call of this family fails is the value boundary, which the script drives
+/// through every shape the configuration holds.
+///
+/// What the script pins instead is the granularity: one setter writes one
+/// field of the configuration and leaves the ten others alone, and above all
+/// the flags sit *beside* the sections they gate, so switching a sheet off
+/// keeps everything its section holds. The document it starts from is
+/// [export_config_document], away from the default on every field, so a write
+/// that did nothing could not pass for one that did.
+///
+/// Rust reads back the file the script saved after its eleven accepted writes
+/// and compares the whole configuration with the one written out here.
+#[test]
+fn the_export_configuration_is_rewritten_section_by_section() {
+    use collomatique_ops::ExportConfigUpdateOp;
+    use collomatique_state_colloscopes::export_config::{
+        ColloscopeConfig, Color, ExportConfig, GlobalConfig, PageOrientation, PerGroupListConfig,
+        PerStudentGroupsConfig,
+    };
+
+    let dir = workspace("export-config-write");
+    let source = dir.join("export_config.collomatique");
+    export_config_document(&source);
+    let target = dir.join("written.collomatique");
+
+    // The french labels the eleven operations carry, in the order the script
+    // writes them, so that its undo assertions pin the operations' own names
+    // and not merely some strings. Only the variant is read, so the payloads
+    // are the emptiest ones to hand.
+    let label = |op: ExportConfigUpdateOp| op.get_desc().1;
+    let labels = vec![
+        label(ExportConfigUpdateOp::UpdateGlobalConfig(
+            GlobalConfig::default(),
+        )),
+        label(ExportConfigUpdateOp::UpdateColloscopeEnabled(true)),
+        label(ExportConfigUpdateOp::UpdateAllGroupsEnabled(true)),
+        label(ExportConfigUpdateOp::UpdateAutomaticGroupsEnabled(false)),
+        label(ExportConfigUpdateOp::UpdatePrefilledGroupsEnabled(false)),
+        label(ExportConfigUpdateOp::UpdatePerGroupListEnabled(true)),
+        label(ExportConfigUpdateOp::UpdateColloscopeConfig(
+            ColloscopeConfig::default(),
+        )),
+        label(ExportConfigUpdateOp::UpdateAllGroupsConfig(
+            PerStudentGroupsConfig::default_all_groups(),
+        )),
+        label(ExportConfigUpdateOp::UpdateAutomaticGroupsConfig(
+            PerStudentGroupsConfig::default_automatic_groups(),
+        )),
+        label(ExportConfigUpdateOp::UpdatePrefilledGroupsConfig(
+            PerStudentGroupsConfig::default_prefilled_groups(),
+        )),
+        label(ExportConfigUpdateOp::UpdatePerGroupListConfig(
+            PerGroupListConfig::default(),
+        )),
+    ];
+
+    // The eleven operations are eleven undo slots, so the labels must tell them
+    // apart: a script undoing its way back through them would not notice two
+    // of them sharing a sentence.
+    assert_eq!(
+        labels.iter().collect::<BTreeSet<_>>().len(),
+        labels.len(),
+        "the eleven operations name themselves apart"
+    );
+
+    run(include_str!("scripts/export_config_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("labels", &labels)?;
+        Ok(())
+    });
+
+    // What the script's eleven writes asked for, written out here so that the
+    // comparison is with a configuration a reader of this test can see whole.
+    let expected = ExportConfig {
+        global: GlobalConfig {
+            background_color: Color {
+                red: 16,
+                green: 17,
+                blue: 18,
+            },
+            stripes_color_enabled: true,
+            stripes_color: Color {
+                red: 19,
+                green: 20,
+                blue: 21,
+            },
+        },
+        colloscope_enabled: true,
+        all_groups_enabled: true,
+        automatic_groups_enabled: false,
+        prefilled_groups_enabled: false,
+        per_group_list_enabled: true,
+        colloscope_config: ColloscopeConfig {
+            sheet_name: "Colles".into(),
+            extra_info_column_enabled: true,
+            extra_info_column_name: "Remarques".into(),
+            teacher_email_enabled: true,
+            teacher_email: "Courriel".into(),
+            teacher_tel_enabled: false,
+            teacher_tel: "Téléphone".into(),
+            orientation: PageOrientation::Landscape,
+            display_week_dates: true,
+            display_annotations: true,
+            no_interrogation_color: Color {
+                red: 22,
+                green: 23,
+                blue: 24,
+            },
+            annotation_color_enabled: true,
+            annotation_color: Color {
+                red: 25,
+                green: 26,
+                blue: 27,
+            },
+            // The map the value carried is the whole of the sheet's afterwards:
+            // the label the fixture ships is gone, and these two are all there
+            // is.
+            extra_colors: BTreeMap::from([
+                (
+                    "Vacances".to_owned(),
+                    Color {
+                        red: 28,
+                        green: 29,
+                        blue: 30,
+                    },
+                ),
+                (
+                    "Examens".to_owned(),
+                    Color {
+                        red: 31,
+                        green: 32,
+                        blue: 33,
+                    },
+                ),
+            ]),
+        },
+        all_groups_config: PerStudentGroupsConfig {
+            sheet_name: "Groupes".into(),
+            orientation: Some(PageOrientation::Portrait),
+            show_emails: true,
+            show_tel: false,
+        },
+        automatic_groups_config: PerStudentGroupsConfig::default_automatic_groups(),
+        // The one the script wrote with the *all-groups* default: the setter is
+        // the address, and the name a value carries is a field like any other.
+        prefilled_groups_config: PerStudentGroupsConfig::default_all_groups(),
+        per_group_list_config: PerGroupListConfig {
+            orientation: PageOrientation::Portrait,
+            show_emails: true,
+            show_tel: true,
+            center_vertically: false,
+        },
+    };
+
+    // Every field of it is away from what the document opened with, so no write
+    // of the eleven could have been a no-op that passed for one.
+    let opened = reload(&source).get_inner_data().export_config.clone();
+    assert_ne!(expected.global, opened.global);
+    assert_ne!(expected.colloscope_enabled, opened.colloscope_enabled);
+    assert_ne!(expected.all_groups_enabled, opened.all_groups_enabled);
+    assert_ne!(
+        expected.automatic_groups_enabled,
+        opened.automatic_groups_enabled
+    );
+    assert_ne!(
+        expected.prefilled_groups_enabled,
+        opened.prefilled_groups_enabled
+    );
+    assert_ne!(
+        expected.per_group_list_enabled,
+        opened.per_group_list_enabled
+    );
+    assert_ne!(expected.colloscope_config, opened.colloscope_config);
+    assert_ne!(expected.all_groups_config, opened.all_groups_config);
+    assert_ne!(
+        expected.automatic_groups_config,
+        opened.automatic_groups_config
+    );
+    assert_ne!(
+        expected.prefilled_groups_config,
+        opened.prefilled_groups_config
+    );
+    assert_ne!(expected.per_group_list_config, opened.per_group_list_config);
+
+    let written = reload(&target);
+    assert_eq!(&written.get_inner_data().export_config, &expected);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with

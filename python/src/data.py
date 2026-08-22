@@ -692,8 +692,8 @@ def _stripes_color() -> Color:
 class ExportGlobalConfigData:
     """The settings shared by every sheet of the export, detached.
 
-    `doc.export_config.global_config.to_data()` hands one back, and the
-    export mutators will take one:
+    `doc.export_config.global_config.to_data()` hands one back, and
+    `doc.export_config.set_global` takes one:
 
         clm.ExportGlobalConfigData(stripes_color=clm.Color(240, 240, 245))
 
@@ -754,8 +754,8 @@ def _annotation_color() -> Color:
 class ExportColloscopeConfigData:
     """The settings of the colloscope sheet, detached.
 
-    `doc.export_config.colloscope_config.to_data()` hands one back, and the
-    export mutators will take one:
+    `doc.export_config.colloscope_config.to_data()` hands one back, and
+    `doc.export_config.set_colloscope_config` takes one:
 
         clm.ExportColloscopeConfigData(
             sheet_name="Colles", no_interrogation_color=clm.Color(200, 200, 200))
@@ -804,7 +804,8 @@ class ExportStudentGroupsConfigData:
     """The settings of one per-student-groups sheet, detached.
 
     `doc.export_config.all_groups_config.to_data()` and the two sibling
-    views hand one back, and the export mutators will take one.
+    views hand one back, and `doc.export_config.set_all_groups_config` and
+    its two siblings take one.
 
     The model has no one default for this shape: each of the three sheets is
     born through its own constructor, and the dataclass mirrors them as three
@@ -816,7 +817,10 @@ class ExportStudentGroupsConfigData:
 
     `sheet_name` names the sheet in the workbook, and it is required: it is
     the one field that says *which* sheet a value is for, and the classmethods
-    above are how the application's own defaults are spelled.
+    above are how the application's own defaults are spelled. Which sheet a
+    value is *written* to is the setter it is handed to and never this field:
+    `set_automatic_groups_config` writes the automatic-groups sheet whatever
+    name the value carries.
 
     `orientation` is `None` when the sheet's orientation is auto-detected from
     the group count when the export is written — the model's own rule, so
@@ -868,7 +872,7 @@ class ExportGroupListConfigData:
     """The settings of the per-group-list sheets, detached.
 
     `doc.export_config.per_group_list_config.to_data()` hands one back, and
-    the export mutators will take one:
+    `doc.export_config.set_per_group_list_config` takes one:
 
         clm.ExportGroupListConfigData(center_vertically=True)
 
