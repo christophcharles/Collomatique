@@ -8156,6 +8156,240 @@ fn the_colloscope_is_written_row_by_row_and_erased() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The subjects are added, rewritten, moved and removed from python
+///
+/// The fourteenth family of the ops mirror, and the most referenced entity the
+/// document has: `doc.subjects` gains `add`, `update`, `remove`, `move_up`,
+/// `move_down` and `set_period_status`. Eight kinds of place name a subject, so
+/// the removal is the heaviest ordinary one there is — and the two other
+/// cascades, switching the interrogations off and taking the subject off a
+/// period, are what the family is really about.
+///
+/// It is the second family whose value is larger than what its ops carry: a
+/// `SubjectData` holds the excluded periods and no subject op does, so `add`
+/// refuses a value that excludes anything and `update` refuses one whose
+/// exclusions differ from the document's, both with the `ValueError` the script
+/// pins beside the model's own two refusals.
+///
+/// Everything the cascades need beyond what the example carries — an
+/// incompatibility on the subject, a pairing rule naming it, and one colle
+/// standing in one of its slots — the script writes for itself through the
+/// surface the earlier pieces published, and undoes again. So this needs no
+/// second stage.
+///
+/// What rust asserts on its own side is that the example really holds the shapes
+/// the script leans on: two subjects that run colles, the first of them holding
+/// every reference site the removal repairs — a teacher, slots, balancing
+/// options of its own, an enrolment row and a group-list association on each of
+/// the three periods — and a week of the first period one of its slots is really
+/// active on.
+///
+/// Rust reads back the file the script saved after its last accepted write of
+/// the first half: the two subjects the example did not have, field by field,
+/// last in the list and in the order the script added them.
+#[test]
+fn subjects_are_added_rewritten_moved_and_removed() {
+    use collomatique_ops::SubjectsUpdateOp;
+    use collomatique_state_colloscopes::subjects::Subject;
+    use collomatique_state_colloscopes::{
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+    };
+
+    let dir = workspace("subjects-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let order: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 2,
+        "the script names two subjects that run colles"
+    );
+
+    // The subject the three cascades are about. Every reference site the
+    // removal has to repair is asserted here, since a fixture that quietly lost
+    // one would make the script's warning list shorter and still green.
+    let rich = with_colles[0];
+    assert_eq!(
+        params
+            .teachers
+            .teacher_map
+            .values()
+            .filter(|teacher| teacher.subjects.contains(&rich))
+            .count(),
+        1,
+        "exactly one teacher holds that subject's colles",
+    );
+    assert!(
+        !params
+            .slots
+            .slots_for_subject(rich)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .is_empty(),
+        "the script asserts the slots that go with the subject",
+    );
+    assert!(
+        params.balancing.subjects.contains(&rich),
+        "the script asserts the balancing override that goes with the subject",
+    );
+    for period in params.periods.period_ids() {
+        assert!(
+            params.assignments.students(period, rich).is_some(),
+            "the subject holds an enrolment row on every period",
+        );
+        assert!(
+            params
+                .group_lists
+                .subjects_associations
+                .get(&(period, rich))
+                .is_some(),
+            "the subject uses a group list on every period",
+        );
+    }
+
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    assert!(
+        params
+            .slots
+            .slots_for_subject(rich)
+            .into_iter()
+            .flatten()
+            .any(|(slot_id, _slot)| params.week_ids().any(|week| {
+                params.weeks.week_position(week).map(|(p, _pos)| p) == Some(first_period)
+                    && params.is_interrogation_possible(*slot_id, week)
+            })),
+        "one of the subject's slots is really active on a week of the first period",
+    );
+
+    // The french labels this family's operations carry, so that the script's
+    // undo assertions pin the operations' own names and not merely some
+    // strings. Only the variant is read, so the payloads below are the nearest
+    // ones to hand — and `set_period_status` gets two, since the op names its
+    // own direction.
+    let label = |op: SubjectsUpdateOp| op.get_desc().1;
+    let blank = params
+        .subjects
+        .find_subject(rich)
+        .expect("the list names a live subject")
+        .parameters
+        .clone();
+    let add_label = label(SubjectsUpdateOp::AddNewSubject(blank.clone()));
+    let update_label = label(SubjectsUpdateOp::UpdateSubject(rich, blank));
+    let remove_label = label(SubjectsUpdateOp::DeleteSubject(rich));
+    let move_up_label = label(SubjectsUpdateOp::MoveSubjectUp(rich));
+    let move_down_label = label(SubjectsUpdateOp::MoveSubjectDown(rich));
+    let exclude_label = label(SubjectsUpdateOp::UpdatePeriodStatus(
+        rich,
+        first_period,
+        false,
+    ));
+    let include_label = label(SubjectsUpdateOp::UpdatePeriodStatus(
+        rich,
+        first_period,
+        true,
+    ));
+
+    run(include_str!("scripts/subjects_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        globals.set_item("move_up_label", &move_up_label)?;
+        globals.set_item("move_down_label", &move_down_label)?;
+        globals.set_item("exclude_label", &exclude_label)?;
+        globals.set_item("include_label", &include_label)?;
+        Ok(())
+    });
+
+    // What the script's two adds asked for, as they stood when it saved. The
+    // first was created bare, rewritten three times and taken off the first
+    // period; the second is the subject that never holds a colle.
+    let written_out = vec![
+        Subject {
+            parameters: SubjectParameters {
+                name: "Sortilèges".into(),
+                interrogation_parameters: Some(SubjectInterrogationParameters {
+                    students_per_group: nonzero_range((2, 3)),
+                    groups_per_interrogation: nonzero_range((1, 1)),
+                    duration: collomatique_time::NonZeroMinutes::new(60)
+                        .expect("an hour is a while"),
+                    take_duration_into_account: true,
+                    periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                        periodicity_in_weeks: NonZeroU32::new(2).expect("two is not zero"),
+                    },
+                }),
+            },
+            excluded_periods: BTreeSet::from([first_period]),
+        },
+        Subject {
+            parameters: SubjectParameters {
+                name: "Club de Bavboules".into(),
+                interrogation_parameters: None,
+            },
+            excluded_periods: BTreeSet::new(),
+        },
+    ];
+
+    // The document the script saved holds everything it opened with, in the
+    // order it opened with, plus the two subjects it added, last and in that
+    // order.
+    let written = reload(&target);
+    let after: Vec<_> = written
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .map(|(id, subject)| (id, subject.clone()))
+        .collect();
+
+    assert_eq!(after.len(), order.len() + 2);
+    assert_eq!(
+        after
+            .iter()
+            .take(order.len())
+            .map(|(id, _subject)| *id)
+            .collect::<Vec<_>>(),
+        order,
+        "the two moves cancelled out, so the example's own subjects are where they were",
+    );
+    assert!(
+        after
+            .iter()
+            .skip(order.len())
+            .all(|(id, _subject)| !order.contains(id)),
+        "the two subjects at the end are the ones the script added",
+    );
+    assert_eq!(
+        after
+            .into_iter()
+            .skip(order.len())
+            .map(|(_id, subject)| subject)
+            .collect::<Vec<_>>(),
+        written_out,
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A document written here rather than copied, holding pairing rules
 ///
 /// The example has no subject pairing rules at all — its only pairings are the

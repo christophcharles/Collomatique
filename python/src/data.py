@@ -212,8 +212,8 @@ class InterrogationData:
 class SubjectData:
     """A subject, detached from the document.
 
-    `doc.subjects[...].to_data()` hands one back, and the subject mutators will
-    take one:
+    `doc.subjects[...].to_data()` hands one back, and `doc.subjects.add` and
+    `doc.subjects.update` take one:
 
         clm.SubjectData("Spé maths")
 
@@ -240,6 +240,14 @@ class SubjectData:
     `doc.subjects.set_period_status(subject, period, active)`, and adding a
     subject that skips a period is therefore two calls, which a transaction
     makes one undo step.
+
+    Rewriting the rest of the value through `doc.subjects.update` is a write
+    that reaches most of the document. Setting `interrogation` to `None`
+    dismantles everything that needed those colles — the teachers who held them,
+    their slots in the subject, its group-list associations, its balancing
+    options and the pairing rules naming it — and lengthening `duration` far
+    enough to push a late slot past midnight takes that slot. The result
+    reports it either way.
     """
 
     name: str

@@ -7,19 +7,57 @@
 //! The slots those colles happen in belong to the subject too, but the model
 //! keeps them in a table of their own, so they live in
 //! [crate::collections::slots] and are reached here as `subject.slots`.
+//!
+//! Written through `add`, `update`, `remove`, `move_up`, `move_down` and
+//! `set_period_status`. This is the most referenced entity in the document —
+//! eight kinds of place name a subject — so it also has the heaviest ordinary
+//! removal: the teachers who hold its colles lose it, and their slots in it go
+//! with them; its incompatibilities, the pairing rules relating it to another
+//! subject, its balancing options, its enrolment rows and its group-list
+//! associations all go too. Every one of those repairs comes back on the
+//! `OpResult`. The `update` cascades in its own two ways — switching the
+//! interrogations off dismantles everything that needed them, and lengthening
+//! one over a slot too late in the day takes that slot — and
+//! `set_period_status(…, False)` drops what the subject held on the period it
+//! leaves: the enrolments, the colles already written on that period's weeks,
+//! and the group list it used there.
+//!
+//! The value is larger than what the ops carry (`docs/python/new_api_design.md`
+//! §2), the second family where that happens: a `SubjectData` holds the
+//! excluded periods, and no subject op does — the model keeps them beside the
+//! parameters and the ops carry the parameters alone. So rather than dropping
+//! the field on the floor, `add` refuses a value that excludes anything and
+//! `update` refuses one whose exclusions differ from the document's, both
+//! naming `set_period_status`, which is the op that moves them. A
+//! read-modify-write never meets the second refusal: `to_data()` fills the
+//! field with the subject's own exclusions.
+//!
+//! The family keeps two refusals for the model, and both reach a script as
+//! `SubjectsError`: a subject at either end of the list has nowhere left to
+//! move. What the model could otherwise object to is caught above the write,
+//! where the message can say which argument was wrong — a dead subject or a
+//! dead period is the argument convention's business
+//! ([crate::handles::argument]).
 
+use std::collections::BTreeSet;
+
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
+use collomatique_ops::{SubjectsUpdateOp, UpdateOp};
+use collomatique_state_colloscopes::PeriodId as RawPeriodId;
 use collomatique_state_colloscopes::SubjectId as RawSubjectId;
-use collomatique_state_colloscopes::{InnerData, SubjectInterrogationParameters};
+use collomatique_state_colloscopes::{InnerData, NewId, SubjectInterrogationParameters};
 
 use crate::Document;
 use crate::collections::periods::Period;
 use crate::collections::slots::Slot;
+use crate::data::{SubjectData, Value as _};
 use crate::errors::StaleHandleError;
-use crate::handles::{Handle, handle_iterator, named, no_such, quoted};
-use crate::ids::{IdClass, SubjectId};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
+use crate::ids::{IdClass, PeriodId, SubjectId};
+use crate::results::{AddResult, OpResult};
 use crate::values;
 
 /// The subjects of one document, in user order
@@ -87,9 +125,227 @@ impl Subjects {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a subject, and hands back the handle of the new one
+    ///
+    /// Takes a `SubjectData` and answers an `AddResult`, whose `created` is the
+    /// `Subject` the document just minted. The new subject lands last in the
+    /// list, which is where the application puts one too.
+    ///
+    /// ```python
+    /// doc.subjects.add(collomatique.SubjectData("Spé maths"))
+    /// doc.subjects.add(collomatique.SubjectData("Quidditch", interrogation=None))
+    /// ```
+    ///
+    /// The exclusions are the one field the op cannot carry, and the mirror
+    /// says so rather than discarding them: a value that excludes a period is a
+    /// `ValueError`. A new subject runs on every period the document holds, and
+    /// taking it off one is `set_period_status` — so a subject that skips a
+    /// period is two calls, which a transaction makes one undo step.
+    ///
+    /// Nothing in the document can name a subject that does not exist yet, so
+    /// there is nothing for the cascade to repair: the answer's `warnings` is
+    /// empty.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let subject = SubjectData::from_py(&self.doc, data)?;
+
+        if !subject.excluded_periods.is_empty() {
+            return Err(PyValueError::new_err(format!(
+                "no subject op carries the excluded periods, and a new subject runs on every \
+                 period: that SubjectData excludes {}. Add the subject and take it off those \
+                 periods with doc.subjects.set_period_status(subject, period, False).",
+                periods(&subject.excluded_periods),
+            )));
+        }
+
+        crate::results::created::<Subject>(
+            py,
+            &self.doc,
+            UpdateOp::Subjects(SubjectsUpdateOp::AddNewSubject(subject.parameters)),
+            |new_id| match new_id {
+                NewId::SubjectId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a subject whole, its excluded periods excepted
+    ///
+    /// The op carries the whole of the rest, so this replaces every other field
+    /// at once: what the `SubjectData` says is what the subject becomes, the
+    /// name and the interrogation parameters together. The id stays, the
+    /// position stays, and so does every handle naming it.
+    ///
+    /// The exclusions are the one field the op cannot carry, and the mirror
+    /// says so rather than discarding them: a value whose `excluded_periods`
+    /// differ from what the document holds for this subject is a `ValueError`
+    /// naming `set_period_status`, which is the op that moves them. A
+    /// read-modify-write never meets that refusal, since `to_data()` fills the
+    /// field with the subject's own exclusions.
+    ///
+    /// Both of the family's cascades live here. Setting `interrogation` to
+    /// `None` is a write like any other, and the repairs dismantle what needed
+    /// those colles: the teachers who held them lose the subject, their slots
+    /// in it go, its group-list associations go and so do its own balancing
+    /// options and the pairing rules naming it. Lengthening an interrogation
+    /// over a slot that would then run past midnight takes that slot. The
+    /// enrolments deliberately survive both: being registered in a subject says
+    /// nothing about having colles in it.
+    ///
+    /// The subject is resolved before the value is read, so a call that is wrong
+    /// about both says which subject it could not find rather than what was
+    /// wrong with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Subject>(&self.doc, key)?;
+
+        // Read here rather than after the value: the argument convention has
+        // just found the subject and nothing has called into python since, so
+        // the subject is still there. `from_py` below runs python code — a
+        // dataclass is a python object — and the document could be written to
+        // under it.
+        let excluded = self
+            .with_data(py, |data| {
+                data.params
+                    .subjects
+                    .find_subject(id)
+                    .map(|subject| subject.excluded_periods.clone())
+            })
+            .expect("the argument convention has just found this subject");
+
+        let subject = SubjectData::from_py(&self.doc, data)?;
+        if subject.excluded_periods != excluded {
+            return Err(PyValueError::new_err(format!(
+                "no subject op carries the excluded periods: this subject skips {}, and that \
+                 SubjectData names {}. Move one with \
+                 doc.subjects.set_period_status(subject, period, active) instead.",
+                periods(&excluded),
+                periods(&subject.excluded_periods),
+            )));
+        }
+
+        self.write(
+            py,
+            UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(id, subject.parameters)),
+        )
+    }
+
+    /// Removes a subject
+    ///
+    /// The heaviest ordinary removal the document has, because a subject is
+    /// what everything else is about: the teachers who hold its colles lose it,
+    /// and their slots in it go with them; its incompatibilities go, and the
+    /// pairing rules relating it to another subject; its own balancing options,
+    /// its enrolment rows and its group-list associations go too, and the colles
+    /// standing in its slots go with the slots. The `OpResult` carries every
+    /// repair, each one linked to the one that needed it. Handles naming the
+    /// subject go stale, and so do the ones naming what went with it.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Subject>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Subjects(SubjectsUpdateOp::DeleteSubject(id)))
+    }
+
+    /// Moves a subject one place up the list
+    ///
+    /// The list order is the one the application shows, and the one
+    /// `doc.subjects` walks in, so this swaps the subject with the one before it
+    /// there. Nothing else moves: a position is display order, and nothing in
+    /// the document reads one.
+    ///
+    /// A subject already first has nowhere to go, and that is a `SubjectsError`
+    /// rather than a call that quietly did nothing.
+    fn move_up(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Subject>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Subjects(SubjectsUpdateOp::MoveSubjectUp(id)))
+    }
+
+    /// Moves a subject one place down the list
+    ///
+    /// The twin of [Subjects::move_up], and it refuses in the same way: a
+    /// subject already last has nowhere to go, and says so with a
+    /// `SubjectsError`.
+    fn move_down(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Subject>(&self.doc, key)?;
+
+        self.write(
+            py,
+            UpdateOp::Subjects(SubjectsUpdateOp::MoveSubjectDown(id)),
+        )
+    }
+
+    /// Puts a subject on a period, or takes it off
+    ///
+    /// The one op that moves `SubjectData.excluded_periods`, one period at a
+    /// time and the other way round: `active=True` means the subject runs on
+    /// the period, which is the exclusion *gone*.
+    ///
+    /// ```python
+    /// doc.subjects.set_period_status(maths, first_period, False)
+    /// ```
+    ///
+    /// Taking a subject off a period drops the three things it held there, and
+    /// the `OpResult` says which: the enrolments of that row, the colles already
+    /// written on the period's weeks, and the group list the subject used there.
+    /// Putting it back only ever widens what the document allows, so there is
+    /// nothing to repair.
+    #[pyo3(signature = (subject, period, active))]
+    fn set_period_status(
+        &self,
+        py: Python<'_>,
+        subject: &Bound<'_, PyAny>,
+        period: &Bound<'_, PyAny>,
+        active: bool,
+    ) -> PyResult<OpResult> {
+        let subject_id = argument::<Subject>(&self.doc, subject)?;
+        let period_id = argument::<Period>(&self.doc, period)?;
+
+        self.write(
+            py,
+            UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                subject_id, period_id, active,
+            )),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.Subjects count={}>", self.__len__(py))
     }
+}
+
+impl Subjects {
+    /// Writes through the document the view came from
+    ///
+    /// The five mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
+    }
+}
+
+/// The periods a refusal names, as its message shows them
+///
+/// Ids and not handles: the two refusals above are about a value, and a value
+/// names periods by id. The spelling is the id class's own `<PeriodId 3>`, so
+/// what the message shows is what a script printing the value would see.
+fn periods(ids: &BTreeSet<RawPeriodId>) -> String {
+    if ids.is_empty() {
+        return "no period".into();
+    }
+
+    ids.iter()
+        .map(|id| PeriodId::text(*id))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 handle_iterator! {
