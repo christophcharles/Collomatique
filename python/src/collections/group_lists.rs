@@ -38,7 +38,7 @@
 //!
 //! The family's sixth op, `add_generated`, is the solver's landing door and is
 //! not published here: its payload only exists once something has produced it
-//! (`docs/python/ops_migration.md`).
+//! (`docs/python/new_api_design.md` §13.5).
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;

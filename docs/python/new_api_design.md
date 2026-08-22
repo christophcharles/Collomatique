@@ -869,16 +869,19 @@ first.
    `git show 04888a59:docs/python/handle_api.md`; the refinements it recorded
    over this document's §2 and §4 are folded in above.
 3. Write surface: ops mirror, `OpResult` warnings, transactions, undo. Value
-   dataclasses land here — **done except the ops mirror**: transactions and undo
-   came first (§5's stack), then the value dataclasses in eleven commits plus
-   two review follow-ups, the last being the double-naming refusal (`3ae29f8d`).
-   The design the values were built from, class by class, is in
+   dataclasses land here — **done**: transactions and undo came first (§5's
+   stack), then the value dataclasses in eleven commits plus two review
+   follow-ups, the last being the double-naming refusal (`3ae29f8d`). The design
+   the values were built from, class by class, is in
    `git show 3ae29f8d:docs/python/values.md`; the refinements it recorded over
    this document's §2, §3 and §5 are folded in above, and `doc.snapshot()` came
-   with it (§8). The ops mirror that remains is a mapping exercise with no
-   vocabulary left to invent; its split into commits — and where the typed
-   errors of §6 and the two `OpResult` stubs land — is
-   `docs/python/ops_migration.md`.
+   with it (§8). The ops mirror followed in eighteen commits — the `OpResult`
+   true-up, the typed errors of §6, the structured warnings, then the fifteen
+   families leaves inward, the last being the period and week mutators
+   (`c8133fa9`). The split it was built from is
+   `git show c8133fa9:docs/python/ops_migration.md`; the two solver landing
+   doors it gates out (`group_lists.add_generated`, `colloscope.install`) land
+   with step 5 below.
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
    document plumbing of §9 — **the plumbing is done except export**, and it
    came early rather than last: `load`/`save` with the caveat guard, the
