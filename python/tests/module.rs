@@ -7600,6 +7600,303 @@ fn a_removed_group_list_stales_the_values_that_name_it() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The group lists are added, rewritten, associated and removed from python
+///
+/// The twelfth family of the ops mirror: `doc.group_lists` gains `add`,
+/// `update` and `remove` for the lists themselves, and `set_association` and
+/// `duplicate_previous_period` for the table beside them. An `update` carries
+/// the whole list, parameters and filling together, because that is what the op
+/// carries — so a filling that changes shape is an ordinary rewrite here.
+///
+/// Every cascade of this family runs through the colloscope, which the write
+/// surface cannot reach yet: a colle names a group *number* measured against
+/// the list its coordinate uses, and a placement names the group a student
+/// landed in. So this runs in two stages, with rust writing that material in
+/// between — the served list turned automatic, a placement row, and one colle
+/// at a coordinate the list bounds — the way
+/// [a_cascade_reports_every_repair_and_what_needed_it] does. The fourth write
+/// in between belongs to the subjects, also a later piece: it stops the served
+/// subject from running on one period, which is the only way the second of the
+/// family's model refusals is reachable at all.
+///
+/// The first stage needs no fixture of its own: it finds the list one single
+/// subject uses, the subject that runs no colles, and its own students off the
+/// document. What rust asserts here is that the example really holds those
+/// shapes.
+///
+/// Rust reads back the file the script saved after its last accepted write of
+/// the first stage: the list the example did not have is the one the script
+/// asked for, field by field, and the association table is exactly the one it
+/// opened with — the script cleared rows and put them back through both
+/// `set_association` and `duplicate_previous_period`.
+#[test]
+fn group_lists_are_added_rewritten_associated_and_removed() {
+    use collomatique_ops::{ColloscopeUpdateOp, GroupListsUpdateOp, SubjectsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::group_lists::{GroupList, GroupListFilling};
+
+    let dir = workspace("group-lists-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert!(
+        period_ids.len() >= 3,
+        "the script copies onto the second period and leaves a third for the \
+         second stage's exclusion"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .all(|subject| subject.excluded_periods.is_empty()),
+        "the script's copy assertion covers every subject that runs colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    // The rows one list serves, in the association table's own key order.
+    let rows_of = |list| {
+        params
+            .group_lists
+            .subjects_associations
+            .iter()
+            .filter(move |(_key, group_list)| **group_list == list)
+            .map(|(key, _group_list)| key)
+            .collect::<Vec<_>>()
+    };
+
+    // The list the whole test is about: the one exactly one subject uses, and
+    // on every period. One subject, so that the removal's unassignments are
+    // countable; every period, so that the first is free for the script's
+    // association writes and the second for its copy.
+    let (served_index, served) = params
+        .group_lists
+        .group_list_map
+        .keys()
+        .enumerate()
+        .find(|(_index, list)| {
+            let rows = rows_of(*list);
+            let subjects: BTreeSet<_> = rows.iter().map(|(_period, subject)| *subject).collect();
+            subjects.len() == 1 && rows.len() == period_ids.len()
+        })
+        .expect("the example has a list one single subject uses on every period");
+    let served_rows = rows_of(served);
+    let served_subject = served_rows[0].1;
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .get(&served)
+            .expect("the list was just read off the table")
+            .params()
+            .group_names
+            .len()
+            > 2,
+        "the second stage writes a colle naming group 2 in that list"
+    );
+
+    // The two students the second stage's placement row holds, and the cell it
+    // is measured against: the first week one of the served subject's slots is
+    // really active on, at a coordinate that subject's list serves.
+    let placed: Vec<_> = params.students.student_map.keys().take(2).collect();
+    assert_eq!(placed.len(), 2, "the placement row holds two students");
+
+    let (cell_period, cell_slot, cell_week) = params
+        .slots
+        .slots_for_subject(served_subject)
+        .into_iter()
+        .flatten()
+        .flat_map(|(slot_id, _slot)| {
+            params
+                .walk_weeks()
+                .map(move |(period, week, _week)| (period, *slot_id, week))
+        })
+        .find(|(period, slot, week)| {
+            params.is_interrogation_possible(*slot, *week)
+                && params
+                    .group_lists
+                    .subjects_associations
+                    .get(&(*period, served_subject))
+                    == Some(&served)
+        })
+        .expect("the served subject has a slot active on a week its list serves");
+
+    // The period the second stage's refusal is asserted on: not the cell's, so
+    // that the colle the script leans on survives the exclusion.
+    let gone_period = *period_ids
+        .iter()
+        .find(|period| **period != cell_period)
+        .expect("the example has more than one period");
+
+    // The french labels the six operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings.
+    // Only the variant — and, for the association, whether it names a list — is
+    // read, so the payloads below are the nearest ones to hand.
+    let label = |op: GroupListsUpdateOp| op.get_desc().1;
+    let blank = params
+        .group_lists
+        .group_list_map
+        .get(&served)
+        .expect("the list was just read off the table")
+        .clone();
+    let add_label = label(GroupListsUpdateOp::AddNewGroupList(blank.clone()));
+    let update_label = label(GroupListsUpdateOp::UpdateGroupList(served, blank));
+    let remove_label = label(GroupListsUpdateOp::DeleteGroupList(served));
+    let assign_label = label(GroupListsUpdateOp::AssignGroupListToSubject(
+        cell_period,
+        served_subject,
+        Some(served),
+    ));
+    let unassign_label = label(GroupListsUpdateOp::AssignGroupListToSubject(
+        cell_period,
+        served_subject,
+        None,
+    ));
+    let duplicate_label = label(GroupListsUpdateOp::DuplicatePreviousPeriod(cell_period));
+
+    // The list the second stage reads: the served one, automatic and otherwise
+    // untouched, so that it can hold a placement row at all.
+    let automatic = GroupList::new(
+        params
+            .group_lists
+            .group_list_map
+            .get(&served)
+            .expect("the list was just read off the table")
+            .params()
+            .clone(),
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::new(),
+        },
+    )
+    .expect("an automatic filling asks nothing of the group names");
+
+    run_stages(
+        &[
+            include_str!("scripts/group_lists_write_before.py"),
+            include_str!("scripts/group_lists_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("served_index", served_index)?;
+            globals.set_item("add_label", &add_label)?;
+            globals.set_item("update_label", &update_label)?;
+            globals.set_item("remove_label", &remove_label)?;
+            globals.set_item("assign_label", &assign_label)?;
+            globals.set_item("unassign_label", &unassign_label)?;
+            globals.set_item("duplicate_label", &duplicate_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "prepared_filling",
+                UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
+                    served,
+                    automatic.clone(),
+                )),
+            );
+            applied_write(
+                py,
+                globals,
+                "prepared_placements",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                    served,
+                    BTreeMap::from([(placed[0], 0), (placed[1], 2)]),
+                )),
+            );
+            applied_write(
+                py,
+                globals,
+                "prepared_cell",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                    cell_slot,
+                    cell_week,
+                    BTreeSet::from([0, 2]),
+                )),
+            );
+            // The subjects are a later piece of the mirror, so the one thing
+            // the second stage cannot say for itself is said here.
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                        served_subject,
+                        gone_period,
+                        false,
+                    )),
+                )
+                .expect("a subject of the example can stop running on a period");
+        },
+    );
+
+    // The document the script saved holds everything it opened with, plus the
+    // one list it wrote — and the association table it opened with, since every
+    // row it cleared it put back.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.group_lists;
+    let added: Vec<_> = after
+        .group_list_map
+        .iter()
+        .filter(|(id, _list)| !params.group_lists.group_list_map.contains(id))
+        .map(|(_id, list)| list.clone())
+        .collect();
+
+    assert_eq!(added.len(), 1);
+    let added = &added[0];
+    assert_eq!(added.params().name, "Maisons");
+    assert_eq!(
+        added.params().group_names.len(),
+        3,
+        "the script's last accepted rewrite gave it three unnamed groups"
+    );
+    assert!(added.params().group_names.iter().all(|name| name.is_none()));
+    assert_eq!(
+        added.filling(),
+        &GroupListFilling::Prefilled {
+            groups: vec![
+                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                    students: BTreeSet::from([placed[0]]),
+                },
+                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                    students: BTreeSet::from([placed[1]]),
+                },
+                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                    students: BTreeSet::new(),
+                },
+            ],
+        }
+    );
+    assert_eq!(
+        after.group_list_map.len(),
+        params.group_lists.group_list_map.len() + 1
+    );
+    assert_eq!(
+        after.subjects_associations.iter().collect::<Vec<_>>(),
+        params
+            .group_lists
+            .subjects_associations
+            .iter()
+            .collect::<Vec<_>>(),
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A document written here rather than copied, holding pairing rules
 ///
 /// The example has no subject pairing rules at all — its only pairings are the

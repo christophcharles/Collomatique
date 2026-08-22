@@ -412,8 +412,8 @@ def _automatic_filling() -> AutomaticGroups:
 class GroupListData:
     """A group list, detached from the document.
 
-    `doc.group_lists[...].to_data()` hands one back, and the group list
-    mutators will take one:
+    `doc.group_lists[...].to_data()` hands one back, and
+    `doc.group_lists.add` and `doc.group_lists.update` take one:
 
         clm.GroupListData(
             "Maisons",
@@ -452,6 +452,13 @@ class GroupListData:
     `len(group_names)` groups, and no student may appear in two of them; both
     are checked when the value is used, by the model's own constructor, whose
     message is the one a script meets.
+
+    The value carries the whole list, so `doc.group_lists.update` rewrites the
+    filling with the parameters: the model seals the two together, and there is
+    no writing one without the other. That write reaches the colloscope, which
+    is measured against the list — fewer groups than a colle names, a student
+    the list starts excluding, or a filling that stops being automatic all cost
+    what no longer fits, and the result reports it.
     """
 
     name: str = "Liste"

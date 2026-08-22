@@ -10,23 +10,55 @@
 //! Which group list a subject uses on a period is a separate table, the
 //! associations keyed by `(period, subject)` — the hop every script makes
 //! between a colloscope cell and the names it should print.
+//!
+//! Written through `add`, `update` and `remove` for the lists themselves, and
+//! through `set_association` and `duplicate_previous_period` for the table
+//! beside them. An `update` carries the whole list — the parameters *and* the
+//! filling — because that is what the op carries: the model seals the two
+//! together, so there is no writing one without the other.
+//!
+//! Both surfaces reach the colloscope, since the list is what bounds it. A
+//! colle names a *group number*, and the number is an index into the list the
+//! cell's subject uses on that week's period; a placement names the group one
+//! student landed in. So a list with fewer groups than a colle names, a list
+//! that stops being automatic, a student it starts excluding, an association
+//! taken away — each of them leaves colloscope material that no longer makes
+//! sense, and the cascade trims exactly that much. Every repair comes back on
+//! the `OpResult`.
+//!
+//! The family keeps three refusals for the model, and each reaches a script as
+//! `GroupListsError`: a subject that runs no interrogations needs no group list
+//! and takes no association, a subject that does not run on a period holds none
+//! there either, and the first period has no previous one to copy from. What
+//! the model could otherwise object to is caught above the write, where the
+//! message can say which argument was wrong: a dead group list, period or
+//! subject is the argument convention's business
+//! ([crate::handles::argument]), and a filling naming a student the document
+//! does not hold is the value boundary's.
+//!
+//! The family's sixth op, `add_generated`, is the solver's landing door and is
+//! not published here: its payload only exists once something has produced it
+//! (`docs/python/ops_migration.md`).
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
+use collomatique_ops::{GroupListsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::GroupListId as RawGroupListId;
-use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::PeriodId as RawPeriodId;
 use collomatique_state_colloscopes::SubjectId as RawSubjectId;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::periods::Period;
 use crate::collections::students::Student;
 use crate::collections::subjects::Subject;
+use crate::data::{GroupListData, Value as _};
 use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{GroupListId, IdClass};
+use crate::results::{AddResult, OpResult};
 use crate::values::nonzero_range;
 
 /// The group lists of one document, in id order
@@ -146,8 +178,197 @@ impl GroupLists {
         GroupListAssociationIter::new(self.doc.clone_ref(py), rows)
     }
 
+    /// Adds a group list, and hands back the handle of the new one
+    ///
+    /// Takes a `GroupListData` and answers an `AddResult`, whose `created` is
+    /// the `GroupList` the document just minted.
+    ///
+    /// ```python
+    /// doc.group_lists.add(collomatique.GroupListData(
+    ///     "Maisons",
+    ///     group_names=["Gryffondor", "Serpentard"],
+    ///     filling=collomatique.PrefilledGroups(({harry}, {ron}))))
+    /// ```
+    ///
+    /// A brand new list serves no subject and holds no colloscope placements,
+    /// so there is nothing for the cascade to repair: the answer's `warnings`
+    /// is empty. The one thing the op itself could object to — a filling naming
+    /// a student the document does not hold — is caught above the write, by the
+    /// value boundary.
+    ///
+    /// The list is not associated to anything by this call: which subject uses
+    /// it on which period is [GroupLists::set_association]'s business, the way
+    /// the model keeps the two apart.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let group_list = GroupListData::from_py(&self.doc, data)?;
+
+        crate::results::created::<GroupList>(
+            py,
+            &self.doc,
+            UpdateOp::GroupLists(GroupListsUpdateOp::AddNewGroupList(group_list)),
+            |new_id| match new_id {
+                NewId::GroupListId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a group list whole
+    ///
+    /// The op carries the whole value, so this replaces everything at once:
+    /// what the `GroupListData` says is what the list becomes, the name, the
+    /// student range, the group names and the filling together. The id stays,
+    /// and so does every handle naming it — and so do the associations, since
+    /// which subject uses the list is not part of the list.
+    ///
+    /// The filling is rewritten with the rest, which is the model's own shape:
+    /// it seals the parameters and the filling into one value, so a call that
+    /// means to move one student writes the whole list back. That is what
+    /// `to_data()` is for.
+    ///
+    /// What the caller changed on purpose lands silently — a group they
+    /// dropped and a student they took out of it are their own edit. What they
+    /// cannot see is the cascade's business, and it says so: a list with fewer
+    /// groups than the colles at its coordinates name has them trimmed, a
+    /// student it starts excluding loses their colloscope placement, and a list
+    /// that stops being automatic loses its whole placement row, since a
+    /// prefilled list holds its groups itself.
+    ///
+    /// The list is resolved before the value is read, so a call that is wrong
+    /// about both says which list it could not find rather than what was wrong
+    /// with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<GroupList>(&self.doc, key)?;
+        let group_list = GroupListData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(id, group_list)),
+        )
+    }
+
+    /// Removes a group list
+    ///
+    /// The list goes and everything that named it goes with it: every
+    /// association that gave it to a subject on a period, since there is no
+    /// list left to give, and its colloscope placement row, since nothing is
+    /// left to be placed in. Dropping an association takes the group bound of
+    /// that coordinate to zero, so the colles written there are out of range
+    /// too and the cascade empties their cells — a repair the removal did not
+    /// ask for directly, and whose `parent` says which unassignment needed it.
+    ///
+    /// Handles naming the list go stale; the subjects and the periods it served
+    /// are untouched, and simply use no list there afterwards.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<GroupList>(&self.doc, key)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::DeleteGroupList(id)),
+        )
+    }
+
+    /// Gives a subject a group list on a period, or takes it away
+    ///
+    /// The write half of `association_for`: one row of the `(period, subject) →
+    /// group list` table.
+    ///
+    /// ```python
+    /// doc.group_lists.set_association(period, maths, principale)
+    /// doc.group_lists.set_association(period, maths, None)
+    /// ```
+    ///
+    /// `None` is the missing row, exactly as it is on the read: the pair keeps
+    /// no list at all afterwards. The list is not removed — a list nobody uses
+    /// is an ordinary document.
+    ///
+    /// The colles at that coordinate are measured against the list, so changing
+    /// it changes what they may name: a group number the new list does not have
+    /// is out of range and the cascade trims it, and taking the list away
+    /// outright takes the bound to zero, which empties those cells. The
+    /// `OpResult` says which.
+    ///
+    /// Two refusals live here, both `GroupListsError`: a subject that runs no
+    /// interrogations needs no group list, and a subject that does not run on
+    /// the period holds nothing there. Both hold for `None` as well — there is
+    /// no row to clear where there could be none.
+    #[pyo3(signature = (period, subject, group_list))]
+    fn set_association(
+        &self,
+        py: Python<'_>,
+        period: &Bound<'_, PyAny>,
+        subject: &Bound<'_, PyAny>,
+        group_list: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+        let subject_id = argument::<Subject>(&self.doc, subject)?;
+        let group_list_id = group_list
+            .map(|group_list| argument::<GroupList>(&self.doc, group_list))
+            .transpose()?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::AssignGroupListToSubject(
+                period_id,
+                subject_id,
+                group_list_id,
+            )),
+        )
+    }
+
+    /// Copies the previous period's associations into this one
+    ///
+    /// The whole point of the op is the second period of a year looking like
+    /// the first: every subject that runs on both periods and holds
+    /// interrogations is given the list the *previous* period gives it — and
+    /// no list at all where the previous period has none, so this really is a
+    /// copy and not a merge.
+    ///
+    /// A subject either of the two periods excludes is left exactly as it is,
+    /// and so is one that runs no interrogations: neither could take an
+    /// association here in the first place.
+    ///
+    /// The colles of the period being written are measured against the lists
+    /// that land, so the cascade trims whatever they leave out of range, one
+    /// coordinate at a time.
+    ///
+    /// The first period has nothing before it, and asking anyway is refused
+    /// with a `GroupListsError` rather than quietly doing nothing.
+    fn duplicate_previous_period(
+        &self,
+        py: Python<'_>,
+        period: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::DuplicatePreviousPeriod(period_id)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.GroupLists count={}>", self.__len__(py))
+    }
+}
+
+impl GroupLists {
+    /// Writes through the document the view came from
+    ///
+    /// The four mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 
