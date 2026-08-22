@@ -625,7 +625,8 @@ class BalancingData:
     """The balancing goals one subject's colles are scheduled under, detached.
 
     `doc.balancing.global_options.to_data()` and the `BalancingOptions`
-    sub-views hand one back, and the balancing mutators will take one:
+    sub-views hand one back, and `doc.balancing.set_global` and
+    `doc.balancing.set_subject` take one:
 
         clm.BalancingData(
             teacher_rotation=clm.Enforcement.OBJECTIVE,

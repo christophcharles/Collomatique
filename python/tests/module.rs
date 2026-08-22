@@ -1894,6 +1894,151 @@ fn the_limits_are_set_overridden_and_un_overridden() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The balancing options are set, overridden and un-overridden from python
+///
+/// The fifth family of the ops mirror, and the settings' twin: the global entry
+/// and the per-subject overrides are records the document holds one of, so the
+/// three ops are whole-entry writes and there is nothing to add or to count.
+/// The whole-entry rule is what the script pins on that — a goal left at `None`
+/// in an override is *not pursued*, rather than inherited from the global entry
+/// — read back through the resolved view it holds across every write.
+///
+/// Where the twin has one refusal for the model, this family has two, one per
+/// addressed op, and both need a subject the document already holds: only a
+/// subject that runs interrogations may carry an override at all, and removing
+/// an override a subject does not have is refused rather than quietly done.
+/// That is what the script's two `BalancingError` assertions read the op, the
+/// case and the subject off; a subject this document does not hold never
+/// reaches the model at all.
+///
+/// The example is what [the_balancing_read_back_entry_by_entry] reads too, and
+/// it has all three subjects this needs: Métamorphose with an override, which
+/// no write of the script names, Arithmancie without one, and the Quidditch
+/// training, which runs no interrogations and so can never have one.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// global entry it installed, the override it gave Arithmancie, and
+/// Métamorphose's own.
+#[test]
+fn the_balancing_options_are_set_overridden_and_un_overridden() {
+    use collomatique_state_colloscopes::balancing::BalancingOptions;
+    use collomatique_state_colloscopes::settings::SoftParam;
+
+    let dir = workspace("balancing-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same subjects the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let subject_named = |name: &str| {
+        params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .find(|(_id, subject)| subject.parameters.name == name)
+            .unwrap_or_else(|| panic!("the example has {name}"))
+            .0
+    };
+    let metamorphose = subject_named("Métamorphose");
+    let arithmancie = subject_named("Arithmancie");
+    let quidditch = subject_named("Entrainement de Quidditch");
+
+    // One of the overrides the example ships, the subject without one, and the
+    // subject that runs no interrogations: the fixture is checked before the
+    // script leans on it.
+    let metamorphose_before = params
+        .balancing
+        .subjects
+        .get(&metamorphose)
+        .expect("Métamorphose has an override")
+        .clone();
+    assert!(
+        params.balancing.subjects.get(&arithmancie).is_none(),
+        "the script needs a subject inheriting the global entry"
+    );
+    assert!(
+        params
+            .subjects
+            .find_subject(quidditch)
+            .expect("the Quidditch training is a subject")
+            .parameters
+            .interrogation_parameters
+            .is_none(),
+        "the script needs a subject that cannot carry an override"
+    );
+    let before = params.balancing.subjects.len();
+
+    // What the script's two last accepted writes asked for, built here so that
+    // the comparison is with the entries a reader of this test can see written
+    // out. Both leave goals at `None`, which is the whole-entry rule: those
+    // goals are not pursued rather than inherited. A `SoftParam` that is `soft`
+    // is the `OBJECTIVE` spelling, and one that is not is `STRICT`.
+    let strict = || {
+        Some(SoftParam {
+            soft: false,
+            value: (),
+        })
+    };
+    let new_global = BalancingOptions {
+        teacher_rotation: None,
+        slot_rotation: strict(),
+        avoid_twice_in_a_row: None,
+        year_teacher_rotation: true,
+        period_teacher_rotation: false,
+    };
+    let arithmancie_override = BalancingOptions {
+        teacher_rotation: strict(),
+        slot_rotation: None,
+        avoid_twice_in_a_row: None,
+        year_teacher_rotation: false,
+        period_teacher_rotation: true,
+    };
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::BalancingUpdateOp| op.get_desc().1;
+    let global_label = label(collomatique_ops::BalancingUpdateOp::UpdateGlobalOptions(
+        new_global.clone(),
+    ));
+    let subject_label = label(collomatique_ops::BalancingUpdateOp::UpdateSubjectOptions(
+        arithmancie,
+        arithmancie_override.clone(),
+    ));
+    let remove_label = label(collomatique_ops::BalancingUpdateOp::RemoveSubjectOptions(
+        arithmancie,
+    ));
+
+    run(include_str!("scripts/balancing_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("global_label", &global_label)?;
+        globals.set_item("subject_label", &subject_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds the two entries it wrote, and the one
+    // it never named is untouched.
+    let written = reload(&target);
+    let balancing = &written.get_inner_data().params.balancing;
+
+    assert_eq!(balancing.global, new_global);
+    assert_eq!(
+        balancing.subjects.get(&arithmancie),
+        Some(&arithmancie_override)
+    );
+    assert_eq!(
+        balancing.subjects.get(&metamorphose),
+        Some(&metamorphose_before)
+    );
+    assert_eq!(balancing.subjects.len(), before + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with

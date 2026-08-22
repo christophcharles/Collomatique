@@ -12,11 +12,28 @@
 //! settings [Limits] view, with the same three ways to get one and the same
 //! rules for which of them goes stale when.
 //!
+//! Written through `set_global`, `set_subject` and `remove_subject` — three
+//! whole-entry writes, since the entries themselves are wholes. Nothing in the
+//! document points at a balancing entry — the per-subject table is keyed by the
+//! subject and names *it* — so no write of this family ever makes the cascade
+//! repair anything.
+//!
+//! The family keeps two refusals for the model, one per addressed op, and both
+//! reach a script as `BalancingError`: only a subject that runs interrogations
+//! may carry an override at all, and a subject with no override of its own has
+//! nothing to remove. Both are statements about the document rather than about
+//! an argument's shape — which is what tells them from the argument convention
+//! ([crate::handles::argument]), where a subject this document does not hold is
+//! caught before the op is even built, and where the message can say which
+//! argument was wrong. What a `BalancingData` carries is the value boundary's
+//! business, as ever.
+//!
 //! [Limits]: crate::collections::settings::Limits
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyTuple};
 
+use collomatique_ops::{BalancingUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::InnerData;
 use collomatique_state_colloscopes::SubjectId as RawSubjectId;
 use collomatique_state_colloscopes::balancing::BalancingOptions as RawBalancingOptions;
@@ -28,6 +45,7 @@ use crate::data::Value as _;
 use crate::errors::StaleHandleError;
 use crate::handles::{Handle, argument};
 use crate::ids::{IdClass, SubjectId};
+use crate::results::OpResult;
 use crate::values::Enforcement;
 
 /// The balancing of one document
@@ -141,9 +159,107 @@ impl Balancing {
         PyTuple::new(py, rows)
     }
 
+    /// Rewrites the document-wide balancing options
+    ///
+    /// Takes a `BalancingData` and installs it whole: what the value says is
+    /// what the global entry becomes, and a goal left at `None` is not pursued
+    /// at all for every subject that has no override of its own.
+    ///
+    /// ```python
+    /// doc.balancing.set_global(collomatique.BalancingData(
+    ///     teacher_rotation=collomatique.Enforcement.STRICT,
+    ///     year_teacher_rotation=True))
+    /// ```
+    ///
+    /// The global entry names no subject, so the model has nothing to object to
+    /// here: what the value carries is answered for when it is read, and the
+    /// write itself always goes through.
+    fn set_global(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5). A `BalancingData` names none,
+        // but the order is the boundary's and not each value's.
+        let options = BalancingData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Balancing(BalancingUpdateOp::UpdateGlobalOptions(options)),
+        )
+    }
+
+    /// Gives one subject balancing options of its own, or rewrites the ones it
+    /// has
+    ///
+    /// The override replaces the global entry **verbatim** for that subject: a
+    /// goal left at `None` is not pursued at all, rather than inherited from
+    /// the global entry. That is the model's whole-entry rule, and this write
+    /// carries the value across untouched.
+    ///
+    /// ```python
+    /// doc.balancing.set_subject(subject, collomatique.BalancingData(
+    ///     avoid_twice_in_a_row=collomatique.Enforcement.STRICT))
+    /// ```
+    ///
+    /// Only a subject that runs interrogations may carry an override: one whose
+    /// interrogations are switched off has nothing to balance, and the write is
+    /// refused with a `BalancingError` rather than leaving an entry behind that
+    /// the document would not check out with.
+    ///
+    /// Takes a [Subject] handle or a [SubjectId], as every argument of this api
+    /// does; one this document does not hold raises `StaleHandleError`. The
+    /// subject is resolved before the value is read, so a call that is wrong
+    /// about both says which subject it could not find rather than what was
+    /// wrong with a value meant for nobody.
+    fn set_subject(
+        &self,
+        py: Python<'_>,
+        subject: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let subject = argument::<Subject>(&self.doc, subject)?;
+        let options = BalancingData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Balancing(BalancingUpdateOp::UpdateSubjectOptions(subject, options)),
+        )
+    }
+
+    /// Takes one subject's override away, so that it inherits the global entry
+    /// again
+    ///
+    /// The subject must have an override to begin with: removing one that is
+    /// not there is refused with a `BalancingError` rather than quietly doing
+    /// nothing, since a script asking for it is wrong about the document.
+    /// `doc.balancing.override_for(subject)` is how to ask whether there is one.
+    ///
+    /// The [BalancingOptions] view `override_for` handed out is bound to the
+    /// entry, so it goes stale here; the resolved view of `options_for` lives
+    /// on and falls back to the global entry, which is the point of its being a
+    /// view.
+    fn remove_subject(&self, py: Python<'_>, subject: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let subject = argument::<Subject>(&self.doc, subject)?;
+
+        self.write(
+            py,
+            UpdateOp::Balancing(BalancingUpdateOp::RemoveSubjectOptions(subject)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         let count = self.with_data(py, |data| data.params.balancing.subjects.len());
         format!("<collomatique.Balancing overrides={count}>")
+    }
+}
+
+impl Balancing {
+    /// Writes through the document the view came from
+    ///
+    /// The whole family ends here: none of its three ops creates anything, so
+    /// none of them needs [crate::results::created]'s second half.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 
