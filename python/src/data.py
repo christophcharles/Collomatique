@@ -287,8 +287,8 @@ class WeekPatternData:
 class SlotData:
     """A slot, detached from the document.
 
-    `doc.slots[...].to_data()` hands one back, and the slot mutators will take
-    one:
+    `doc.slots[...].to_data()` hands one back, and `doc.slots.add` and
+    `doc.slots.update` take one:
 
         clm.SlotData(maths, snape, clm.Weekday.THURSDAY, datetime.time(14, 0))
 

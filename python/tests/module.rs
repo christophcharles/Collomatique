@@ -2987,6 +2987,242 @@ fn week_patterns_are_added_rewritten_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The slots are added, rewritten, moved and removed from python
+///
+/// The eleventh family of the ops mirror, and the first whose value is larger
+/// than what its ops carry: a `SlotData` names its subject, and a slot cannot
+/// change subject. So the `add` reads that field — `AddNewSlot` takes the
+/// subject beside the slot payload — and the `update` refuses a value naming
+/// another one, which is the `ValueError` the script pins beside the model's own
+/// refusals. It is also the first family with a position, so it brings two
+/// mutators nothing else has: `move_up` and `move_down`, whose ends of the list
+/// refuse.
+///
+/// The removal cascade needs a colle, and a colloscope cell is written through
+/// the colloscope family, which is a later piece — so this runs in two stages,
+/// with rust writing the one colle in between, the way
+/// [a_cascade_reports_every_repair_and_what_needed_it] does. The slot it writes
+/// on is the antecedent of the example's first slot pairing rule, so the second
+/// stage has a cell and a rule on one slot: the removal repairs both, and the
+/// `update` that puts the slot on a narrowing pattern repairs the cell alone.
+///
+/// The first stage needs no fixture of its own: it finds the subjects that run
+/// colles and the one that runs none, a teacher of the first and a stranger to
+/// it, off the document. What rust asserts here is that the example really holds
+/// those shapes.
+///
+/// Rust reads back the file the script saved after its last accepted write of
+/// the first stage: the slot the example did not have is the one the script
+/// asked for, field by field, and it sits last among its subject's slots.
+#[test]
+fn slots_are_added_rewritten_moved_and_removed() {
+    use collomatique_ops::{ColloscopeUpdateOp, SlotsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::slots::Slot;
+
+    let dir = workspace("slots-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The subjects the script names, in the order it walks them: the two first
+    // that run colles, and the first that runs none — the second is what the
+    // `SubjectHasNoInterrogation` refusal is asserted on.
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 2,
+        "the script names two subjects that run colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    let held = with_colles[0];
+    let slots_of_held: Vec<_> = params
+        .slots
+        .slots_for_subject(held)
+        .into_iter()
+        .flatten()
+        .map(|(slot_id, _slot)| *slot_id)
+        .collect();
+    assert!(
+        slots_of_held.len() >= 2,
+        "the script moves a slot around this subject's list and refuses at both ends"
+    );
+
+    // The teacher the script builds its slot around, and the stranger to that
+    // subject the `TeacherDoesNotTeachInSubject` refusal is asserted on. Both
+    // are the first of their kind, which is what the script picks too.
+    let teaches = params
+        .teachers
+        .teacher_map
+        .iter()
+        .find(|(_id, teacher)| teacher.subjects.contains(&held))
+        .map(|(id, _teacher)| id)
+        .expect("the example has a teacher of its first subject with colles");
+    assert!(
+        params
+            .teachers
+            .teacher_map
+            .values()
+            .any(|teacher| !teacher.subjects.contains(&held)),
+        "the script needs a teacher who is a stranger to that subject"
+    );
+
+    let pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .next()
+        .expect("the example has week patterns");
+
+    // The slot the second stage is about: the antecedent of the first slot
+    // pairing rule. It must be named by that rule and by no other, since the
+    // script asserts the removal's warning list entry by entry, and it must
+    // carry no pattern of its own, since the script puts one on it.
+    let cell_slot = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .values()
+        .next()
+        .map(|rule| rule.antecedent().slot_id)
+        .expect("the example has slot pairing rules");
+    assert_eq!(
+        params
+            .slot_pairings
+            .slot_pairing_rule_map
+            .iter()
+            .filter(|(_id, other)| other.antecedent().slot_id == cell_slot
+                || other.consequent().slot_id == cell_slot)
+            .count(),
+        1,
+        "exactly one rule names that slot, so the removal repairs exactly one",
+    );
+    assert_eq!(
+        params
+            .slots
+            .find_slot(cell_slot)
+            .expect("a rule names a live slot")
+            .week_pattern,
+        None,
+        "the second stage puts a pattern on that slot, so it starts with none",
+    );
+
+    // The cell rust writes between the stages: the first week that slot is
+    // really active on, which is where a colle may be written at all.
+    let (cell_week_index, cell_week) = params
+        .week_ids()
+        .enumerate()
+        .find(|(_index, week)| params.is_interrogation_possible(cell_slot, *week))
+        .expect("the slot is active on at least one week");
+
+    // The french labels the five operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: SlotsUpdateOp| op.get_desc().1;
+    let blank = params
+        .slots
+        .find_slot(cell_slot)
+        .expect("a rule names a live slot")
+        .clone();
+    let add_label = label(SlotsUpdateOp::AddNewSlot(held, blank.clone()));
+    let update_label = label(SlotsUpdateOp::UpdateSlot(cell_slot, blank));
+    let remove_label = label(SlotsUpdateOp::DeleteSlot(cell_slot));
+    let move_up_label = label(SlotsUpdateOp::MoveSlotUp(cell_slot));
+    let move_down_label = label(SlotsUpdateOp::MoveSlotDown(cell_slot));
+
+    run_stages(
+        &[
+            include_str!("scripts/slots_write_before.py"),
+            include_str!("scripts/slots_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("cell_week_index", cell_week_index)?;
+            globals.set_item("add_label", &add_label)?;
+            globals.set_item("update_label", &update_label)?;
+            globals.set_item("remove_label", &remove_label)?;
+            globals.set_item("move_up_label", &move_up_label)?;
+            globals.set_item("move_down_label", &move_down_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "prepared",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                    cell_slot,
+                    cell_week,
+                    BTreeSet::from([0]),
+                )),
+            );
+        },
+    );
+
+    // What the script's one add asked for, as it stood when it saved: created
+    // with one value and rewritten twice, then moved up and back down again.
+    let written_out = Slot {
+        subject_id: held,
+        teacher_id: teaches,
+        start_time: collomatique_time::SlotStart {
+            weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+            start_time: collomatique_time::WholeMinuteTime::new(
+                chrono::NaiveTime::from_hms_opt(8, 0, 0).expect("a real time of day"),
+            )
+            .expect("a whole minute"),
+        },
+        extra_info: String::new(),
+        week_pattern: Some(pattern),
+        cost: -2,
+    };
+
+    // The document the script saved holds everything it opened with, plus the
+    // one slot it wrote — last in its subject's list, which is where the two
+    // moves left it.
+    let written = reload(&target);
+    let after: Vec<_> = written
+        .get_inner_data()
+        .params
+        .slots
+        .slots_for_subject(held)
+        .into_iter()
+        .flatten()
+        .map(|(slot_id, slot)| (*slot_id, slot.clone()))
+        .collect();
+
+    assert_eq!(after.len(), slots_of_held.len() + 1);
+    let (added_id, added) = after.last().expect("the subject holds slots").clone();
+    assert!(!slots_of_held.contains(&added_id));
+    assert_eq!(added, written_out);
+    assert_eq!(
+        after
+            .iter()
+            .take(slots_of_held.len())
+            .map(|(id, _slot)| *id)
+            .collect::<Vec<_>>(),
+        slots_of_held,
+        "the two moves cancelled out, so the subject's own slots are where they were",
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with
