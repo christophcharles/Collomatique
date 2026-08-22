@@ -145,7 +145,9 @@ class TeacherData:
 class StudentData:
     """A student, detached from the document.
 
-    The same card as `TeacherData`, with a different set at the end:
+    The same card as `TeacherData`, with a different set at the end.
+    `doc.students[...].to_data()` hands one back, and `doc.students.add` and
+    `doc.students.update` take one:
 
         clm.StudentData("Harry", "Potter", tel="0601020304",
                         excluded_periods={first_period})
@@ -161,7 +163,10 @@ class StudentData:
 
     Which subjects a student takes is not here. The model keeps that in a
     junction table of its own, keyed by period and subject, which python reads
-    and writes as `doc.assignments`.
+    and writes as `doc.assignments`. Excluding a period through this class is
+    therefore a write that reaches those rows: nobody can be assigned in a
+    period they take no part in, so `doc.students.update` unassigns them there
+    and reports it.
     """
 
     firstname: str

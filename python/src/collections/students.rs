@@ -4,17 +4,39 @@
 //! them, contact details — together with the periods they take no part in.
 //! Which subjects a student takes is not here: the model keeps that in a
 //! junction table of its own, keyed by period and subject.
+//!
+//! Written through `add`, `update` and `remove`. A student's name is written
+//! down all over the document — the rows of `doc.assignments`, the groups of a
+//! prefilled group list, the excluded set of an automatic one, the per-student
+//! entry of `doc.settings`, the placements of a colloscope — and none of those
+//! sites can go on naming somebody the document no longer holds, so removing a
+//! student takes their name out of every one of them, and each removal comes
+//! back on the `OpResult`. An `update` cascades too, without anybody being
+//! removed: a student who now sits a period out cannot be assigned in it, so
+//! that period's assignment rows let them go.
+//!
+//! The family keeps no refusal for the model. `StudentsUpdateOp` can object to
+//! two things — a student id the document does not hold, and an excluded period
+//! that names nothing — and both are caught on this side, where the message can
+//! say which argument was wrong: a dead student is the argument convention's
+//! business ([crate::handles::argument]), and a dead period is the value
+//! boundary's. So nothing here raises `StudentsError`, unlike the teachers next
+//! door, where whether a subject runs colles is a statement about the document
+//! that only the write can make.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
-use collomatique_state_colloscopes::InnerData;
+use collomatique_ops::{StudentsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::StudentId as RawStudentId;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::periods::Period;
-use crate::handles::{Handle, handle_iterator, named, no_such, quoted};
+use crate::data::{StudentData, Value as _};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, StudentId};
+use crate::results::{AddResult, OpResult};
 
 /// The students of one document, in id order
 ///
@@ -83,8 +105,98 @@ impl Students {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a student, and hands back the handle of the new one
+    ///
+    /// Takes a `StudentData` — the whole of what a student is, since the entity
+    /// and the op payload are the same type here — and answers an `AddResult`,
+    /// whose `created` is the `Student` the document just minted.
+    ///
+    /// ```python
+    /// doc.students.add(collomatique.StudentData(
+    ///     "Luna", "Lovegood", email="luna@poudlard.fr",
+    ///     excluded_periods={first_period}))
+    /// ```
+    ///
+    /// A student arrives assigned to nothing and in no group, so there is
+    /// nothing for the cascade to repair: the answer's `warnings` is empty.
+    /// Which subjects they take is written afterwards, through
+    /// `doc.assignments`.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let student = StudentData::from_py(&self.doc, data)?;
+
+        crate::results::created::<Student>(
+            py,
+            &self.doc,
+            UpdateOp::Students(StudentsUpdateOp::AddNewStudent(student)),
+            |new_id| match new_id {
+                NewId::StudentId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a student whole
+    ///
+    /// The op carries the whole value, so this replaces every field at once:
+    /// what the `StudentData` says is what the student becomes, the card and
+    /// the excluded periods together. The id stays, and so does every handle
+    /// naming it.
+    ///
+    /// Excluding a period the student was assigned in is a write like any
+    /// other, and the cascade repairs what it broke: nobody can be assigned in
+    /// a period they take no part in, so that period's assignment rows let them
+    /// go, and the warnings say so.
+    ///
+    /// The student is resolved before the value is read, so a call that is
+    /// wrong about both says which student it could not find rather than what
+    /// was wrong with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Student>(&self.doc, key)?;
+        let student = StudentData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Students(StudentsUpdateOp::UpdateStudent(id, student)),
+        )
+    }
+
+    /// Removes a student
+    ///
+    /// Every site that names the student lets go of them — the assignment rows
+    /// they sat in, the prefilled group that held them, the automatic list that
+    /// excluded them, their entry in the settings, their placements in a
+    /// colloscope — and the `OpResult` carries every one of those repairs.
+    /// Nothing else is removed with them: an assignment row, a group list and a
+    /// limits entry all survive losing one name, so this cascade is wide rather
+    /// than deep. Handles naming the student go stale.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Student>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Students(StudentsUpdateOp::DeleteStudent(id)))
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.Students count={}>", self.__len__(py))
+    }
+}
+
+impl Students {
+    /// Writes through the document the view came from
+    ///
+    /// The two mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

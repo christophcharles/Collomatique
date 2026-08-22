@@ -2407,6 +2407,186 @@ fn teachers_are_added_rewritten_and_removed() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The students are added, rewritten and removed from python
+///
+/// The eighth family of the ops mirror, and the widest cascade so far: a
+/// student's name is written down in the assignment rows they sit in, in the
+/// prefilled groups that hold them, and in their own entry of the settings, and
+/// removing them takes it out of every one of those at once. None of those
+/// sites dies of it — a row that lost a name is still a row — so the warning
+/// list is flat where the teachers' was a tree, and this test says both things.
+/// The `update` cascades too, and without anybody being removed: a student who
+/// now sits a period out cannot be assigned in it.
+///
+/// Unlike the teachers next door, this family keeps no refusal for the model:
+/// the two things `StudentsUpdateOp` can object to — a student id and an
+/// excluded period id — are both caught above the write, so the script asserts
+/// them as a stale handle and not as a `StudentsError`.
+///
+/// The example is picked over a fixture of its own because it already holds
+/// every shape this needs: one student with a limits override, students in
+/// prefilled group lists, and assignment rows over several periods. Each of
+/// those is checked here before the script leans on it.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// two students the example did not have are the two the script asked for,
+/// field by field.
+#[test]
+fn students_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::PersonWithContact;
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::Student;
+
+    let dir = workspace("students-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.students.student_map.keys().collect();
+
+    // The last period, which the script's second add excludes: it is written
+    // out, so rust has to name the same one the script did.
+    let last_period = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+
+    // Where each student is assigned, as the script reads it off
+    // `doc.assignments`: the periods of the rows naming them, and how many rows
+    // that is.
+    let rows_of = |student_id| {
+        params
+            .assignments
+            .iter()
+            .filter(move |(_period, _subject, students)| students.contains(&student_id))
+    };
+    let periods_of = |student_id| {
+        rows_of(student_id)
+            .map(|(period, _subject, _students)| period)
+            .collect::<BTreeSet<_>>()
+    };
+
+    // The student the script removes: the one the settings hold an override
+    // for, which the example has exactly one of. They must also be held by a
+    // prefilled group list and sit in assignment rows — the three kinds of site
+    // whose repairs the script reads apart.
+    let mut overridden = params.settings.students.keys();
+    let doomed = overridden
+        .next()
+        .expect("the example holds one per-student limits override");
+    assert!(
+        overridden.next().is_none(),
+        "the script reads the override count down to zero, so there is one"
+    );
+    let doomed_index = params
+        .students
+        .student_map
+        .keys()
+        .position(|id| id == doomed)
+        .expect("the overridden student is a student");
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .values()
+            .any(|group_list| group_list.filling().contains_student(doomed)),
+        "the removed student is held by a prefilled group list"
+    );
+    assert!(
+        rows_of(doomed).next().is_some(),
+        "the removed student sits in assignment rows"
+    );
+
+    // The student the script excludes from a period: assigned over at least two
+    // periods, so that the repair can be seen to take one period's rows and
+    // leave the others alone. Never the removed one, whose rows the script
+    // asserts whole.
+    let (excluded_index, excluded) = params
+        .students
+        .student_map
+        .keys()
+        .enumerate()
+        .find(|(_index, student_id)| *student_id != doomed && periods_of(*student_id).len() >= 2)
+        .expect("the example has a student assigned over two periods");
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .values()
+            .any(|group_list| group_list.filling().contains_student(excluded)),
+        "the excluded student is held by a group list the exclusion must leave alone"
+    );
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::StudentsUpdateOp| op.get_desc().1;
+    let some_student = unsafe { collomatique_state_colloscopes::StudentId::new(1) };
+    let add_label = label(collomatique_ops::StudentsUpdateOp::AddNewStudent(
+        Student::default(),
+    ));
+    let update_label = label(collomatique_ops::StudentsUpdateOp::UpdateStudent(
+        some_student,
+        Student::default(),
+    ));
+    let remove_label = label(collomatique_ops::StudentsUpdateOp::DeleteStudent(
+        some_student,
+    ));
+
+    run(include_str!("scripts/students_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("excluded_index", excluded_index)?;
+        globals.set_item("doomed_index", doomed_index)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // What the script's two adds asked for, as they stood when it saved: the
+    // first was rewritten twice after being created, the second never touched.
+    let written_out = vec![
+        Student {
+            desc: PersonWithContact {
+                surname: "Tonks".to_owned(),
+                firstname: "Nymphadora".to_owned(),
+                tel: None,
+                email: None,
+            },
+            excluded_periods: BTreeSet::new(),
+        },
+        Student {
+            desc: PersonWithContact {
+                surname: "Black".to_owned(),
+                firstname: "Sirius".to_owned(),
+                tel: None,
+                email: None,
+            },
+            excluded_periods: BTreeSet::from([last_period]),
+        },
+    ];
+
+    // The document the script saved holds everything it opened with, plus the
+    // two students it wrote — and those two are what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.students.student_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _student)| !before.contains(id))
+        .map(|(_id, student)| student.clone())
+        .collect();
+
+    assert_eq!(added, written_out);
+    assert_eq!(after.len(), before.len() + 2);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with
