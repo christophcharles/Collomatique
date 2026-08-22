@@ -1411,6 +1411,118 @@ fn a_cascade_reports_every_repair_and_what_needed_it() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The incompatibilities are added, rewritten and removed from python
+///
+/// The first family of the ops mirror, and the debut of `AddResult`: an `add`
+/// answers the subclass carrying the handle of what it made, while the two
+/// other ops answer the plain `OpResult` — with no `created` at all rather than
+/// one holding `None`.
+///
+/// The family was picked first because nothing in the document points at an
+/// incompatibility: no write of it cascades, so what this test says is about
+/// the wiring and not about the model. Its refusals are the two the surface
+/// itself owns — a dead or foreign argument, and a value naming an entity this
+/// document does not hold — because those are the only ones the three ops have
+/// (`crate::collections::incompats`).
+///
+/// Rust reads back the file the script saved after its last write: the one
+/// incompatibility the example did not have is the one the script asked for,
+/// field by field.
+#[test]
+fn incompatibilities_are_added_rewritten_and_removed() {
+    let dir = workspace("incompats-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.incompats.incompat_map.keys().collect();
+
+    // The two entities the script names — its first subject and its first week
+    // pattern, in the order the script walks them.
+    let subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+    let pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .next()
+        .expect("the example has week patterns");
+
+    let at = |hour: u32, minute: u32| {
+        collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a real time of day"),
+        )
+        .expect("a whole minute")
+    };
+    let monday_at = |hour: u32| {
+        collomatique_time::SlotWithDuration::new(
+            collomatique_time::SlotStart {
+                weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+                start_time: at(hour, 0),
+            },
+            collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+        )
+        .expect("an hour from a whole hour is a window")
+    };
+
+    // What the script's last write asked for, built here so that the comparison
+    // is with the incompatibility a reader of this test can see written out.
+    let written_out = collomatique_state_colloscopes::incompats::Incompatibility {
+        subject_id: subject,
+        name: "Lundi Midi (par id)".to_owned(),
+        slots: vec![monday_at(12), monday_at(13)],
+        minimum_free_slots: NonZeroU32::new(2).expect("two is not zero"),
+        week_pattern_id: Some(pattern),
+    };
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::IncompatibilitiesUpdateOp| op.get_desc().1;
+    let some_incompat = *before.iter().next().expect("the example has incompats");
+    let add_label = label(collomatique_ops::IncompatibilitiesUpdateOp::AddNewIncompat(
+        written_out.clone(),
+    ));
+    let update_label = label(collomatique_ops::IncompatibilitiesUpdateOp::UpdateIncompat(
+        some_incompat,
+        written_out.clone(),
+    ));
+    let remove_label = label(collomatique_ops::IncompatibilitiesUpdateOp::DeleteIncompat(
+        some_incompat,
+    ));
+
+    run(include_str!("scripts/incompats_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds everything it opened with, plus the
+    // one incompatibility it wrote — and that one is what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.incompats.incompat_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _incompat)| !before.contains(id))
+        .map(|(_id, incompat)| incompat.clone())
+        .collect();
+
+    assert_eq!(added, vec![written_out]);
+    assert_eq!(after.len(), before.len() + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The subjects read back, with their interrogation parameters
 ///
 /// The script walks `doc.subjects` and leaves what it saw; rust compares it with

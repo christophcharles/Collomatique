@@ -329,8 +329,8 @@ class SlotData:
 class IncompatData:
     """An incompatibility, detached from the document.
 
-    `doc.incompats[...].to_data()` hands one back, and the incompatibility
-    mutators will take one:
+    `doc.incompats[...].to_data()` hands one back, and `doc.incompats.add` and
+    `doc.incompats.update` take one:
 
         clm.IncompatData("Lundi Midi", maths, slots=[clm.TimeSlot(
             clm.Weekday.MONDAY, datetime.time(12, 0), 60)])

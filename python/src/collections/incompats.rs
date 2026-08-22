@@ -8,18 +8,34 @@
 //! The subject is deliberately not required to run colles of its own: a student
 //! can be declared in a subject purely so that an incompatibility can block
 //! slots for them, without the subject having interrogations.
+//!
+//! Written through `add`, `update` and `remove`. The family sits at the leaf of
+//! the reference graph — nothing in the document points at an incompatibility —
+//! so a removal takes nothing with it and no write of this family ever makes
+//! the cascade repair anything.
+//!
+//! Every refusal the three ops have is caught on this side of them, which is
+//! why nothing here raises `IncompatibilitiesError`: the model can only object
+//! to a dead incompatibility, a dead subject or a dead week pattern, and the
+//! first is the argument convention's business ([crate::handles::argument])
+//! while the other two are the value boundary's ([crate::data::IncompatData]).
+//! A script meets a `StaleHandleError` naming the argument it got wrong,
+//! instead of a refusal from a layer that knows nothing about handles.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyTuple};
 
+use collomatique_ops::{IncompatibilitiesUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::IncompatId as RawIncompatId;
-use collomatique_state_colloscopes::InnerData;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::subjects::Subject;
 use crate::collections::week_patterns::WeekPattern;
-use crate::handles::{Handle, handle_iterator, named, no_such, quoted};
+use crate::data::{IncompatData, Value as _};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, IncompatId};
+use crate::results::{AddResult, OpResult};
 use crate::values::TimeSlot;
 
 /// The incompatibilities of one document, in id order
@@ -92,8 +108,90 @@ impl Incompats {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds an incompatibility, and hands back the handle of the new one
+    ///
+    /// Takes an `IncompatData` — the whole of what an incompatibility is, since
+    /// the entity and the op payload are the same type here — and answers an
+    /// `AddResult`, whose `created` is the `Incompat` the document just minted.
+    ///
+    /// ```python
+    /// doc.incompats.add(collomatique.IncompatData(
+    ///     "Lundi Midi", maths,
+    ///     slots=[clm.TimeSlot(clm.Weekday.MONDAY, datetime.time(12, 0), 60)]))
+    /// ```
+    ///
+    /// The subject is deliberately not required to hold interrogations of its
+    /// own: a student can be declared in a subject purely so that an
+    /// incompatibility can block slots for them.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let incompat = IncompatData::from_py(&self.doc, data)?;
+
+        crate::results::created::<Incompat>(
+            py,
+            &self.doc,
+            UpdateOp::Incompatibilities(IncompatibilitiesUpdateOp::AddNewIncompat(incompat)),
+            |new_id| match new_id {
+                NewId::IncompatId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites an incompatibility whole
+    ///
+    /// The op carries the whole value, so this replaces every field at once:
+    /// what the `IncompatData` says is what the incompatibility becomes. The id
+    /// stays, and so does every handle naming it.
+    ///
+    /// The incompatibility is resolved before the value is read, so a call that
+    /// is wrong about both says which incompatibility it could not find rather
+    /// than what was wrong with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Incompat>(&self.doc, key)?;
+        let incompat = IncompatData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Incompatibilities(IncompatibilitiesUpdateOp::UpdateIncompat(id, incompat)),
+        )
+    }
+
+    /// Removes an incompatibility
+    ///
+    /// Nothing in the document points at an incompatibility, so the removal
+    /// takes nothing with it and the warnings are always empty. Handles naming
+    /// it go stale, like every other removal's.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Incompat>(&self.doc, key)?;
+
+        self.write(
+            py,
+            UpdateOp::Incompatibilities(IncompatibilitiesUpdateOp::DeleteIncompat(id)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.Incompats count={}>", self.__len__(py))
+    }
+}
+
+impl Incompats {
+    /// Writes through the document the view came from
+    ///
+    /// The two mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

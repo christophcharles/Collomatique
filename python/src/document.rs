@@ -9,7 +9,7 @@ use pyo3::types::PyFrozenSet;
 use collomatique_ops::{Desc, UpdateOp};
 use collomatique_state::SessionStack;
 use collomatique_state::traits::Manager;
-use collomatique_state_colloscopes::Data;
+use collomatique_state_colloscopes::{Data, NewId};
 use collomatique_storage::Caveat;
 
 use crate::collections::{
@@ -22,7 +22,7 @@ use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
     NothingToUndo, SaveError,
 };
-use crate::results::OpResult;
+use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
 
 /// Where a document came from, and where a bare `save()` writes
@@ -235,6 +235,23 @@ impl Document {
     /// under `collomatique.UpdateError` — carrying the op, the case and the
     /// entities the model named ([crate::errors::refused]).
     pub fn update(&mut self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let (warnings, _created) = self.write(py, op)?;
+
+        Ok(OpResult::new(warnings))
+    }
+
+    /// Applies one composite op, keeping both halves of what it answered
+    ///
+    /// The repairs the cascade made, and the id the op issued when it created
+    /// something. [Document::update] is the door for a mutator that creates
+    /// nothing, and it drops the second half; a creating one goes through
+    /// [crate::results::created], which turns it into the handle its
+    /// `AddResult` carries.
+    pub(crate) fn write(
+        &mut self,
+        py: Python<'_>,
+        op: UpdateOp,
+    ) -> PyResult<(Vec<Py<Warning>>, Option<NewId>)> {
         let result = op
             .dry_apply(&self.state)
             .map_err(|e| crate::errors::refused(py, &e))?;
@@ -247,7 +264,7 @@ impl Document {
 
         self.state = result.new_state;
 
-        Ok(OpResult::new(warnings))
+        Ok((warnings, result.new_id))
     }
 
     /// Opens a transaction on the document
