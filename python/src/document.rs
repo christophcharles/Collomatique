@@ -20,7 +20,7 @@ use crate::collections::{
 use crate::dialogs::FileRequest;
 use crate::errors::{
     Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
-    NothingToUndo, SaveError, UpdateError,
+    NothingToUndo, SaveError,
 };
 use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
@@ -229,10 +229,15 @@ impl Document {
     /// that call it: the ops layer holds every write, but the python surface
     /// publishes them one family at a time. The tests use it directly, because
     /// staleness needs a removal the read surface cannot make yet.
+    ///
+    /// A refusal comes back as the exception class of the family that refused
+    /// — a `collomatique.GeneralPlanningError` and its fourteen siblings, all
+    /// under `collomatique.UpdateError` — carrying the op, the case and the
+    /// entities the model named ([crate::errors::refused]).
     pub fn update(&mut self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
         let result = op
             .dry_apply(&self.state)
-            .map_err(|e| UpdateError::new_err(e.to_string()))?;
+            .map_err(|e| crate::errors::refused(py, &e))?;
 
         // Rendered here, while `self.state` is still the state the op was
         // applied to: a warning names material this update may be about to

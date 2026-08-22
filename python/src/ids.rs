@@ -42,7 +42,42 @@ pub(crate) trait IdClass: Sized {
 
 /// Declares the id classes, which differ only in their name and their kind
 macro_rules! id_classes {
-    ($($name:ident wrapping $inner:ty, one $what:literal;)*) => { $(
+    ($($name:ident wrapping $inner:ty, one $what:literal;)*) => {
+        /// The id class a serde newtype-struct name stands for, around `inner`
+        ///
+        /// The rust ids are newtype structs (`PeriodId(u64)`), so a serde walk
+        /// over anything holding one is handed the struct's name — and the name
+        /// is the only thing that still tells an id from a plain number. The
+        /// walk over the model's refusals (`errors::payload`) asks here
+        /// with it.
+        ///
+        /// `inner` comes back untouched when the name is not an id class, or
+        /// when what it holds is not the `u64` an id is: the caller is
+        /// structural, and it must not lose what it cannot recognise.
+        pub(crate) fn from_serde<'py>(
+            py: Python<'py>,
+            name: &str,
+            inner: Bound<'py, PyAny>,
+        ) -> PyResult<Bound<'py, PyAny>> {
+            let Ok(value) = inner.extract::<u64>() else {
+                return Ok(inner);
+            };
+
+            match name {
+                $(stringify!($name) => {
+                    // `Id::new` is unsafe because a *document* must not be
+                    // handed an id it did not mint. Nothing here reaches one:
+                    // this is the id the model just named in a refusal, minted
+                    // so the script can print it and compare it with the ids it
+                    // already holds.
+                    let raw = unsafe { <$inner as collomatique_state::ids::Id>::new(value) };
+                    Ok(Bound::new(py, <$name as IdClass>::wrap(raw))?.into_any())
+                })*
+                _ => Ok(inner),
+            }
+        }
+
+        $(
         #[doc = concat!("The identity of one ", $what, ", inside one run")]
         ///
         /// Opaque: it compares and hashes, orders against ids of its own kind,

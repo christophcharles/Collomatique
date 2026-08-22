@@ -20,6 +20,10 @@ pyo3 = { workspace = true, features = [ "chrono" ] }
 rfd.workspace = true
 # `rfd`: the native file dialogs of the `dialogs` submodule
 # (`docs/python/new_api_design.md` §9.3).
+serde.workspace = true
+# `serde`: nothing here is read or written. The `Serializer` trait is how the
+# model's write errors are walked without naming a variant
+# (`src/errors/payload.rs`).
 tokio = { workspace = true, features = [ "rt", "rt-multi-thread", "net", "time" ] }
 # `tokio`: nothing here calls it. `rfd`'s blocking calls go through `zbus`,
 # which spawns onto whatever runtime is in context, and a python interpreter

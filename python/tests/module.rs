@@ -182,6 +182,28 @@ fn document_of(globals: &Bound<'_, PyDict>) -> Py<collomatique_python::Document>
         .expect("`doc` is a collomatique document")
 }
 
+/// The exception one refused write raised, put where the script can see it
+///
+/// The write surface publishes nothing the model can refuse yet, so the test
+/// drives the door the mirror will drive — the raw `Document::update` — and
+/// hands the script what it raised.
+fn refused_write(
+    py: Python<'_>,
+    globals: &Bound<'_, PyDict>,
+    name: &str,
+    op: collomatique_ops::UpdateOp,
+) {
+    let doc = document_of(globals);
+    let error = match doc.borrow_mut(py).update(py, op) {
+        Ok(_) => panic!("`{name}` is a write the model must refuse"),
+        Err(error) => error,
+    };
+
+    globals
+        .set_item(name, error.value(py))
+        .expect("the exception should go into the namespace");
+}
+
 /// One global, extracted into the rust shape the test compares against
 fn global<T>(globals: &Py<PyDict>, name: &str) -> T
 where
@@ -1163,6 +1185,128 @@ fn a_removed_period_makes_its_handles_stale() {
                     ),
                 )
                 .expect("the last period of the example is removable");
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A refused write names its family, its op and its case
+///
+/// The typed update errors of `docs/python/new_api_design.md` §6, end to end:
+/// the class comes from the family, and the three attributes from the two
+/// levels under it. None of it is written out variant by variant — the mapping
+/// is walked off the model's own serde shape — so this test is what says the
+/// walk finds the same thing the model put there.
+///
+/// The four refusals cover what the walk has to get right: two families, so the
+/// class table is exercised rather than assumed; a case carrying one id, which
+/// must reach the script as the very `PeriodId` it is holding; a case carrying
+/// nothing; and a case carrying two numbers, which must come in the model's own
+/// order.
+///
+/// They are applied from here rather than from the script because no python
+/// mutator can be refused yet — the two first-week ops are the whole write
+/// surface, and neither can fail.
+#[test]
+fn a_refused_write_names_its_family_its_op_and_its_case() {
+    let dir = workspace("refused");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let first = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    let doomed = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+    let first_week_count = params
+        .weeks
+        .week_count_for_period(first)
+        .expect("the first period has weeks");
+    let doomed_subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+
+    // A refusal needs something the model can say no to, and the surest one is
+    // an entity that is not there any more.
+    assert_ne!(first, doomed, "the example has more than one period");
+
+    run_stages(
+        &[
+            include_str!("scripts/refused_before.py"),
+            include_str!("scripts/refused_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::GeneralPlanning(
+                        collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(doomed),
+                    ),
+                )
+                .expect("the last period of the example is removable");
+
+            refused_write(
+                py,
+                globals,
+                "dead_period",
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::UpdatePeriodWeekCount(doomed, 3),
+                ),
+            );
+            refused_write(
+                py,
+                globals,
+                "no_previous",
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::MergeWithPreviousPeriod(first),
+                ),
+            );
+            refused_write(
+                py,
+                globals,
+                "too_long",
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::CutPeriod(
+                        first,
+                        first_week_count + 5,
+                    ),
+                ),
+            );
+
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Subjects(
+                        collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                    ),
+                )
+                .expect("a subject of the example is removable");
+            refused_write(
+                py,
+                globals,
+                "dead_subject",
+                collomatique_ops::UpdateOp::Subjects(
+                    collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                ),
+            );
         },
     );
 

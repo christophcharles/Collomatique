@@ -29,43 +29,16 @@ pub use transaction::Transaction;
 /// The `collomatique` python module, for registration in an interpreter's inittab.
 #[pymodule]
 pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    let py = m.py();
-
     m.add(
         "__version__",
         collomatique_settings::current_version().to_string(),
-    )?;
-
-    m.add("Error", py.get_type::<errors::Error>())?;
-    m.add("LoadError", py.get_type::<errors::LoadError>())?;
-    m.add("SaveError", py.get_type::<errors::SaveError>())?;
-    m.add("NoOrigin", py.get_type::<errors::NoOrigin>())?;
-    m.add("UpdateError", py.get_type::<errors::UpdateError>())?;
-    m.add("NothingToUndo", py.get_type::<errors::NothingToUndo>())?;
-    m.add(
-        "StaleHandleError",
-        py.get_type::<errors::StaleHandleError>(),
-    )?;
-    m.add("NotHosted", py.get_type::<errors::NotHosted>())?;
-    m.add("NoDocument", py.get_type::<errors::NoDocument>())?;
-    m.add("Cancelled", py.get_type::<errors::Cancelled>())?;
-    m.add(
-        "DialogUnavailable",
-        py.get_type::<errors::DialogUnavailable>(),
-    )?;
-    m.add(
-        "IdCeilingExceeded",
-        py.get_type::<errors::IdCeilingExceeded>(),
-    )?;
-    m.add(
-        "CaveatedOverwrite",
-        py.get_type::<errors::CaveatedOverwrite>(),
     )?;
 
     caveats::register(m)?;
     collections::register(m)?;
     data::register(m)?;
     dialogs::register(m)?;
+    errors::register(m)?;
     host::register(m)?;
     ids::register(m)?;
     refs::register(m)?;
