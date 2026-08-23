@@ -922,8 +922,14 @@ first.
    `group_lists.add_generated` and `colloscope.install` — since their payloads
    only exist once a solve produces them.
 6. Migrate the three contract scripts to the new API (user-validated) — they gain an
-   explicit `doc.save()`. Retire `python-old/` and its registration, and with it the
-   engine's automatic send-back (§11).
+   explicit `doc.save()`. The three ports are **done**: the old-API versions moved
+   to `scripts/old_api/` (`e304580b`), and the new ones landed beside them in
+   `scripts/` — the Pronote web import (`aee006b1`), the custom xlsx export
+   (`0479324e`) and the full draft import (`321acd1c`). The user ran all three on
+   real documents: the web import and the full import write byte-identical files
+   on the old and the new API, and the xlsx export was checked visually. What
+   remains of this step is retiring `python-old/` and its registration, and with
+   it the engine's automatic send-back (§11).
 
 Standalone packaging (wheel + nix environment) can land any time after step 3; no
 step depends on it.
