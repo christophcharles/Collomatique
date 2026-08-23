@@ -1,4 +1,4 @@
-//! The words the application speaks about a solve's configuration.
+//! The words the application speaks about a solve.
 //!
 //! One French sentence per [`collomatique_strategies::ConductorWarning`]
 //! variant, phrased the way the application's own solve dialog shows it
@@ -6,8 +6,11 @@
 //! module's warnings say what the dialog says. The match is exhaustive with no
 //! wildcard arm, so a new warning over there is a compile error here — the
 //! [`crate::caveats::caveat_text`] shape.
+//!
+//! [`solve_verdict_text`] does the same for the one sentence that same dialog
+//! writes once a solve has finished.
 
-use collomatique_strategies::ConductorWarning;
+use collomatique_strategies::{ConductorWarning, SolveVerdict};
 
 /// The sentence a conductor warning is shown as
 ///
@@ -49,5 +52,19 @@ pub fn conductor_warning_text(warning: ConductorWarning) -> &'static str {
         ConductorWarning::OverwhelmedCpu => {
             "Le nombre de tâches en parallèle dépasse le nombre de cœurs du processeur."
         }
+    }
+}
+
+/// The sentence the application shows for a finished solve
+///
+/// The solve dialog's own words (`gtk4/src/editor/run_solver.rs`), down to the
+/// punctuation, so a script printing a status prints what the user would have
+/// read.
+pub fn solve_verdict_text(verdict: SolveVerdict) -> &'static str {
+    match verdict {
+        SolveVerdict::Optimal => "Solution optimale trouvée !",
+        SolveVerdict::Feasible => "Solution trouvée !",
+        SolveVerdict::NoSolution => "Pas de solution !",
+        SolveVerdict::Error => "Erreur pendant l'exécution",
     }
 }
