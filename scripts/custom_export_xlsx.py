@@ -468,61 +468,149 @@ def query_prefilled(doc):
 # ------------------------------------------------------------ the sheets
 
 
-def build_colloscope_sheet(worksheet, formats, doc, global_settings, settings):
-    """The colloscope itself: one row per slot, one column per week."""
-    background = global_settings.background_color
-    stripe = global_settings.stripes_color
+class FixedColumns:
+    """Where the non-week columns sit, once the optional ones are known.
 
-    # Where the non-week columns sit. The contact column is written when
-    # either contact toggle is on, and carries whichever heading is set.
-    contact_name = settings.teacher_email
-    if contact_name is None:
-        contact_name = settings.teacher_tel
-    headings = ["Matière", "Colleur"]
-    col_contact = None
-    if contact_name is not None:
-        col_contact = len(headings)
-        headings.append(contact_name)
-    col_slot = len(headings)
-    headings.append("Créneau")
-    col_extra_info = None
-    if settings.extra_info_column_name is not None:
-        col_extra_info = len(headings)
-        headings.append(settings.extra_info_column_name)
-    fixed_col_count = len(headings)
+    Each optional column shifts the ones after it, so the positions are worked
+    out once and read from here rather than counted at every write.
+    """
 
-    # The periods that have weeks, left to right.
+    def __init__(self, settings):
+        self.subject = 0
+        self.teacher = 1
+        next_col = 2
+
+        self.email = None
+        if settings.teacher_email is not None:
+            self.email = next_col
+            next_col += 1
+
+        self.tel = None
+        if settings.teacher_tel is not None:
+            self.tel = next_col
+            next_col += 1
+
+        self.slot = next_col
+        next_col += 1
+
+        self.extra_info = None
+        if settings.extra_info_column_name is not None:
+            self.extra_info = next_col
+            next_col += 1
+
+        self.count = next_col
+
+
+@dataclasses.dataclass
+class PeriodLayout:
+    period: object
+    weeks: tuple
+    col_start: int
+    period_index: int
+    first_week_num: int
+
+
+def period_layout(doc, first_col):
+    """The periods that have weeks, left to right.
+
+    A period with no week is skipped entirely, numbering included: « Période 1 »
+    is the first period that has weeks, not the first period.
+    """
     layout = []
-    col = fixed_col_count
+    col = first_col
+    weeks_before = 0
     for period in doc.periods:
         weeks = period.weeks
         if not weeks:
             continue
-        layout.append((period, col, weeks))
+        layout.append(PeriodLayout(period, weeks, col, len(layout),
+                                   weeks_before))
         col += len(weeks)
-    week_col_count = col - fixed_col_count
+        weeks_before += len(weeks)
+    return layout
 
-    header_fmt = fmt_header(formats, background)
+
+def week_background(settings, week, default_background):
+    """The colour a week's column is painted, in the export's own order.
+
+    1. an annotation that names one of the extra colours wins outright;
+    2. then a week that holds no interrogation at all;
+    3. then any annotation, when the annotation colour is on;
+    4. otherwise whatever the row was already painted.
+    """
+    annotation = week.annotation
+    if annotation is not None:
+        extra = settings.extra_colors.get(annotation)
+        if extra is not None:
+            return extra
+    if not week.interrogations:
+        return settings.no_interrogation_color
+    if annotation is not None and settings.annotation_color is not None:
+        return settings.annotation_color
+    return default_background
+
+
+def build_colloscope_sheet(worksheet, formats, doc, global_settings, settings):
+    """The colloscope itself: one row per slot, one column per week."""
+    cols = FixedColumns(settings)
+    layout = period_layout(doc, cols.count)
+    week_col_count = sum(len(entry.weeks) for entry in layout)
+
+    background = global_settings.background_color
+    stripe = global_settings.stripes_color
+
+    first_week = doc.periods.first_week
+    show_week_dates = settings.display_week_dates and first_week is not None
+    header_row_offset = 1 if show_week_dates else 0
 
     # -- Row 0: one title per period, over its weeks --
-    for _period, col_start, weeks in layout:
-        write_or_merge(worksheet, 0, col_start, 0, col_start + len(weeks) - 1,
-                       "Période", header_fmt)
+    for entry in layout:
+        label = generate_period_title(first_week, entry.period_index,
+                                      entry.first_week_num, len(entry.weeks))
+        write_or_merge(worksheet, 0, entry.col_start,
+                       0, entry.col_start + len(entry.weeks) - 1,
+                       label, fmt_header(formats, background))
 
-    # -- Row 1: the fixed headings, then S1, S2, … --
-    for col, name in enumerate(headings):
-        worksheet.write(1, col, name, header_fmt)
+    # -- Row 1, when asked for: each week's date range, written sideways --
+    if show_week_dates:
+        for entry in layout:
+            for index, week in enumerate(entry.weeks):
+                left, right = side_borders(index, len(entry.weeks))
+                fmt = fmt_week_dates(formats, left, right,
+                                     week_background(settings, week,
+                                                     background))
+                worksheet.write(1, entry.col_start + index,
+                                generate_week_dates_title(week.monday), fmt)
+
+    # -- The heading row: the fixed columns, then S1, S2, … --
+    header_row = 1 + header_row_offset
+    header_fmt = fmt_header(formats, background)
+    worksheet.write(header_row, cols.subject, "Matière", header_fmt)
+    worksheet.write(header_row, cols.teacher, "Colleur", header_fmt)
+    # A column exists exactly when its heading does, and an empty heading is a
+    # heading someone chose — the model allows it — so it is written as it is.
+    if cols.email is not None:
+        worksheet.write(header_row, cols.email, settings.teacher_email,
+                        header_fmt)
+    if cols.tel is not None:
+        worksheet.write(header_row, cols.tel, settings.teacher_tel, header_fmt)
+    worksheet.write(header_row, cols.slot, "Créneau", header_fmt)
+    if cols.extra_info is not None:
+        worksheet.write(header_row, cols.extra_info,
+                        settings.extra_info_column_name, header_fmt)
 
     week_number = 1
-    for _period, col_start, weeks in layout:
-        for index in range(len(weeks)):
-            left, right = side_borders(index, len(weeks))
-            worksheet.write(1, col_start + index, "S{}".format(week_number),
-                            fmt_header_cell(formats, left, right, background))
+    for entry in layout:
+        for index, week in enumerate(entry.weeks):
+            left, right = side_borders(index, len(entry.weeks))
+            fmt = fmt_header_cell(formats, left, right,
+                                  week_background(settings, week, background))
+            worksheet.write(header_row, entry.col_start + index,
+                            "S{}".format(week_number), fmt)
             week_number += 1
 
     # -- The body --
-    row = 2
+    row = 2 + header_row_offset
     first_subject = True
     stripe_index = 0
 
@@ -535,15 +623,16 @@ def build_colloscope_sheet(worksheet, formats, doc, global_settings, settings):
             # A blank ruled row between two subjects. It does not advance
             # `stripe_index`: the stripes count interrogation rows, not sheet
             # rows, so a subject boundary never flips them.
-            for col in range(fixed_col_count):
+            for col in range(cols.count):
                 worksheet.write(row, col, "",
                                 fmt_empty_row(formats, 2, 2, background))
-            for _period, col_start, weeks in layout:
-                for index in range(len(weeks)):
-                    left, right = side_borders(index, len(weeks))
-                    worksheet.write(row, col_start + index, "",
-                                    fmt_empty_row(formats, left, right,
-                                                  background))
+            for entry in layout:
+                for index, week in enumerate(entry.weeks):
+                    left, right = side_borders(index, len(entry.weeks))
+                    fmt = fmt_empty_row(formats, left, right,
+                                        week_background(settings, week,
+                                                        background))
+                    worksheet.write(row, entry.col_start + index, "", fmt)
             row += 1
         first_subject = False
 
@@ -556,48 +645,59 @@ def build_colloscope_sheet(worksheet, formats, doc, global_settings, settings):
             data_fmt = fmt_data_cell(formats, top, bottom, 2, 2,
                                      row_background)
 
-            worksheet.write(row, 1, teacher.surname, data_fmt)
-            if col_contact is not None:
-                if settings.teacher_email is not None:
-                    write_mailto(worksheet, row, col_contact, teacher.email,
-                                 data_fmt)
-                else:
-                    worksheet.write(row, col_contact, teacher.tel or "",
-                                    data_fmt)
-            worksheet.write(row, col_slot, format_slot_start(slot), data_fmt)
-            if col_extra_info is not None:
-                worksheet.write(row, col_extra_info, slot.extra_info, data_fmt)
+            worksheet.write(row, cols.teacher, teacher.surname, data_fmt)
+            if cols.email is not None:
+                write_mailto(worksheet, row, cols.email, teacher.email,
+                             data_fmt)
+            if cols.tel is not None:
+                worksheet.write(row, cols.tel, teacher.tel or "", data_fmt)
+            worksheet.write(row, cols.slot, format_slot_start(slot), data_fmt)
+            if cols.extra_info is not None:
+                worksheet.write(row, cols.extra_info, slot.extra_info,
+                                data_fmt)
 
-            for period, col_start, weeks in layout:
+            for entry in layout:
                 # Which group list this subject uses depends on the period.
-                group_list = doc.group_lists.association_for(period, subject)
+                group_list = doc.group_lists.association_for(entry.period,
+                                                             subject)
                 names = (group_list.group_names
                          if group_list is not None else None)
-                for index, week in enumerate(weeks):
-                    left, right = side_borders(index, len(weeks))
+                for index, week in enumerate(entry.weeks):
+                    left, right = side_borders(index, len(entry.weeks))
                     fmt = fmt_data_cell(formats, top, bottom, left, right,
-                                        row_background)
-                    worksheet.write(row, col_start + index,
+                                        week_background(settings, week,
+                                                        row_background))
+                    worksheet.write(row, entry.col_start + index,
                                     interrogation_text(doc, slot, week, names),
                                     fmt)
 
             stripe_index += 1
             row += 1
 
-        write_or_merge(worksheet, subject_start_row, 0, row - 1, 0,
-                       subject.name,
+        write_or_merge(worksheet, subject_start_row, cols.subject,
+                       row - 1, cols.subject, subject.name,
                        fmt_data_cell(formats, 2, 2, 2, 2, background))
 
-    worksheet.set_column(0, 0, 14)
-    worksheet.set_column(1, 1, 14)
-    if col_contact is not None:
-        worksheet.set_column(col_contact, col_contact, 22)
-    worksheet.set_column(col_slot, col_slot, 14)
-    if col_extra_info is not None:
-        worksheet.set_column(col_extra_info, col_extra_info, 10)
+    # -- Under the grid: each annotated week's own text, written sideways --
+    if settings.display_annotations:
+        for entry in layout:
+            for index, week in enumerate(entry.weeks):
+                if week.annotation is not None:
+                    worksheet.write(row, entry.col_start + index,
+                                    "{} ".format(week.annotation),
+                                    fmt_annotation(formats, background))
+
+    worksheet.set_column(cols.subject, cols.subject, 14)
+    worksheet.set_column(cols.teacher, cols.teacher, 14)
+    if cols.email is not None:
+        worksheet.set_column(cols.email, cols.email, 22)
+    if cols.tel is not None:
+        worksheet.set_column(cols.tel, cols.tel, 14)
+    worksheet.set_column(cols.slot, cols.slot, 14)
+    if cols.extra_info is not None:
+        worksheet.set_column(cols.extra_info, cols.extra_info, 10)
     if week_col_count:
-        worksheet.set_column(fixed_col_count,
-                             fixed_col_count + week_col_count - 1, 5)
+        worksheet.set_column(cols.count, cols.count + week_col_count - 1, 5)
 
 
 def interrogation_text(doc, slot, week, group_names):
