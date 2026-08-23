@@ -17,6 +17,9 @@ collomatique-settings = { path = "../settings" }
 collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-storage = { path = "../storage" }
+# The worker subprocesses a solve runs in, and `EngineExe` — which collomatique
+# binary they re-execute (`docs/python/new_api_design.md` §10).
+collomatique-subprocesses = { path = "../subprocesses" }
 # The solve strategies `ConductorStrategy` mirrors, and the two presets its
 # classmethods hand back (`docs/python/new_api_design.md` §13) — the
 # application's own structs, so a script and a click run the same solve.

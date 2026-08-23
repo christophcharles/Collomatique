@@ -404,10 +404,15 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
 
             eprintln!("Running Python script...");
             collomatique_python_runner::initialize();
+            // A hosted process is a collomatique binary, so the running
+            // executable is an engine a script's solve may re-execute —
+            // hosted or not, since a script may solve a document it loaded
+            // itself.
             collomatique_python_runner::run_python_script(
                 script,
                 Some(shared.clone()),
                 Some(host),
+                Some(collomatique_python_runner::EngineExe::Current),
             )?;
 
             // Send back if modified

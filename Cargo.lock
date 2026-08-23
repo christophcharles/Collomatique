@@ -487,6 +487,7 @@ dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-strategies",
+ "collomatique-subprocesses",
  "collomatique-time",
  "collomatique-ui-text",
  "collomatique-xlsx",

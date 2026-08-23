@@ -12,6 +12,7 @@ pub mod collections;
 pub mod data;
 pub mod dialogs;
 pub mod document;
+pub mod engine;
 pub mod errors;
 pub mod handles;
 pub mod host;
@@ -26,6 +27,7 @@ pub mod values;
 
 pub use dialogs::{Dialogs, FileRequest, set_dialogs};
 pub use document::Document;
+pub use engine::{EngineExe, set_engine};
 pub use host::{Host, set_host};
 pub use model::ColloscopeModel;
 pub use transaction::Transaction;

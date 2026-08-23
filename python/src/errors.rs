@@ -75,6 +75,20 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    SolveError,
+    Error,
+    "A solve could not be run to an outcome."
+);
+
+create_exception!(
+    collomatique,
+    NoEngine,
+    SolveError,
+    "No collomatique engine was found to run a solve."
+);
+
+create_exception!(
+    collomatique,
     NothingToUndo,
     Error,
     "undo() or redo() was called with nothing left in that direction."
@@ -286,6 +300,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("UpdateError", py.get_type::<UpdateError>())?;
     m.add("ExportError", py.get_type::<ExportError>())?;
     m.add("ModelBuildError", py.get_type::<ModelBuildError>())?;
+    m.add("SolveError", py.get_type::<SolveError>())?;
+    m.add("NoEngine", py.get_type::<NoEngine>())?;
     m.add("NothingToUndo", py.get_type::<NothingToUndo>())?;
     m.add("StaleHandleError", py.get_type::<StaleHandleError>())?;
     m.add("NotHosted", py.get_type::<NotHosted>())?;
