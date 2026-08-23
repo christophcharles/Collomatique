@@ -777,6 +777,20 @@ dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
   sentences are `collomatique_ui_text::solver::conductor_warning_text`, the same
   function the solve dialog renders its list from, so `str(warning)` is what the
   user would have read.
+
+  Each `*_config` field both **enables and tunes** its substrategy: `None`
+  switches it off, an object switches it on. So `ConductorStrategy()` — warm
+  start alone, one worker — is the application's « Recherche simple », and the
+  two classmethods answer plain instances built on the Rust side, which is what
+  makes drift against the application's own presets impossible.
+
+  This is the one value family with no document behind it: a strategy names no
+  entity, so it is read through a marker struct with inherent methods rather than
+  through the `Value` trait of §2, whose `from_py` wants a document to resolve
+  against. Its boundary checks are its own two: a time limit is a whole number of
+  seconds and at least one, `None` being how "no limit" is said — zero is refused
+  rather than read as no limit — and a sigma or a tolerance must be finite and
+  not negative, zero allowed.
 - Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
   `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
 
@@ -921,6 +935,10 @@ the outcome.
   an engine to ask.
 - **Nothing is written to the document**, so a solve takes no undo slot. What it
   produces is a value, and `doc.colloscope.install(...)` is what lands it.
+- **`progress()` answers a `SolveProgress`**, or `None` before the run's first
+  report: the best incumbent's cost and the best proven bound, either of which may
+  be `None` on its own. It is the same pair `SolveOutcome` carries as `objective`
+  and `bound` once the run has finished.
 
 **One verdict, and the interface shows the same one.** `outcome.status` is a
 `SolveStatus` with exactly four values — `OPTIMAL`, `FEASIBLE`, `NO_SOLUTION`,
@@ -1101,8 +1119,9 @@ first.
    `model.solve` on the same object.
 5. Solver (last), including the engine-location mechanism — **done**, in eleven
    commits, the last being the end-to-end tests (`8f3ff6f4`). The design it was
-   built from, door by door, is `docs/python/solver.md`; the refinements it
-   settled over this document's §1 and §10 are folded in above.
+   built from, door by door, is
+   `git show 5d19b15a:docs/python/solver.md`; the refinements it settled over
+   this document's §1 and §10 are folded in above.
 
    It added `model.solve` to the `ColloscopeModel` of step 4 — the config and the
    build were already there — plus the run handle and the `SolveOutcome` of §10.3,
