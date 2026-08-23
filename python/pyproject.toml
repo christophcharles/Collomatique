@@ -11,8 +11,9 @@ build-backend = "maturin"
 name = "collomatique"
 requires-python = ">=3.9"
 description = "Automatic colloscope building program"
-# The version lives in the workspace `Cargo.toml`, like every other crate's;
-# `dynamic` is how PEP 621 says "not written here".
+# Not written here: maturin takes it from `Cargo.toml`, and `dynamic` is how
+# PEP 621 says so. Which version that is, and why this crate does not inherit
+# the workspace's, is explained where it is written -- `python/Cargo.toml`.
 dynamic = [ "version" ]
 
 [tool.maturin]

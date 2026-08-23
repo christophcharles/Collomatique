@@ -16,7 +16,7 @@ fi
 
 staged() { git diff --cached --name-only | grep -qx "$1"; }
 
-# The version is written out by hand in two places. Read them as the commit
+# The version is written out by hand in three places. Read them as the commit
 # would contain them, not as the working tree happens to have them, and refuse
 # a commit that would leave them disagreeing. Cargo.lock repeats the version
 # once per workspace member, but cargo writes those; nothing in pkgs/flatpak/
@@ -27,28 +27,81 @@ cargo_version=$(staged_content Cargo.toml | awk '
     /^\[workspace\.package\]/ { in_section = 1; next }
     /^\[/                     { in_section = 0 }
     in_section && /^version = / { gsub(/"/, "", $3); print $3; exit }')
-nix_version=$(staged_content collomatique.nix | awk '
+nix_version=$(staged_content pkgs/nix/collomatique.nix | awk '
     /^[[:space:]]*version = / { gsub(/[";]/, "", $3); print $3; exit }')
 
 if [ -z "$cargo_version" ] || [ -z "$nix_version" ]; then
     echo "pre-commit: could not read the version out of Cargo.toml or" >&2
-    echo "  collomatique.nix. The hook expects both to declare one." >&2
+    echo "  pkgs/nix/collomatique.nix. The hook expects both to declare one." >&2
     exit 1
 fi
 
 if [ "$cargo_version" != "$nix_version" ]; then
     echo "pre-commit: the two files declaring the version disagree." >&2
-    echo "  Cargo.toml:       $cargo_version" >&2
-    echo "  collomatique.nix: $nix_version" >&2
+    echo "  Cargo.toml:                $cargo_version" >&2
+    echo "  pkgs/nix/collomatique.nix: $nix_version" >&2
     exit 1
 fi
 
-# The cargoHash in collomatique.nix covers the whole lock file, dependency
-# edges included, so any change to Cargo.lock changes it. Demanding the two be
-# staged together is therefore exact.
-if staged Cargo.lock && ! staged collomatique.nix; then
-    echo "pre-commit: Cargo.lock is staged but collomatique.nix is not." >&2
-    echo "  Regenerate the cargoHash in collomatique.nix and stage it." >&2
+# The third one cannot repeat the string. python/Cargo.toml is what maturin
+# reads to build the wheel's metadata, and it wants PEP 440, which allows
+# nothing numeric after a prerelease -- so `0.1.0-alpha.1.99` is refused
+# outright. That crate therefore carries the same version with the dev counter
+# cut off, and this cuts it off the same way rather than trusting the two to
+# be kept in step by hand. A prerelease shape the rule does not cover is
+# refused rather than guessed at, for the same reason as the foreign
+# Cargo.lock source further down.
+expected_python_version=$(printf '%s' "$cargo_version" | python3 -c '
+import re, sys
+
+workspace = sys.stdin.read().strip()
+release, _, prerelease = workspace.partition("-")
+
+if not prerelease:
+    print(release)
+    sys.exit(0)
+
+shape = re.fullmatch(r"(alpha|beta|rc)\.(\d+)(?:\.\d+)?", prerelease)
+if shape is None:
+    sys.exit(
+        "pre-commit: the version has a prerelease this hook does not know how\n"
+        f"  to truncate: {workspace}\n"
+        "  Teach the rule in .githooks/pre-commit before committing."
+    )
+
+print(f"{release}-{shape.group(1)}.{shape.group(2)}")
+') || exit 1
+
+python_version=$(staged_content python/Cargo.toml | awk '
+    /^\[package\]/ { in_section = 1; next }
+    /^\[/          { in_section = 0 }
+    in_section && /^version = / { gsub(/"/, "", $3); print $3; exit }')
+
+if [ -z "$python_version" ]; then
+    echo "pre-commit: could not read the version out of python/Cargo.toml." >&2
+    echo "  That crate writes one out rather than inheriting the workspace's;" >&2
+    echo "  the hook expects a [package] version = \"...\" line." >&2
+    exit 1
+fi
+
+if [ "$python_version" != "$expected_python_version" ]; then
+    echo "pre-commit: python/Cargo.toml does not carry the version in Cargo.toml" >&2
+    echo "  with its dev counter cut off." >&2
+    echo "  Cargo.toml:        $cargo_version" >&2
+    echo "  python/Cargo.toml: $python_version" >&2
+    echo "  expected there:    $expected_python_version" >&2
+    exit 1
+fi
+
+# The cargoHash in pkgs/nix/collomatique.nix covers the whole lock file,
+# dependency edges included, so any change to Cargo.lock changes it. Demanding
+# the two be staged together is therefore exact. There is one hash in the tree
+# and no second one to check: pkgs/nix/collomatique-python.nix builds the same
+# workspace and takes both the vendor derivation and the version from this
+# file rather than repeating them.
+if staged Cargo.lock && ! staged pkgs/nix/collomatique.nix; then
+    echo "pre-commit: Cargo.lock is staged but pkgs/nix/collomatique.nix is not." >&2
+    echo "  Regenerate the cargoHash in pkgs/nix/collomatique.nix and stage it." >&2
     exit 1
 fi
 

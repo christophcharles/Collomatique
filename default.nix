@@ -1,4 +1,4 @@
 {
     pkgs ? import <nixpkgs> {}
 }:
-pkgs.callPackage ./collomatique.nix {}
+pkgs.callPackage ./pkgs/nix/collomatique.nix {}

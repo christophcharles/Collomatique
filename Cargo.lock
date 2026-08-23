@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python"
-version = "0.1.0-alpha.1.99"
+version = "0.1.0-alpha.1"
 dependencies = [
  "chrono",
  "collomatique-constraints-colloscopes",

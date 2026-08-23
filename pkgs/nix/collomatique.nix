@@ -14,13 +14,15 @@
     python3,
     python3Packages,
     clippy,
+    maturin,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
     version = "0.1.0-alpha.1.99";
 
     src = lib.cleanSourceWith {
-        src = ./.;
+        # The whole repository: this file lives two levels down from its root.
+        src = ../../.;
         filter = path: type:
             let
                 baseName = baseNameOf path;
@@ -30,7 +32,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-o/ggDnzo+IlYHlrmeiTimE5aCBM5s3It7rw87Tzcjnw=";
+    cargoHash = "sha256-j1qRI7GghtXeUJB5ozglXmsoDDD952/FRnnmkK3TRi4=";
 
     # The test suite is run from the dev shell, not from the package build.
     doCheck = false;
@@ -43,6 +45,11 @@ rustPlatform.buildRustPackage rec {
         cbc # We need it for tests
         clippy
         python3
+        # Not used by this build, which wants no wheel: it is here for the dev
+        # shell, where `maturin build` in `python/` is how the standalone
+        # module gets tried by hand. `collomatique-python.nix` builds it for
+        # real, with the hooks.
+        maturin
     ];
 
     buildInputs = [

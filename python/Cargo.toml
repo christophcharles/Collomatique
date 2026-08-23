@@ -1,6 +1,22 @@
 [package]
 name = "collomatique-python"
-version.workspace = true
+# The one crate that does not inherit the workspace version, and it cannot.
+# maturin reads this line to build the wheel's metadata and wants PEP 440,
+# which allows nothing numeric after a prerelease -- so the workspace's
+# `0.1.0-alpha.1.99` is refused outright. Writing the dev counter the way PEP
+# 440 would take it, `post99`, breaks the other side: semver compares an
+# identifier with letters in it lexically, so `post100` would sort before
+# `post99`.
+#
+# So the wheel gets the workspace version with the dev counter cut off. What
+# is lost is only wheel identity: two dev builds make wheels of the same name,
+# which nix does not care about (its store paths are not keyed on this) and
+# which pip answers to with --force-reinstall. Nothing here is what the
+# program reports or what documents record -- `__version__` and the header
+# both come from `collomatique_settings::current_version()`, which is the
+# workspace version, exact. The pre-commit hook derives this string from
+# Cargo.toml and refuses a commit where the two disagree.
+version = "0.1.0-alpha.1"
 edition.workspace = true
 authors.workspace = true
 
