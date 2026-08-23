@@ -815,7 +815,13 @@ def build_per_group_list_sheet(worksheet, formats, doc, global_settings,
     write_or_merge(worksheet, 0, 0, 0, len(headings) - 1, group_list.name,
                    header_fmt)
     for col, name in enumerate(headings):
-        worksheet.write(1, col, name, header_fmt)
+        if col == 1:
+            fmt = fmt_header_cell(formats, 2, 1, background)
+        elif col == 2:
+            fmt = fmt_header_cell(formats, 1, 2, background)
+        else:
+            fmt = header_fmt
+        worksheet.write(1, col, name, fmt)
 
     row = 2
     for display_index, group_number in enumerate(sorted(groups)):
@@ -823,24 +829,27 @@ def build_per_group_list_sheet(worksheet, formats, doc, global_settings,
         # The stripe alternates per *group* here, not per row: a group reads
         # as one block.
         row_background = stripe if display_index % 2 == 0 else background
-        name = get_group_name(group_list.group_names, group_number)
-        group_fmt = fmt_data_cell(formats, 2, 2, 2, 2, row_background)
-        write_or_merge(worksheet, row, 0, row + len(members) - 1, 0, name,
-                       group_fmt)
+        write_group_cell(worksheet, formats, row, members,
+                         get_group_name(group_list.group_names, group_number),
+                         show_emails, row_background)
 
         for member_index, student in enumerate(members):
             # Medium at the edges of a group, thin between its students.
             top, bottom = vertical_borders(member_index, len(members))
-            data_fmt = fmt_data_cell(formats, top, bottom, 2, 2,
-                                     row_background)
-            worksheet.write(row, 1, student.surname, data_fmt)
-            worksheet.write(row, 2, student.firstname, data_fmt)
+            worksheet.write(row, 1, student.surname,
+                            fmt_data_cell(formats, top, bottom, 2, 1,
+                                          row_background))
+            worksheet.write(row, 2, student.firstname,
+                            fmt_data_cell(formats, top, bottom, 1, 2,
+                                          row_background))
+            contact_fmt = fmt_data_cell(formats, top, bottom, 2, 2,
+                                        row_background)
             col = 3
             if show_emails:
-                write_mailto(worksheet, row, col, student.email, data_fmt)
+                write_mailto(worksheet, row, col, student.email, contact_fmt)
                 col += 1
             if show_tel:
-                worksheet.write(row, col, student.tel or "", data_fmt)
+                worksheet.write(row, col, student.tel or "", contact_fmt)
                 col += 1
             row += 1
 
@@ -853,6 +862,30 @@ def build_per_group_list_sheet(worksheet, formats, doc, global_settings,
         col += 1
     if show_tel:
         worksheet.set_column(col, col, 14)
+
+
+def write_group_cell(worksheet, formats, row, members, name, show_emails,
+                     row_background):
+    """Column 0 of a group: its name, over all its rows, linking to its members.
+
+    The cell spans a whole group whether the group holds one student or ten,
+    so it is ruled medium all round either way. When the contact column is on
+    and somebody in the group has an address, the name doubles as a link that
+    writes to the whole group at once.
+    """
+    fmt = fmt_data_cell(formats, 2, 2, 2, 2, row_background)
+    if len(members) > 1:
+        worksheet.merge_range(row, 0, row + len(members) - 1, 0, name, fmt)
+
+    addresses = [student.email for student in members if student.email]
+    if show_emails and addresses:
+        # Written over the merged range's anchor cell, which is where the link
+        # has to land -- so a merged group's cell is written twice, once by
+        # the merge and once by the link, exactly as the application does it.
+        worksheet.write_url(row, 0, "mailto:{}".format(",".join(addresses)),
+                            fmt, name)
+    elif len(members) == 1:
+        worksheet.write(row, 0, name, fmt)
 
 
 # ------------------------------------------------------------ the export
