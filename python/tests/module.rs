@@ -11461,6 +11461,126 @@ fn the_colloscope_comes_back_detached() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// A colloscope lands whole, through `install`
+///
+/// The family's fifth op, and the door a solve's outcome comes back through:
+/// the script reads the colloscope out with `to_data()`, edits it the way
+/// something that produced one would — one cell rewritten, one dropped, one
+/// student moved — and puts it back with `install`.
+///
+/// Rust reads back the file the script saved: the document holds exactly the
+/// value's rows and no others, which is what a dropped row makes visible —
+/// nothing removed it, the value simply did not name it. What the script says
+/// for itself is the rest: the empty `warnings` of a family nothing points at,
+/// the single undo slot however much changed, the model's own refusal for a
+/// group number past the bound, and the argument convention catching a value
+/// that names a dead slot before the write ever runs.
+///
+/// The example was never resolved, so it has no colloscope to install a
+/// changed copy of: this needs [colloscope_document], the fixture with cells
+/// on several coordinates and one filled automatic list.
+#[test]
+fn a_colloscope_lands_whole_through_install() {
+    use collomatique_ops::{ColloscopeContents, ColloscopeUpdateOp};
+
+    let dir = workspace("colloscope-install");
+    let source = dir.join("colloscope.collomatique");
+    colloscope_document(&source);
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entities the script is
+    // holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let original = ColloscopeContents::from(&data.get_inner_data().colloscope);
+
+    assert!(
+        original.interrogations.len() >= 2,
+        "the script rewrites one cell and drops another"
+    );
+    assert_eq!(
+        original.group_lists.len(),
+        1,
+        "the script names the single placements row"
+    );
+
+    // The rows the edit is about, found by the rule the script uses: the
+    // value's key order is the model's, so the first and the last cell are
+    // the same two on both sides.
+    let cells: Vec<_> = original.interrogations.keys().copied().collect();
+    let first_cell = *cells.first().expect("the fixture has cells");
+    let dropped_cell = *cells.last().expect("the fixture has cells");
+    assert_ne!(first_cell, dropped_cell);
+
+    let (automatic, placed) = original
+        .group_lists
+        .iter()
+        .next()
+        .expect("the fixture fills one list");
+    let group_count = params
+        .group_lists
+        .group_list_map
+        .get(automatic)
+        .expect("a placements row names a live group list")
+        .params()
+        .group_names
+        .len();
+    assert!(
+        group_count >= 3,
+        "the script rewrites a cell naming group 1 and refuses one naming group {group_count}"
+    );
+
+    // The colloscope the script installs: the first cell becomes `{0, 1}`,
+    // the last one is gone, and the first placed student moves to the next
+    // group round the list.
+    let mut expected = original.clone();
+    expected
+        .interrogations
+        .insert(first_cell, BTreeSet::from([0, 1]));
+    expected.interrogations.remove(&dropped_cell);
+    let mut moved = placed.clone();
+    let (first_student, first_group) = moved
+        .iter()
+        .next()
+        .map(|(student, group)| (*student, *group))
+        .expect("the fixture places a student");
+    moved.insert(
+        first_student,
+        (first_group + 1) % u32::try_from(group_count).expect("a group list holds few groups"),
+    );
+    assert_ne!(&moved, placed, "the script really moves the student");
+    expected.group_lists.insert(*automatic, moved);
+
+    // The french label the operation carries, so that the script's undo
+    // assertion pins the operation's own name and not merely some string.
+    // Only the variant is read, so the payload is the nearest one to hand.
+    let install_label = ColloscopeUpdateOp::InstallColloscope(ColloscopeContents::default())
+        .get_desc()
+        .1;
+
+    run(include_str!("scripts/colloscope_install.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("install_label", &install_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds exactly the rows the value named:
+    // the rewritten cell, the untouched ones, the moved placement — and not
+    // the dropped cell, which no write removed.
+    let written = reload(&target);
+    let after = ColloscopeContents::from(&written.get_inner_data().colloscope);
+    assert_eq!(after, expected);
+    assert_eq!(
+        after.interrogations.len() + 1,
+        original.interrogations.len()
+    );
+    assert!(!after.interrogations.contains_key(&dropped_cell));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A document written here rather than copied, holding a non-default export
 /// configuration
 ///

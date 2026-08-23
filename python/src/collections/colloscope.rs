@@ -38,9 +38,10 @@
 //! is the argument convention's business ([crate::handles::argument]), and so
 //! is a placed student the document does not hold.
 //!
-//! The family's fifth op, `install`, is the solver's landing door and is not
-//! published here: its payload only exists once something has produced it
-//! (`docs/python/new_api_design.md` §13.5).
+//! The family's fifth op, `install`, is the whole-colloscope door: it takes a
+//! `ColloscopeData` and makes the document hold exactly its rows. It is the
+//! solver's landing door — what a solve's outcome is put back through — and
+//! the row-by-row writes stay for everything smaller.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -208,10 +209,9 @@ impl Colloscope {
     ///
     /// A fresh object every call. Nothing here can go stale: the view is
     /// bound to the document alone, so this never raises `StaleHandleError`.
-    /// There is no write that takes one back whole: `install` is the solver's
-    /// landing door and waits for it, so a value read here is put back row by
-    /// row, through [Colloscope::set_interrogation] and
-    /// [Colloscope::set_group_list].
+    /// [Colloscope::install] takes one back whole; the row-by-row doors,
+    /// [Colloscope::set_interrogation] and [Colloscope::set_group_list],
+    /// remain for a single cell.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {
         // Copied out of the borrow before anything python-facing happens:
         // building the value calls into python, and doing that under the
@@ -342,6 +342,35 @@ impl Colloscope {
         )
     }
 
+    /// Replaces the whole colloscope
+    ///
+    /// ```python
+    /// outcome = run.wait()
+    /// doc.colloscope.install(outcome.colloscope)
+    /// ```
+    ///
+    /// Afterwards the document holds exactly the value's rows and no others:
+    /// a row the value does not name is gone, the way `erase` would have left
+    /// it. One operation, and so one undo slot, however much changed — the op
+    /// *carries* a whole colloscope but *lands* as a diff, so a row the
+    /// document already holds costs nothing.
+    ///
+    /// The value is measured against the document the way the row-by-row
+    /// writes are, and the refusals are the same ones: each is a
+    /// `ColloscopeError` naming the offending row. The colloscope is pointed
+    /// at by nothing, so this repairs nothing and `warnings` is empty.
+    fn install(&self, py: Python<'_>, colloscope: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        // Extracted before the borrow below and never inside it: reading the
+        // value calls into python, and doing that under the document's borrow
+        // is how a nested borrow becomes a `PanicException`.
+        let contents = ColloscopeData::from_py(&self.doc, colloscope)?;
+
+        self.write(
+            py,
+            UpdateOp::Colloscope(ColloscopeUpdateOp::InstallColloscope(contents)),
+        )
+    }
+
     /// The view itself — `<collomatique.Colloscope>`
     ///
     /// Deliberately without a row count: the view has two tables, and a repr
@@ -354,7 +383,7 @@ impl Colloscope {
 impl Colloscope {
     /// Writes through the document the view came from
     ///
-    /// The four mutators end here: none of them creates anything, so none of
+    /// The five mutators end here: none of them creates anything, so none of
     /// them needs the id half [crate::results::created] keeps.
     fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
         let mut doc = self.doc.borrow_mut(py);
