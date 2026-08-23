@@ -1146,8 +1146,11 @@ impl Document {
             return Err(failure);
         }
 
+        // The parameters go with the model: they are the half of this snapshot
+        // a solution is read against, and `inner` is this call's own copy — the
+        // borrow that made it ended long ago, so moving them out is free.
         built
-            .map(ColloscopeModel::new)
+            .map(|model| ColloscopeModel::new(model, inner.params))
             .map_err(ModelBuildError::new_err)
     }
 }

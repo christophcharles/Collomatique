@@ -21,6 +21,7 @@ use std::path::PathBuf;
 use pyo3::prelude::*;
 
 use collomatique_constraints_colloscopes::ConfiguredColloscopeModel;
+use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use crate::errors::ExportError;
 
@@ -44,12 +45,24 @@ pub struct ColloscopeModel {
     /// checker one, so the choice between them belongs to the export and not
     /// to the build (§10.2).
     model: ConfiguredColloscopeModel,
+    /// The parameters the model was built against
+    ///
+    /// Kept because a solution is a set of variable values and nothing more:
+    /// turning one back into a colloscope is `convert::build_colloscope`, and
+    /// that reads the periods, the weeks, the slots and the students out of
+    /// these. Only the parameters, not the whole `InnerData` — the colloscope
+    /// the document happens to hold is not part of the question.
+    ///
+    /// Part of the same snapshot as the model itself, taken in the same
+    /// breath: so the two can never disagree, and neither goes stale when the
+    /// document is edited afterwards.
+    params: Parameters,
 }
 
 impl ColloscopeModel {
     /// The python object for one built model
-    pub(crate) fn new(model: ConfiguredColloscopeModel) -> Self {
-        ColloscopeModel { model }
+    pub(crate) fn new(model: ConfiguredColloscopeModel, params: Parameters) -> Self {
+        ColloscopeModel { model, params }
     }
 
     /// The problem itself, for the doors this crate opens on it
@@ -58,6 +71,18 @@ impl ColloscopeModel {
     /// things that ever see it.
     pub(crate) fn inner(&self) -> &ConfiguredColloscopeModel {
         &self.model
+    }
+
+    /// What a solution of this model is read against
+    ///
+    /// Crate-private for the same reason as [ColloscopeModel::inner]: the
+    /// parameters are the document's own structures, and publishing them would
+    /// publish a second way of reading a document alongside the collections.
+    // Read by `solve`, which turns a solution into a colloscope; the model
+    // starts keeping them one commit before the door that asks for them.
+    #[allow(dead_code)]
+    pub(crate) fn params(&self) -> &Parameters {
+        &self.params
     }
 }
 
