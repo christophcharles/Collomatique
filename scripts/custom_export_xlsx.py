@@ -720,9 +720,10 @@ def build_per_student_groups_sheet(worksheet, formats, doc, global_settings,
     background = global_settings.background_color
     stripe = global_settings.stripes_color
 
+    # The two name columns read as one band: medium outside, thin between.
     header_fmt = fmt_header(formats, background)
-    worksheet.write(0, 0, "Nom", header_fmt)
-    worksheet.write(0, 1, "Prénom", header_fmt)
+    worksheet.write(0, 0, "Nom", fmt_header_cell(formats, 2, 1, background))
+    worksheet.write(0, 1, "Prénom", fmt_header_cell(formats, 1, 2, background))
     col = 2
     if show_emails:
         worksheet.write(0, col, "Courriel", header_fmt)
@@ -744,16 +745,20 @@ def build_per_student_groups_sheet(worksheet, formats, doc, global_settings,
         row = row_index + 1
         top, bottom = vertical_borders(row_index, len(students))
         row_background = stripe if row_index % 2 == 0 else background
-        data_fmt = fmt_data_cell(formats, top, bottom, 2, 2, row_background)
 
-        worksheet.write(row, 0, student.surname, data_fmt)
-        worksheet.write(row, 1, student.firstname, data_fmt)
+        worksheet.write(row, 0, student.surname,
+                        fmt_data_cell(formats, top, bottom, 2, 1,
+                                      row_background))
+        worksheet.write(row, 1, student.firstname,
+                        fmt_data_cell(formats, top, bottom, 1, 2,
+                                      row_background))
+        contact_fmt = fmt_data_cell(formats, top, bottom, 2, 2, row_background)
         col = 2
         if show_emails:
-            write_mailto(worksheet, row, col, student.email, data_fmt)
+            write_mailto(worksheet, row, col, student.email, contact_fmt)
             col += 1
         if show_tel:
-            worksheet.write(row, col, student.tel or "", data_fmt)
+            worksheet.write(row, col, student.tel or "", contact_fmt)
             col += 1
 
         for index, group_list in enumerate(group_lists):
