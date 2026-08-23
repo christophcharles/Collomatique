@@ -480,6 +480,7 @@ version = "0.1.0-alpha.1.99"
 dependencies = [
  "chrono",
  "collomatique-constraints-colloscopes",
+ "collomatique-mps",
  "collomatique-ops",
  "collomatique-settings",
  "collomatique-state",

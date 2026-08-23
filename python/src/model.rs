@@ -16,9 +16,13 @@
 //! the model nor invalidates it, so there is no staleness question to ask of
 //! it — it is not a handle.
 
+use std::path::PathBuf;
+
 use pyo3::prelude::*;
 
 use collomatique_constraints_colloscopes::ConfiguredColloscopeModel;
+
+use crate::errors::ExportError;
 
 /// A colloscope problem, built and ready to be written out or solved
 ///
@@ -52,7 +56,6 @@ impl ColloscopeModel {
     ///
     /// Crate-private on purpose: `export_mps` and, later, `solve` are the only
     /// things that ever see it.
-    #[allow(dead_code)]
     pub(crate) fn inner(&self) -> &ConfiguredColloscopeModel {
         &self.model
     }
@@ -78,6 +81,54 @@ impl ColloscopeModel {
             + stats.objective_defining_constraint_count;
 
         format!("<ColloscopeModel: {variables} variables, {constraints} constraints>")
+    }
+
+    /// Writes the problem out as an MPS file
+    ///
+    /// ```python
+    /// model = doc.build_colloscope_model(collomatique.ColloscopeSolveConfig())
+    /// model.export_mps("problem.mps")
+    /// model.export_mps("checker.mps", checker=True)
+    /// ```
+    ///
+    /// MPS is the file format solvers read: every variable, every constraint
+    /// and the objective, written down in full. It is a diagnostic file — it
+    /// goes to a solver, or to somebody looking at why a colloscope will not
+    /// come out. Nothing reads one back, and a solved MPS file is not a
+    /// colloscope.
+    ///
+    /// The names it carries are this program's own names for its variables and
+    /// its constraints, mangled into what MPS allows. They are a debugging aid
+    /// and nothing more: they can change from one version to the next, so a
+    /// script must not read them.
+    ///
+    /// With `checker=True` a second, smaller problem is written instead: the
+    /// constraints alone, with no objective and without what only the objective
+    /// needed. It answers « is this colloscope allowed », where the full file
+    /// answers « what is the best colloscope ». One build carries both, so the
+    /// choice is made here and not at `build_colloscope_model`.
+    ///
+    /// The model is not touched and the document is not touched either — an
+    /// export writes a file, so it takes no undo slot. A path that cannot be
+    /// written raises `ExportError`, and the message names the path.
+    #[pyo3(signature = (path, *, checker=false))]
+    fn export_mps(&self, py: Python<'_>, path: PathBuf, checker: bool) -> PyResult<()> {
+        let model = self.inner();
+        let problem = if checker {
+            model.checker_problem()
+        } else {
+            model.problem()
+        };
+
+        // Released for the duration: a whole colloscope written out variable by
+        // variable is long enough to be worth not blocking the interpreter over
+        // (`document.rs`'s own `export_xlsx`).
+        py.detach(|| {
+            let names = collomatique_mps::generate_names(problem);
+            let contents = collomatique_mps::generate_mps(problem, &names);
+            std::fs::write(&path, contents)
+        })
+        .map_err(|e| ExportError::new_err(format!("{}: {e}", path.display())))
     }
 }
 

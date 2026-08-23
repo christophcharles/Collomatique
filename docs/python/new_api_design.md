@@ -1011,19 +1011,20 @@ first.
    `group_lists.add_generated` stays out of the API for as long as group-list
    generation itself is unsettled (§10).
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
-   document plumbing of §9 — **done except the MPS export**. The plumbing came
+   document plumbing of §9 — **done**. The plumbing came
    early rather than last: `load`/`save` with the caveat guard, the `Origin`
    rule and `compacted()` landed right after the crate split
    (`12f9d959`…`20e4a7ca`), the hosted handoff in `8fd457f8`, the dialogs in
    `6bc64975` and `f5ddc152`, and `default_document` in `8138f50d`. The rest
    waited for the ops mirror: `replace_all` landed with the §8 decision it was
    holding open (`4c3ba5eb`), and `doc.export_xlsx` with the `ExportError` of §6
-   (`b9dcd6a7`). What remains of this step is the MPS export, which waited for
-   the `ColloscopeSolveConfig` of §10 rather than fronting it: the config value
-   itself (§10.1), the build door `doc.build_colloscope_model` with its opaque
-   `ColloscopeModel` and `ModelBuildError` (§10.2), and `model.export_mps` on
-   top of them (§9.4). The build door is shared with step 5, so it lands here
-   even though only the export uses it yet.
+   (`b9dcd6a7`). The MPS export came last of all, since it waited for the
+   `ColloscopeSolveConfig` of §10 rather than fronting it: the config value
+   itself (`a0330d84`, §10.1), then the build door
+   `doc.build_colloscope_model` with its opaque `ColloscopeModel` and
+   `ModelBuildError` (`c17507ed`, §10.2), and `model.export_mps` on top of the
+   two of them (§9.4). The build door is shared with step 5, which hangs
+   `model.solve` on the same object.
 5. Solver (last), including the engine-location mechanism. It adds `model.solve`
    to the `ColloscopeModel` of step 4 — the config and the build are already
    there — plus the run handle and `SolveOutcome` of §10. The landing door

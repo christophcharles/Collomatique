@@ -13963,3 +13963,125 @@ fn a_document_builds_its_colloscope_model() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// A built problem goes out as an MPS file, the whole one or the checker one
+///
+/// The file format is the mps crate's business and is tested there; what this
+/// says is that python reaches that writer with the problem the config built,
+/// that `checker=True` picks the other of the two problems one build carries,
+/// and that a failure on the way arrives as an `ExportError` naming the file.
+///
+/// Each file is read back and asked how many rows it holds — an MPS file has
+/// one row for the objective and one per constraint — and the answer is
+/// compared with the problem rust builds here from the same document. A file
+/// written from the wrong problem, or from no config at all, would not match.
+#[test]
+fn a_model_exports_to_mps() {
+    use collomatique_constraints_colloscopes::{
+        GroupListRecompute, GroupListSolveData, SolveConfig,
+    };
+
+    let dir = workspace("export-mps");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let full_target = dir.join("problem.mps");
+    let again_target = dir.join("again.mps");
+    let anchored_target = dir.join("anchored.mps");
+    let checker_target = dir.join("checker.mps");
+    let pinned_target = dir.join("pinned.mps");
+    let bad_target = dir.join("refused.mps");
+
+    let globals = run(include_str!("scripts/export_mps.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("full_target", &full_target)?;
+        globals.set_item("again_target", &again_target)?;
+        globals.set_item("anchored_target", &anchored_target)?;
+        globals.set_item("checker_target", &checker_target)?;
+        globals.set_item("pinned_target", &pinned_target)?;
+        globals.set_item("bad_target", &bad_target)?;
+        Ok(())
+    });
+
+    // The `ROWS` section runs from its header to the next one, and every line
+    // in it is indented — so counting them is asking the file how many rows the
+    // problem it holds has.
+    let rows = |target: &Path| {
+        let text = std::fs::read_to_string(target).expect("the script wrote this file");
+        text.lines()
+            .skip_while(|line| *line != "ROWS")
+            .skip(1)
+            .take_while(|line| line.starts_with(' '))
+            .count()
+    };
+
+    // The script never saved, so the file on disk is still the one it opened.
+    let data = reload(&source);
+
+    let automatic = data
+        .get_inner_data()
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .find(|(_id, group_list)| !group_list.is_prefilled())
+        .map(|(id, _group_list)| id)
+        .expect("the fixture holds an automatic list");
+
+    let build = |config: SolveConfig| {
+        config
+            .build_model(data.get_inner_data(), &mut |_line| {})
+            .expect("the fixture's model builds")
+    };
+
+    let built = build(SolveConfig::default());
+    let full_rows = built.problem().get_constraints().len() + 1;
+    assert!(full_rows > 1);
+    assert_eq!(rows(&full_target), full_rows);
+
+    // The same model asked twice wrote the same file, which the script already
+    // checked; what rust adds is that the second spelling of the path — a
+    // `pathlib.Path` rather than a `str` — reached the same writer.
+    assert_eq!(rows(&again_target), full_rows);
+
+    // The anchored problem carries an objective, and its checker problem is the
+    // constraints without what only that objective needed. Two problems out of
+    // one build, and the flag chooses between them.
+    let anchored = build(SolveConfig {
+        group_lists: BTreeMap::from([(
+            automatic,
+            GroupListSolveData {
+                recompute: Some(GroupListRecompute {
+                    previous_values_as_objective: true,
+                }),
+            },
+        )]),
+        ..SolveConfig::default()
+    });
+    let checker_rows = anchored.checker_problem().get_constraints().len() + 1;
+    assert!(checker_rows < anchored.problem().get_constraints().len() + 1);
+    assert_eq!(
+        rows(&anchored_target),
+        anchored.problem().get_constraints().len() + 1
+    );
+    assert_eq!(rows(&checker_target), checker_rows);
+
+    // And the pinned config's problem, which is a third one again: the group
+    // list keeps the groups it has, so there is less to write down.
+    let pinned = build(SolveConfig {
+        group_lists: BTreeMap::from([(automatic, GroupListSolveData { recompute: None })]),
+        ..SolveConfig::default()
+    });
+    let pinned_rows = pinned.problem().get_constraints().len() + 1;
+    assert_ne!(pinned_rows, full_rows);
+    assert_eq!(rows(&pinned_target), pinned_rows);
+
+    // The refusals: nothing was written where the flag was handed over
+    // positionally, and the path that could not be written is what the message
+    // opens with.
+    assert!(!bad_target.exists());
+    let failure = global::<String>(&globals, "failure");
+    assert!(failure.contains("no-such-directory"));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
