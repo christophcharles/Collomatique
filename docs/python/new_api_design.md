@@ -422,6 +422,10 @@ worker-killing `panic!`s:
   are `SaveError`s, so a script that only cares that the write failed catches one
   thing. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
   tracks how it was produced.
+- `ModelBuildError` for a colloscope model the constraint builder refuses to
+  build (`doc.build_colloscope_model`, §10.2), carrying the builder's own
+  sentence. It is a build failure and not an export failure, which is what lets
+  `model.export_mps` raise `ExportError` over the file alone.
 - `NothingToUndo` for `doc.undo()` or `doc.redo()` with nothing left in that
   direction (§5). One class for both, because it is one question — the history has
   another step that way, or it has not — and a script that wants to ask rather than
@@ -675,9 +679,17 @@ The downsides, stated plainly:
 - `doc.export_xlsx(path, config=None)` — `None` uses the document's export config.
   The `ExportConfig → xlsx::Config` conversion lives in the `xlsx` crate (§11.2);
   no shared crate is needed, since `xlsx` already depends on `state-colloscopes`.
-- `doc.export_mps(path, config)` — writes the built ILP problem for a given solve
-  config, the GUI's advanced-tools export. `config` is the `ColloscopeSolveConfig`
-  of §10, and the ILP model itself never becomes a Python object (§10).
+- MPS — the GUI's advanced-tools export, written through the model object of §10:
+  `model = doc.build_colloscope_model(config)`, then `model.export_mps(path)`.
+  It writes the full problem, objective included; `checker=True` writes the
+  constraints-only checker problem the same build already carries (§10.2). The
+  GUI writes the *base* model, with no config at all; the Python export writes
+  the configured one, so the file matches the problem a solve would actually
+  attack. Failures raise `ExportError`, as for xlsx — and only file failures
+  reach it, since a model that cannot be built already failed at
+  `build_colloscope_model` with `ModelBuildError` (§6). There is no
+  `doc.export_mps` sugar: an export needs a config, a config produces a model,
+  and one door is enough.
 
 ### 9.5 Compaction and the id ceiling
 
@@ -749,25 +761,115 @@ dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
   `IncrementalConfig`, `FuzzyConfig`; classmethods `ConductorStrategy.search()`
   and `.optimize()` (the two GUI presets); `.warnings()` returns the preflight
   `ConductorWarning`s.
-- Colloscope solve: `ColloscopeSolveConfig` (per-period recompute flags, per-group-
-  list recompute, anchor weights) mirroring `constraints_colloscopes::SolveConfig`.
+- Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
+  `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
 - Group-list generation: `GenerationRequest` (rebuild set, kept lists, canonical
   range) and `ObjectiveWeights`.
 
-**The ILP model is never a Python object.** No handle, no accessor, no introspection.
-The only thing that crosses is `doc.export_mps(path, config)` (§9.4), which writes a
-file. Exposing the problem would pin the internal variable and constraint naming of
+### 10.1 The colloscope solve config
+
+`ColloscopeSolveConfig` says which periods and which group lists a solve
+recomputes, and what a dropped constraint or a previous value is worth as an
+objective term. It mirrors `constraints_colloscopes::SolveConfig`, which is what
+the GUI's own solve dialog fills in.
+
+```python
+@dataclass
+class PeriodSolveConfig:
+    recompute: bool = True             # solve this period again
+    use_current_values: bool = False   # start from what the document holds
+
+@dataclass
+class GroupListSolveConfig:
+    recompute: bool = True
+    previous_values_as_objective: bool = False   # stay close to the current list
+
+@dataclass
+class ColloscopeSolveConfig:
+    periods: dict[Period | PeriodId, PeriodSolveConfig] = field(default_factory=dict)
+    group_lists: dict[GroupList | GroupListId, GroupListSolveConfig] = field(default_factory=dict)
+    objectify_cross_fixed_period: float | None = 1000.0
+    l1_anchor_weight: float = 1000.0
+```
+
+- **Names.** This family does not take the `*Data` suffix of §3. That suffix
+  means "the detached value of an entity", and these are call arguments. Rust's
+  internal `PeriodSolveData` / `GroupListSolveData` are not public-API precedent
+  either (§3).
+- **The group-list config is flat.** Rust nests it
+  (`Option<GroupListRecompute>`); Python gets the two booleans the GUI's own
+  dialog row holds. The one combination the nesting cannot express —
+  `recompute=False, previous_values_as_objective=True` — is refused at
+  extraction, naming the list: nothing is recomputed, so there is nothing for
+  the anchor to hold on to.
+- **A missing entry means the default.** A period or a group list absent from
+  the dicts is recomputed from scratch, so `ColloscopeSolveConfig()` is the
+  "recompute everything" config — what a script that does not care wants. The
+  dict keys are handles or ids like every other mapping argument (§2), with the
+  same refusal of dead, foreign and twice-named keys.
+- **A prefilled group list in `group_lists` is refused**, loudly, naming the
+  list: it has no solve to configure. Rust's `sanitize` drops such an entry
+  instead, but that runs before the GUI shows its dialog, to carry an earlier
+  choice forward sensibly. A Python config is written at the moment of the call,
+  so an entry like that is a mistake in the script and is said out loud.
+- **The weights are validated at the boundary**: non-finite or negative is
+  refused, zero is allowed. `objectify_cross_fixed_period=None` means the cross
+  constraints of a fixed period are dropped rather than paid for.
+- **The config is never stored on the document.** It is an argument, like the
+  GUI's dialog result, and every call takes its own.
+
+### 10.2 The model object
+
+The config is the common gate to both remaining doors — writing the problem out
+and solving it. Both take the same road: build the model once, then use it.
+
+```python
+model = doc.build_colloscope_model(config, on_log=...)   # config is required
+model.export_mps("problem.mps")                          # §9.4
+model.export_mps("checker.mps", checker=True)
+run = model.solve(strategy, on_progress=..., on_log=...)
+```
+
+- `config` is **required**. The GUI never solves without passing its dialog, and
+  a `None` here would read like `export_xlsx`'s `None`, which means something
+  else entirely (the document's own stored export config, §9.4). A script that
+  wants everything recomputed writes `ColloscopeSolveConfig()` and says so.
+- `ColloscopeModel` is **opaque**: no accessors, nothing to walk. Its `repr`
+  carries the two counts the GUI's advanced-tools panel shows
+  (`<ColloscopeModel: 12345 variables, 6789 constraints>`) and no names.
+- It is **detached**, like a value (§2): a snapshot taken at build time. Editing
+  the document afterwards neither changes it nor invalidates it — there is no
+  staleness question to ask. It is not a handle.
+- A model that cannot be built raises `ModelBuildError` (§6). That failure
+  belongs to the build, which leaves `export_mps` with nothing to fail over but
+  the file itself.
+- `on_log` is keyword-only, takes one `str` per line, and `None` discards: the
+  log the GUI's loading dialog shows while it builds. There is no `on_progress`
+  on a build — a build has lines, not a proportion; progress is the solver's
+  (below). A callback that raises does not tear the build in half: the build
+  runs to its end, the callback is not called again, and the exception
+  propagates once it returns, with no model produced.
+- **Checker or full is an export-time choice**, not a build-time one. One built
+  model already carries both problems: the real one, and the constraints-only
+  checker with a trivial objective (`ilp-modeler`'s `problem()` and
+  `checker_problem()`). There is no cheaper checker-only build to ask for, so
+  `checker=True` is a flag on the export rather than a second build or a
+  `model.checker()` object.
+
+**The ILP problem is never introspectable.** `ColloscopeModel` is a token for a
+built problem, not a view of one: no variables, no constraints, no accessors.
+Exposing the problem would pin the internal variable and constraint naming of
 `constraints-colloscopes` as public API, so every rename downstream would break
-scripts. The names inside the MPS file are already a de-facto contract through the
-GUI's own export, but that is a diagnostic file for a solver, not an API.
+scripts. The only thing that crosses is the file `export_mps` writes (§9.4). The
+names inside it are already a de-facto contract through the GUI's own export, but
+that is a diagnostic file for a solver, not an API.
 
 Execution is subprocess-based, reusing `StrategySubprocess::spawn` — the
 battle-tested path, with hard cancellation and no GIL contention. The API is a run
 handle:
 
 ```python
-run = doc.solve_colloscope(config, strategy,
-                           on_progress=..., on_log=...)   # non-blocking
+run = model.solve(strategy, on_progress=..., on_log=...)   # non-blocking
 run.progress()          # last known progress (async by design — no waiting)
 run.stop()              # cooperative stop → run finishes with best-so-far
 run.kill()              # hard kill
@@ -777,8 +879,10 @@ doc.colloscope.install(colloscope)  # lands through ops, one undo slot
 ```
 
 Group lists analogously: `doc.generate_group_lists(request, weights, strategy, ...)`
-→ outcome → `doc.group_lists.add_generated(outcome.entries)`. Mid-solve incumbent
-accept (the GUI's "take best so far") is `run.stop()` + using the outcome.
+→ outcome → `doc.group_lists.add_generated(outcome.entries)`. That model has no
+export door, so whether it grows the same two-step shape is a step-5 question and
+stays open here. Mid-solve incumbent accept (the GUI's "take best so far") is
+`run.stop()` + using the outcome.
 
 **Engine location.** The subprocess mechanism re-executes a collomatique binary with
 `--rpc-engine`. Standalone, the interpreter is `python`, so the engine binary is
@@ -907,17 +1011,22 @@ first.
    doors it gates out (`group_lists.add_generated`, `colloscope.install`) land
    with step 5 below.
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
-   document plumbing of §9 — **done except `export_mps`**. The plumbing came
+   document plumbing of §9 — **done except the MPS export**. The plumbing came
    early rather than last: `load`/`save` with the caveat guard, the `Origin`
    rule and `compacted()` landed right after the crate split
    (`12f9d959`…`20e4a7ca`), the hosted handoff in `8fd457f8`, the dialogs in
    `6bc64975` and `f5ddc152`, and `default_document` in `8138f50d`. The rest
    waited for the ops mirror: `replace_all` landed with the §8 decision it was
    holding open (`4c3ba5eb`), and `doc.export_xlsx` with the `ExportError` of §6
-   (`b9dcd6a7`). What remains of this step is `export_mps` alone — it takes the
-   `ColloscopeSolveConfig` of §10 as its argument, so it lands once that
-   vocabulary is settled rather than fronting it.
-5. Solver (last), including the engine-location mechanism. The two landing
+   (`b9dcd6a7`). What remains of this step is the MPS export, which waited for
+   the `ColloscopeSolveConfig` of §10 rather than fronting it: the config value
+   itself (§10.1), the build door `doc.build_colloscope_model` with its opaque
+   `ColloscopeModel` and `ModelBuildError` (§10.2), and `model.export_mps` on
+   top of them (§9.4). The build door is shared with step 5, so it lands here
+   even though only the export uses it yet.
+5. Solver (last), including the engine-location mechanism. It adds `model.solve`
+   to the `ColloscopeModel` of step 4 — the config and the build are already
+   there — plus the run handle and `SolveOutcome` of §10. The two landing
    doors are gated out of the ops mirror and land here with it —
    `group_lists.add_generated` and `colloscope.install` — since their payloads
    only exist once a solve produces them.
