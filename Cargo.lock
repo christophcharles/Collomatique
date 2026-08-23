@@ -708,6 +708,7 @@ dependencies = [
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-strategies",
  "collomatique-time",
  "thiserror 1.0.69",
 ]
