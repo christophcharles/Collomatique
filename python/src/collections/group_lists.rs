@@ -36,9 +36,10 @@
 //! ([crate::handles::argument]), and a filling naming a student the document
 //! does not hold is the value boundary's.
 //!
-//! The family's sixth op, `add_generated`, is the solver's landing door and is
-//! not published here: its payload only exists once something has produced it
-//! (`docs/python/new_api_design.md` §13.5).
+//! The family's sixth op, `add_generated`, is the landing door of group-list
+//! generation and is not published here: that feature is not settled yet, so
+//! the API fronts nothing for it — neither the generation call nor this door
+//! (`docs/python/new_api_design.md` §10).
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;

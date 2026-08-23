@@ -300,7 +300,7 @@ colloscope, export config).
 | Incompatibilities (3) | `doc.incompats.add/update/remove` |
 | Pairings (3) | `doc.pairings.add/update/remove` |
 | SlotPairings (3) | `doc.slot_pairings.add/update/remove` |
-| GroupLists (6) | `doc.group_lists.add/update/remove`, `.set_association(p, subj, gl_or_None)`, `.duplicate_previous_period(p)`, `.add_generated(entries)` (solver landing) |
+| GroupLists (5) | `doc.group_lists.add/update/remove`, `.set_association(p, subj, gl_or_None)`, `.duplicate_previous_period(p)` |
 | Settings (3) | `doc.settings.set_global_limits(LimitsData)`, `.set_student_limits(student, LimitsData)`, `.remove_student_limits(student)` |
 | Balancing (3) | `doc.balancing.set_global(BalancingData)`, `.set_subject(subj, BalancingData)`, `.remove_subject(subj)` |
 | Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (`InstallColloscope`, §11.1) |
@@ -318,9 +318,6 @@ are different types, structured the same: a write that creates nothing has no
 id field holding `None`, and `isinstance(r, OpResult)` holds for both, so code
 that only reads warnings treats them alike. A handle and not an id, for §4's
 own reason — it is strictly more useful, and the id is one attribute away.
-(The one exception is `group_lists.add_generated`, which creates many lists
-and answers a plain `OpResult`; a script reaches the lists through the
-associations they were installed at.)
 
 ```python
 r = doc.teachers.remove(tid)     # OpResult
@@ -763,8 +760,13 @@ dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
   `ConductorWarning`s.
 - Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
   `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
-- Group-list generation: `GenerationRequest` (rebuild set, kept lists, canonical
-  range) and `ObjectiveWeights`.
+
+**Group-list generation stays out of the API.** The feature itself is not settled
+yet, so there is no shape to mirror and the API does not invent one: no
+generation request, no objective weights, no `doc.generate_group_lists`, and no
+`group_lists.add_generated` landing door. Scripts get the colloscope solve, and
+nothing else of the solver. When the feature settles, its API is designed against
+whatever it has become by then.
 
 ### 10.1 The colloscope solve config
 
@@ -878,11 +880,8 @@ colloscope = outcome.colloscope     # a ColloscopeData value, NOT yet applied
 doc.colloscope.install(colloscope)  # lands through ops, one undo slot
 ```
 
-Group lists analogously: `doc.generate_group_lists(request, weights, strategy, ...)`
-→ outcome → `doc.group_lists.add_generated(outcome.entries)`. That model has no
-export door, so whether it grows the same two-step shape is a step-5 question and
-stays open here. Mid-solve incumbent accept (the GUI's "take best so far") is
-`run.stop()` + using the outcome.
+Mid-solve incumbent accept (the GUI's "take best so far") is `run.stop()` + using
+the outcome.
 
 **Engine location.** The subprocess mechanism re-executes a collomatique binary with
 `--rpc-engine`. Standalone, the interpreter is `python`, so the engine binary is
@@ -1007,9 +1006,10 @@ first.
    true-up, the typed errors of §6, the structured warnings, then the fifteen
    families leaves inward, the last being the period and week mutators
    (`c8133fa9`). The split it was built from is
-   `git show c8133fa9:docs/python/ops_migration.md`; the two solver landing
-   doors it gates out (`group_lists.add_generated`, `colloscope.install`) land
-   with step 5 below.
+   `git show c8133fa9:docs/python/ops_migration.md`; of the two solver landing
+   doors it gates out, `colloscope.install` lands with step 5 below and
+   `group_lists.add_generated` stays out of the API for as long as group-list
+   generation itself is unsettled (§10).
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
    document plumbing of §9 — **done except the MPS export**. The plumbing came
    early rather than last: `load`/`save` with the caveat guard, the `Origin`
@@ -1026,10 +1026,10 @@ first.
    even though only the export uses it yet.
 5. Solver (last), including the engine-location mechanism. It adds `model.solve`
    to the `ColloscopeModel` of step 4 — the config and the build are already
-   there — plus the run handle and `SolveOutcome` of §10. The two landing
-   doors are gated out of the ops mirror and land here with it —
-   `group_lists.add_generated` and `colloscope.install` — since their payloads
-   only exist once a solve produces them.
+   there — plus the run handle and `SolveOutcome` of §10. The landing door
+   gated out of the ops mirror lands here with it — `colloscope.install` —
+   since its payload only exists once a solve produces one. Group-list
+   generation is not part of this step (§10).
 6. Migrate the three contract scripts to the new API (user-validated) — they gain an
    explicit `doc.save()`. The three ports are **done**: the old-API versions moved
    to `scripts/old_api/` (`e304580b`), and the new ones landed beside them in
