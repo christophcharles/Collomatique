@@ -4,6 +4,13 @@ version.workspace = true
 edition.workspace = true
 authors.workspace = true
 
+# Both shapes of the same module. `rlib` is the embedded one — `python-runner`
+# links this crate and hands the interpreter its `#[pymodule]` through
+# `append_to_inittab`. `cdylib` is the standalone one: the extension module a
+# plain interpreter dlopens, built into a wheel by `pyproject.toml` next door.
+[lib]
+crate-type = [ "rlib", "cdylib" ]
+
 [dependencies]
 # The solve configuration `ColloscopeSolveConfig` mirrors, and the model
 # builder it will be handed to (`docs/python/new_api_design.md` §10).
