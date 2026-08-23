@@ -20,6 +20,9 @@ use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
+use collomatique_constraints_colloscopes::{
+    GroupListRecompute, GroupListSolveData, PeriodSolveData, SolveConfig,
+};
 use collomatique_ops::ColloscopeContents;
 use collomatique_state::{OrderedTable, Table};
 use collomatique_state_colloscopes::export_config::{
@@ -365,6 +368,66 @@ fn cost(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<i32> {
             shown(&value, "that value"),
         ))
     })
+}
+
+/// A field the solver prices an objective term with
+///
+/// A real number, zero included: a weight of zero writes the term and prices
+/// it at nothing, which is a thing a script may well mean. What is refused is
+/// a negative weight — it would pay the solver to break exactly what the term
+/// is there to price — and a non-finite one, which is no weight an objective
+/// can carry.
+fn weight(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<f64> {
+    let value = field(site, name, obj)?;
+    let number: f64 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a weight, and {} is not a number",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    checked_weight(site, name, number)
+}
+
+/// The same, for a weight that may name none
+///
+/// `None` is a value here rather than an absence: it says the term is not
+/// written at all, which is a different request from writing it and pricing
+/// it at zero.
+fn optional_weight(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let number: f64 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a weight or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    checked_weight(site, name, number).map(Some)
+}
+
+/// What both weight helpers refuse, in one place so they refuse it alike
+fn checked_weight(site: Site<'_>, name: &str, number: f64) -> PyResult<f64> {
+    if !number.is_finite() {
+        return Err(PyValueError::new_err(format!(
+            "{} is a finite weight, and {number} is not one",
+            site.field(name),
+        )));
+    }
+    if number < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "{} is zero or more, and {number} is negative",
+            site.field(name),
+        )));
+    }
+
+    Ok(number)
 }
 
 /// A field the model stores as "at least one"
@@ -2720,6 +2783,194 @@ impl Value for DocumentData {
             "export_config",
             ExportConfigData::to_py(py, &inner.export_config)?,
         )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// What one period is to a solve
+pub struct PeriodSolveConfig;
+
+impl Value for PeriodSolveConfig {
+    type Model = PeriodSolveData;
+
+    const CLASS: &'static str = "PeriodSolveConfig";
+
+    /// The document is not consulted: a period says nothing about itself here
+    /// beyond the two booleans, and the period it *is* is the key of the
+    /// mapping this value sits in, resolved there.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<PeriodSolveData> {
+        let site = Site::whole(Self::CLASS);
+
+        Ok(PeriodSolveData {
+            recompute: flag(site, "recompute", obj)?,
+            use_current_values: flag(site, "use_current_values", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, data: &PeriodSolveData) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("recompute", data.recompute)?;
+        kwargs.set_item("use_current_values", data.use_current_values)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The two booleans one `GroupListSolveConfig` carries
+///
+/// Not the model's own [GroupListSolveData], which nests the second inside the
+/// first (`Option<GroupListRecompute>`) and therefore cannot hold
+/// `recompute=False, previous_values_as_objective=True` at all. That pair is
+/// refused, and the refusal names the group list it was written for — which
+/// this value does not know and [ColloscopeSolveConfig], holding the mapping,
+/// does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupListFlags {
+    pub recompute: bool,
+    pub previous_values_as_objective: bool,
+}
+
+/// What one automatic group list is to a solve
+pub struct GroupListSolveConfig;
+
+impl Value for GroupListSolveConfig {
+    type Model = GroupListFlags;
+
+    const CLASS: &'static str = "GroupListSolveConfig";
+
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<GroupListFlags> {
+        let site = Site::whole(Self::CLASS);
+
+        Ok(GroupListFlags {
+            recompute: flag(site, "recompute", obj)?,
+            previous_values_as_objective: flag(site, "previous_values_as_objective", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, flags: &GroupListFlags) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("recompute", flags.recompute)?;
+        kwargs.set_item(
+            "previous_values_as_objective",
+            flags.previous_values_as_objective,
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// What a solve recomputes, and what it must leave alone
+pub struct ColloscopeSolveConfig;
+
+impl Value for ColloscopeSolveConfig {
+    type Model = SolveConfig;
+
+    const CLASS: &'static str = "ColloscopeSolveConfig";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<SolveConfig> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        let periods = entity_dict::<Period, PeriodSolveConfig>(doc, site, "periods", obj)?
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
+
+        let entries =
+            entity_dict::<GroupList, GroupListSolveConfig>(doc, site, "group_lists", obj)?;
+
+        // A prefilled list is refused before anything else is said about its
+        // entry: somebody wrote those groups, so there is no solve to
+        // configure. The model's own `sanitize` drops such an entry instead,
+        // but that runs before the application shows its dialog, to carry an
+        // earlier answer forward sensibly; a script writes its config at the
+        // moment it calls, so an entry like this is a mistake, and a mistake
+        // is said out loud.
+        let prefilled = {
+            let document = doc.borrow(obj.py());
+            let group_lists = &document.data().get_inner_data().params.group_lists;
+            entries.iter().map(|(id, _flags)| *id).find(|id| {
+                group_lists
+                    .group_list_map
+                    .get(id)
+                    .is_some_and(|group_list| group_list.is_prefilled())
+            })
+        };
+        if let Some(id) = prefilled {
+            return Err(PyValueError::new_err(format!(
+                "{} names {}, and that group list is prefilled: a solve computes the automatic \
+                 ones",
+                site.field("group_lists"),
+                GroupListId::text(id),
+            )));
+        }
+
+        let mut group_lists = BTreeMap::new();
+        for (id, flags) in entries {
+            let recompute = match (flags.recompute, flags.previous_values_as_objective) {
+                (true, previous_values_as_objective) => Some(GroupListRecompute {
+                    previous_values_as_objective,
+                }),
+                (false, false) => None,
+                // The combination the model has no room for, and the one thing
+                // a script can write here that means nothing: a list that is
+                // not recomputed keeps its groups, so there is no recomputed
+                // value left for the anchor to hold on to.
+                (false, true) => {
+                    return Err(PyValueError::new_err(format!(
+                        "{} asks {} for previous_values_as_objective without recompute, and a \
+                         group list that is not recomputed keeps its groups",
+                        site.field("group_lists"),
+                        GroupListId::text(id),
+                    )));
+                }
+            };
+            group_lists.insert(id, GroupListSolveData { recompute });
+        }
+
+        Ok(SolveConfig {
+            periods,
+            group_lists,
+            objectify_cross_fixed_period: optional_weight(
+                site,
+                "objectify_cross_fixed_period",
+                obj,
+            )?,
+            l1_anchor_weight: weight(site, "l1_anchor_weight", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, config: &SolveConfig) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+
+        let periods = PyDict::new(py);
+        for (id, data) in &config.periods {
+            periods.set_item(PeriodId::wrap(*id), PeriodSolveConfig::to_py(py, data)?)?;
+        }
+        kwargs.set_item("periods", periods)?;
+
+        let group_lists = PyDict::new(py);
+        for (id, data) in &config.group_lists {
+            let flags = GroupListFlags {
+                recompute: data.recompute.is_some(),
+                previous_values_as_objective: data
+                    .recompute
+                    .as_ref()
+                    .is_some_and(|recompute| recompute.previous_values_as_objective),
+            };
+            group_lists.set_item(
+                GroupListId::wrap(*id),
+                GroupListSolveConfig::to_py(py, &flags)?,
+            )?;
+        }
+        kwargs.set_item("group_lists", group_lists)?;
+
+        kwargs.set_item(
+            "objectify_cross_fixed_period",
+            config.objectify_cross_fixed_period,
+        )?;
+        kwargs.set_item("l1_anchor_weight", config.l1_anchor_weight)?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

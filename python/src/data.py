@@ -86,6 +86,9 @@ __all__ = [
     "ColloscopeData",
     "WeekData",
     "DocumentData",
+    "PeriodSolveConfig",
+    "GroupListSolveConfig",
+    "ColloscopeSolveConfig",
 ]
 
 
@@ -1102,3 +1105,104 @@ class DocumentData:
     subject_balancing: dict[SubjectId, BalancingData] = field(default_factory=dict)
     colloscope: ColloscopeData = field(default_factory=ColloscopeData)
     export_config: ExportConfigData = field(default_factory=ExportConfigData)
+
+
+@dataclass
+class PeriodSolveConfig:
+    """What one period is to a solve.
+
+    A `ColloscopeSolveConfig` holds one of these per period it says something
+    about. A period it does not name is recomputed from scratch, which is what
+    both fields default to.
+
+    `recompute` is whether the solver works out this period's interrogations
+    again. A period that is not recomputed keeps exactly what the document
+    holds there: those values are handed to the solver pinned.
+
+    `use_current_values` says what the values already there are worth, and it
+    means something on both sides of `recompute`. On a period that *is*
+    recomputed, the solve is anchored softly to them, so the result stays as
+    close to the current colloscope as the rest of the problem allows. On a
+    period that is not, it says the pinned values may be relied upon: the
+    constraints that reach across the pin survive — priced as soft penalties
+    when `objectify_cross_fixed_period` names a weight, kept hard when it is
+    `None` — instead of being dropped, which is what happens without it.
+
+    All four combinations therefore mean something, which is why this is two
+    independent booleans rather than one switch.
+    """
+
+    recompute: bool = True
+    use_current_values: bool = False
+
+
+@dataclass
+class GroupListSolveConfig:
+    """What one automatic group list is to a solve.
+
+    A `ColloscopeSolveConfig` holds one of these per group list it says
+    something about. A list it does not name is recomputed freely, which is
+    what both fields default to.
+
+    Only an automatic list belongs here. A prefilled list has no groups to
+    work out — somebody wrote them — so naming one is refused when the config
+    is used, rather than quietly ignored.
+
+    `recompute` is whether the solver fills this list again. A list that is
+    not recomputed keeps the groups the document holds: they are pinned.
+
+    `previous_values_as_objective` anchors the recomputed groups softly to
+    the ones already there, so a student stays where they were unless the
+    rest of the problem pays for moving them. It only means something on a
+    list that *is* recomputed: `recompute=False` together with
+    `previous_values_as_objective=True` is refused when the config is used,
+    since there would be nothing for the anchor to hold on to.
+    """
+
+    recompute: bool = True
+    previous_values_as_objective: bool = False
+
+
+@dataclass
+class ColloscopeSolveConfig:
+    """What a solve recomputes, and what it must leave alone.
+
+    §10 of `docs/python/new_api_design.md` is the design.
+    `doc.build_colloscope_model(config)` takes one of these, and the model it
+    hands back is what the MPS export writes:
+
+        config = clm.ColloscopeSolveConfig()
+        model = doc.build_colloscope_model(config)
+        model.export_mps("probleme.mps")
+
+    `clm.ColloscopeSolveConfig()` recomputes everything from scratch, and
+    that is what an empty `periods` and an empty `group_lists` mean: a period
+    or a group list the config does not name gets the default of its own
+    class. A config only ever spells out what departs from that.
+
+    `periods` and `group_lists` are keyed by entity, and take handles and ids
+    interchangeably, like every other place in this API that names one. A
+    mapping that names the same period or the same list twice, once in each
+    spelling, is refused when the config is used, rather than quietly keeping
+    the last entry.
+
+    `objectify_cross_fixed_period` is what a constraint reaching across a
+    pinned period is worth: a weight prices it as a soft penalty, and `None`
+    keeps it hard — which drops it wherever the pin makes it unsatisfiable.
+    `l1_anchor_weight` is what one step away from an anchored current value
+    costs, for the anchors `use_current_values` and
+    `previous_values_as_objective` ask for.
+
+    Both weights are the model's own defaults. A weight that is negative or
+    not finite is refused when the config is used; zero is allowed, and means
+    the term is written and prices nothing.
+
+    A config is not stored on the document. It is an argument, and every
+    build takes its own.
+    """
+
+    periods: dict[Period | PeriodId, PeriodSolveConfig] = field(default_factory=dict)
+    group_lists: dict[GroupList | GroupListId, GroupListSolveConfig] = field(
+        default_factory=dict)
+    objectify_cross_fixed_period: float | None = 1000.0
+    l1_anchor_weight: float = 1000.0

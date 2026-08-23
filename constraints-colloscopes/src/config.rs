@@ -64,7 +64,7 @@ pub enum ConfiguredConstraintDesc {
 ///
 /// [`sanitize`]: SolveConfig::sanitize
 /// [`build_model`]: SolveConfig::build_model
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct SolveConfig {
     pub periods: BTreeMap<collomatique_state_colloscopes::PeriodId, PeriodSolveData>,
     pub group_lists: BTreeMap<collomatique_state_colloscopes::GroupListId, GroupListSolveData>,
@@ -77,7 +77,7 @@ pub struct SolveConfig {
     pub l1_anchor_weight: f64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PeriodSolveData {
     pub recompute: bool,
     pub use_current_values: bool,
@@ -92,7 +92,7 @@ impl Default for PeriodSolveData {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GroupListSolveData {
     /// `Some` recomputes this group list's `StudentInGroup` variables (freely, or softly anchored
     /// per [`GroupListRecompute`]); `None` pins them to their current values.
@@ -101,7 +101,7 @@ pub struct GroupListSolveData {
 
 /// How a recomputed group list treats its current values. Only meaningful when the group list
 /// is recomputed, hence carried inside [`GroupListSolveData::recompute`].
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct GroupListRecompute {
     /// Softly anchor the recomputed variables to their current values (an L1 objective) instead
     /// of leaving them entirely free.

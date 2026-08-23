@@ -13642,3 +13642,213 @@ fn a_document_exports_to_a_spreadsheet() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// The solve configuration crosses the boundary whole, and refuses what means
+/// nothing
+///
+/// The vocabulary of §10, extracted the way `build_colloscope_model` will
+/// extract it. The document is the two-filling fixture because both shapes are
+/// needed here: the automatic list is what a config speaks about, and naming
+/// the prefilled one is one of the three refusals this class makes.
+#[test]
+fn the_solve_config_crosses_the_boundary() {
+    use collomatique_constraints_colloscopes::{
+        GroupListRecompute, GroupListSolveData, PeriodSolveData, SolveConfig,
+    };
+    use collomatique_python::data::{ColloscopeSolveConfig, Value};
+    use collomatique_state_colloscopes::ids::Id as _;
+
+    let dir = workspace("solve-config");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let globals = run(include_str!("scripts/solve_config.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the entities the script named.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let periods: Vec<_> = params.periods.period_ids().collect();
+    assert_eq!(periods.len(), 2);
+
+    let mut automatic = None;
+    let mut prefilled = None;
+    for (id, group_list) in params.group_lists.group_list_map.iter() {
+        if group_list.is_prefilled() {
+            prefilled = Some(id);
+        } else {
+            automatic = Some(id);
+        }
+    }
+    let automatic = automatic.expect("the fixture holds an automatic list");
+    let prefilled = prefilled.expect("the fixture holds a prefilled list");
+
+    // The default pin: `clm.ColloscopeSolveConfig()` is the model's own
+    // default, weights included — recompute everything, freely.
+    assert_eq!(
+        extracted::<ColloscopeSolveConfig>(&globals, "bare"),
+        SolveConfig::default()
+    );
+
+    // A config that says something about everything it can, out and back.
+    let spelled_out = SolveConfig {
+        periods: BTreeMap::from([
+            (
+                periods[0],
+                PeriodSolveData {
+                    recompute: false,
+                    use_current_values: true,
+                },
+            ),
+            (
+                periods[1],
+                PeriodSolveData {
+                    recompute: true,
+                    use_current_values: true,
+                },
+            ),
+        ]),
+        group_lists: BTreeMap::from([(
+            automatic,
+            GroupListSolveData {
+                recompute: Some(GroupListRecompute {
+                    previous_values_as_objective: true,
+                }),
+            },
+        )]),
+        objectify_cross_fixed_period: None,
+        l1_anchor_weight: 0.0,
+    };
+    assert_eq!(
+        extracted::<ColloscopeSolveConfig>(&globals, "spelled_out"),
+        spelled_out
+    );
+
+    // And the other direction, which nothing else exercises: the value the
+    // boundary writes is one it reads back unchanged, the flat two booleans of
+    // a group list included — the shape the model nests.
+    Python::attach(|py| {
+        let doc = document_of(globals.bind(py));
+        let value = ColloscopeSolveConfig::to_py(py, &spelled_out)
+            .expect("a config should convert to python");
+        assert_eq!(
+            ColloscopeSolveConfig::from_py(&doc, &value).expect("and back out again"),
+            spelled_out
+        );
+    });
+
+    // A key names an entity, so a handle and an id are the same key.
+    let pinned = SolveConfig {
+        periods: BTreeMap::from([(
+            periods[0],
+            PeriodSolveData {
+                recompute: false,
+                use_current_values: false,
+            },
+        )]),
+        group_lists: BTreeMap::from([(automatic, GroupListSolveData { recompute: None })]),
+        ..SolveConfig::default()
+    };
+    for name in ["by_handle", "by_id"] {
+        assert_eq!(extracted::<ColloscopeSolveConfig>(&globals, name), pinned);
+    }
+
+    // Zero is a weight: the term is written and prices nothing.
+    assert_eq!(
+        extracted::<ColloscopeSolveConfig>(&globals, "zero_weights"),
+        SolveConfig {
+            objectify_cross_fixed_period: Some(0.0),
+            l1_anchor_weight: 0.0,
+            ..SolveConfig::default()
+        }
+    );
+
+    // The refusals, each with the sentence it raises. The first is the double
+    // naming every mapping of entities refuses; the next two are this class's
+    // own.
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "named_twice"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "a ColloscopeSolveConfig's periods names <PeriodId {}> twice",
+                periods[0].inner()
+            ),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "prefilled_list"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "a ColloscopeSolveConfig's group_lists names <GroupListId {}>, and that group \
+                 list is prefilled: a solve computes the automatic ones",
+                prefilled.inner()
+            ),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "nothing_to_anchor"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "a ColloscopeSolveConfig's group_lists asks <GroupListId {}> for \
+                 previous_values_as_objective without recompute, and a group list that is not \
+                 recomputed keeps its groups",
+                automatic.inner()
+            ),
+        )
+    );
+
+    // The weights, both ways of not being one.
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "negative_weight"),
+        (
+            "ValueError".to_owned(),
+            "a ColloscopeSolveConfig's l1_anchor_weight is zero or more, and -1 is negative"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "infinite_weight"),
+        (
+            "ValueError".to_owned(),
+            "a ColloscopeSolveConfig's objectify_cross_fixed_period is a finite weight, and inf \
+             is not one"
+                .to_owned(),
+        )
+    );
+
+    // And the ordinary shapes of wrong: the flag is refused at the site of the
+    // class the script wrote it in, and the mapping at its own.
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "not_a_flag"),
+        (
+            "TypeError".to_owned(),
+            "a PeriodSolveConfig's recompute is True or False, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "not_a_mapping"),
+        (
+            "TypeError".to_owned(),
+            "a ColloscopeSolveConfig's periods is a mapping of entities to values, and 3 is not \
+             one"
+            .to_owned(),
+        )
+    );
+
+    // A key that names nothing here is refused the way every entity reference
+    // is: a handle of another document, and a handle of something this one no
+    // longer holds.
+    for name in ["foreign_period", "dead_period"] {
+        let (kind, _message) = refused::<ColloscopeSolveConfig>(&globals, name);
+        assert_eq!(kind, "StaleHandleError");
+    }
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
