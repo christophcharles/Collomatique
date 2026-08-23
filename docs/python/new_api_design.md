@@ -66,19 +66,22 @@ depend on a running GUI. There are three contexts, one API:
   This is the standalone context, reached without packaging the wheel: nothing is
   hosted, so `current_document()` is `None` and a script works on the files it names
   itself. What it adds is that the interpreter is running *inside* a collomatique
-  binary, which is therefore an engine a solve can re-execute — the middle rung of
+  binary, which is therefore an engine a solve can re-execute — the second rung of
   §10.3. `--python-no-engine` withholds it, which is what lets a script, or a test,
   reach the rungs below.
 
 The embedded interpreter stops being the API's foundation and becomes *a runner*.
 
-**Packaging.** The Rust crate builds both as an rlib (linked into the collomatique
-binary, module registered via `append_to_inittab` — the hosted path needs **no**
-packaging or nix changes) and as a cdylib for a wheel (maturin), which a Python
-environment must have on `sys.path` for standalone use. The nix wiring for the
-standalone environment (a `python3.withPackages` with the built module, available in
-the dev shell) is separate work, and only gates standalone use — the whole API can be
-implemented and used hosted-first.
+**Packaging.** Done. The Rust crate builds both as an rlib (linked into the
+collomatique binary, module registered via `append_to_inittab` — the hosted path
+needed **no** packaging or nix changes) and as a cdylib for a wheel, which maturin
+builds from `python/pyproject.toml` and which a Python environment must have on
+`sys.path` for standalone use. On the nix side `pkgs/nix/collomatique-python.nix` is
+the module as a member of an interpreter's package set, and `pkgs/nix/python-env.nix`
+an interpreter with it already in; the flake exposes both. The wheel is the `.so` and
+nothing beside it — the value dataclasses travel inside it (§12) — and it is built
+against a particular collomatique, which it remembers as the last engine rung of
+§10.3.
 
 **No UI framework.** The five RPC dialog primitives of the old API are not part of the
 new one: nothing in the API talks to the GUI over RPC to draw something. Scripts that
@@ -963,23 +966,33 @@ about the same run, which is the completeness requirement at the head of this
 document applied to what a user is *told* and not only to what they can do.
 
 **Engine location.** The subprocess mechanism re-executes a collomatique binary with
-`--rpc-engine`, so a solve has to name one. Three rungs, tried in order, and nothing
+`--rpc-engine`, so a solve has to name one. Four rungs, tried in order, and nothing
 found is a loud `NoEngine` — a subclass of `SolveError` — rather than a guess:
 
 1. the call's own `engine=`, being the most local thing said about this solve;
 2. the engine the runner **injected**, being about this run rather than about the
    machine;
 3. the `COLLOMATIQUE_ENGINE` environment variable, where an empty value counts as
-   unset.
+   unset;
+4. a default baked in at build time — `COLLOMATIQUE_DEFAULT_ENGINE`, read with
+   `option_env!` — being about the build, the least local thing there is. An empty
+   value counts as unset here too, and a build that named none leaves the rung
+   simply absent.
 
-The middle rung is a parameter of `run_python_script`, decided by whoever starts the
+The second rung is a parameter of `run_python_script`, decided by whoever starts the
 interpreter rather than by the module: a hosted script and a `--python-file` script
 both run inside a collomatique binary, which is therefore an engine, so both call
 sites pass `EngineExe::Current` — `rpc-engine`, which is what the GUI's script
 runner spawns, and the command-line branch of the gtk4 binary itself. A bare
-`python` importing the wheel injects nothing, so a standalone script names its
-engine or sets the variable. `--python-no-engine` (§1) withholds the injection,
-which is how a script — and `gtk4/tests/e2e/` — reaches the rungs below it.
+`python` importing the wheel injects nothing, so a standalone script falls through
+to what its environment or its build says. The last rung is what makes that
+painless where it can be: `pkgs/nix/collomatique-python.nix` sets
+`COLLOMATIQUE_DEFAULT_ENGINE` to the store path of the collomatique the wheel was
+built against, which ends up inside the compiled module — so nix keeps that binary
+alive, and a script run from `pkgs/nix/python-env.nix` solves without naming
+anything. A wheel built anywhere else simply has no fourth rung unless its builder
+sets the variable. `--python-no-engine` (§1) withholds the injection, which is how a
+script — and `gtk4/tests/e2e/` — reaches the rungs below it.
 
 ## 11. Rust-side prerequisites
 
@@ -1068,9 +1081,18 @@ therefore needed nothing removed first.
   `collomatique_old`. Frozen for the transition, then **removed** once the three
   contract scripts had been ported (§13, step 6).
 - `python/` — the new API crate, module name `collomatique`. Builds as rlib (for
-  embedding) and cdylib (for the wheel). Ships the value-dataclass `.py` source; in
-  embedded mode the runner materializes it (`PyModule::from_code`) so hosted
-  scripts need no filesystem package. Takes a new `rfd` dependency for §9.3.
+  embedding) and cdylib (for the wheel, whose maturin manifest is
+  `python/pyproject.toml`). Ships the value-dataclass `.py` source, baked in with
+  `include_str!` and materialized by the crate's own `data::register`
+  (`PyModule::from_code`) during module init — which is why neither a hosted script
+  nor a wheel needs a filesystem package. Takes a new `rfd` dependency for §9.3.
+  It is also the one crate that does not inherit the workspace version: maturin
+  reads its `[package] version` and wants PEP 440, which allows nothing numeric
+  after a prerelease and so refuses `0.1.0-alpha.1.99`. It therefore writes that
+  version out truncated, `0.1.0-alpha.1`, which means an alpha bump touches two
+  files — the pre-commit hook truncates the workspace version itself and refuses a
+  commit where the two disagree. Nothing user-facing is affected: `__version__` and
+  every document header still come from `collomatique_settings::current_version()`.
 - `python-runner/` — the executor: interpreter lifecycle, inittab registration (of
   *both* modules during the transition, of `collomatique` alone since), the document
   handoff to hosted scripts. `rpc-engine` depends on this crate only.
@@ -1160,8 +1182,11 @@ therefore needed nothing removed first.
    `run_python_script` — and with them the old-API copies under `scripts/old_api/`
    and the engine's automatic send-back (§11).
 
-Standalone packaging (wheel + nix environment) can land any time after step 3; no
-step depends on it.
+Standalone packaging (wheel + nix environment) depended on no step and landed after
+this one: the baked engine rung (`a7a15da5`), the cdylib and the maturin manifest
+(`22b1f79f`), and the nix packaging (`1a0c4bc6`). The user built both nix entry
+points and imported the module out of the resulting interpreter; a solve through the
+baked rung has not been run.
 
 ## 14. Examples
 
