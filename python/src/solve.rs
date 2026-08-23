@@ -30,15 +30,11 @@ use collomatique_constraints_colloscopes::{
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_strategies::{
     ConductorPayload, ConductorProgress, ConductorStrategy as RawConductorStrategy,
-    ConductorWarning as RawConductorWarning, IncrementalPayload, OPTIMALITY_GAP_EPS,
-    SolveStatus as RawSolveStatus, StrategyOutcome,
+    ConductorWarning as RawConductorWarning, IncrementalPayload, SolveVerdict, StrategyOutcome,
 };
 use collomatique_subprocesses::{EngineExe, StrategySubprocess};
 
 use crate::errors::SolveError;
-
-#[cfg(test)]
-mod tests;
 
 /// The « Recherche simple » preset, as the application builds it
 ///
@@ -192,22 +188,28 @@ struct Snapshot {
 
 /// How a solve ended
 ///
+/// The four the application's own solve dialog distinguishes, mirrored from
+/// [SolveVerdict] so that a script and a user are told the same thing about the
+/// same run. This is deliberately *not* what the engine reports: the engine
+/// calls a run « optimal » as soon as it holds any colloscope at all, so a
+/// script handed the raw word would read a promise nobody made.
+///
 /// `OPTIMAL` is always a *proof*: the solver closed the gap between the
 /// colloscope it found and the best any colloscope could be. `FEASIBLE` is a
 /// colloscope in hand with that question still open — which is what a run cut
-/// short almost always gives. The engine itself does not draw that line; it
-/// calls a run « optimal » as soon as it holds any colloscope at all, so a
-/// script handed the raw word would read a promise nobody made.
+/// short almost always gives.
+///
+/// `NO_SOLUTION` is about emptiness and not about how the run ended: a run
+/// stopped before it found anything and a problem no colloscope satisfies are
+/// the same answer to a script, and the engine cannot tell them apart either.
 ///
 /// `ERROR` is a status and not an exception, because a run that broke down may
 /// still carry the best colloscope it had found by then: raising would throw it
 /// away.
 // Handed out only, never taken back in — a script compares a status, it never
 // passes one in — so the extraction is skipped, like [ConductorWarning]'s.
-// `Debug` beyond what the class needs: the unit tests below assert on a
-// status, and `assert_eq!` is what names the wrong one when they fail.
 #[pyclass(module = "collomatique", frozen, eq, hash, skip_from_py_object)]
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SolveStatus {
     /// A colloscope, and the proof that none is better
     #[pyo3(name = "OPTIMAL")]
@@ -215,15 +217,23 @@ pub enum SolveStatus {
     /// A colloscope, with the question of a better one left open
     #[pyo3(name = "FEASIBLE")]
     Feasible,
-    /// No colloscope at all satisfies these constraints
-    #[pyo3(name = "INFEASIBLE")]
-    Infeasible,
-    /// The run ended before it had found anything
-    #[pyo3(name = "STOPPED")]
-    Stopped,
+    /// Nothing in hand: stopped before finding one, or none exists
+    #[pyo3(name = "NO_SOLUTION")]
+    NoSolution,
     /// The run broke down
     #[pyo3(name = "ERROR")]
     Error,
+}
+
+#[pymethods]
+impl SolveStatus {
+    /// The French sentence the application shows for this status
+    ///
+    /// The solve dialog's own words, not a second set written here: a script
+    /// that prints a status prints what the user would have read.
+    fn __str__(&self) -> &'static str {
+        collomatique_ui_text::solver::solve_verdict_text(self.to_model())
+    }
 }
 
 impl SolveStatus {
@@ -235,42 +245,32 @@ impl SolveStatus {
         match self {
             SolveStatus::Optimal => "OPTIMAL",
             SolveStatus::Feasible => "FEASIBLE",
-            SolveStatus::Infeasible => "INFEASIBLE",
-            SolveStatus::Stopped => "STOPPED",
+            SolveStatus::NoSolution => "NO_SOLUTION",
             SolveStatus::Error => "ERROR",
         }
     }
-}
 
-/// The status one raw outcome earns
-///
-/// The conductor reports `Optimal` whenever any incumbent exists, so the proof
-/// has to be looked for separately: it is the closed gap, the same
-/// `OPTIMALITY_GAP_EPS` test the application applies before it writes
-/// « Solution optimale trouvée ». An unproven incumbent is `FEASIBLE` whether
-/// the run ended on its own or was stopped, since to a script the two are the
-/// same colloscope in hand.
-fn status_of(outcome: &Outcome) -> SolveStatus {
-    match outcome.status {
-        RawSolveStatus::Error => SolveStatus::Error,
-        RawSolveStatus::Infeasible => SolveStatus::Infeasible,
-        RawSolveStatus::Optimal | RawSolveStatus::Stopped(_) => {
-            if outcome.solution.is_none() {
-                return SolveStatus::Stopped;
-            }
+    /// The python status for one verdict
+    ///
+    /// A match, like [ConductorWarning::from_model], so that a fifth verdict
+    /// over in `strategies` is a compile error here rather than an outcome
+    /// python silently cannot describe.
+    fn from_model(verdict: SolveVerdict) -> SolveStatus {
+        match verdict {
+            SolveVerdict::Optimal => SolveStatus::Optimal,
+            SolveVerdict::Feasible => SolveStatus::Feasible,
+            SolveVerdict::NoSolution => SolveStatus::NoSolution,
+            SolveVerdict::Error => SolveStatus::Error,
+        }
+    }
 
-            let proven = match (outcome.objective, outcome.best_bound) {
-                (Some(objective), Some(bound)) => (objective - bound).abs() <= OPTIMALITY_GAP_EPS,
-                // No bound is no proof. It is the ordinary shape of a run that
-                // was stopped early, and of one whose bound never improved.
-                _ => false,
-            };
-
-            if proven {
-                SolveStatus::Optimal
-            } else {
-                SolveStatus::Feasible
-            }
+    /// The verdict for one python status, for the sentence `ui-text` keys on it
+    fn to_model(self) -> SolveVerdict {
+        match self {
+            SolveStatus::Optimal => SolveVerdict::Optimal,
+            SolveStatus::Feasible => SolveVerdict::Feasible,
+            SolveStatus::NoSolution => SolveVerdict::NoSolution,
+            SolveStatus::Error => SolveVerdict::Error,
         }
     }
 }
@@ -651,7 +651,7 @@ impl SolveRun {
         };
 
         Ok(SolveOutcome {
-            status: status_of(&outcome),
+            status: SolveStatus::from_model(collomatique_strategies::verdict(&outcome)),
             objective: outcome.objective,
             bound: outcome.best_bound,
             colloscope,
