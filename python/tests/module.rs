@@ -13973,6 +13973,225 @@ fn the_solve_config_crosses_the_boundary() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// One strategy a script built, extracted the way a solve will extract it
+///
+/// Not [extracted]: the strategy family is not a [collomatique_python::data::Value]
+/// — it names no entity, so it needs no document — and its door is an inherent
+/// method rather than a trait one.
+fn strategy(globals: &Py<PyDict>, name: &str) -> collomatique_strategies::ConductorStrategy {
+    Python::attach(|py| {
+        let value = globals
+            .bind(py)
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        collomatique_python::data::ConductorStrategy::from_py(&value).unwrap_or_else(|e| {
+            e.print(py);
+            panic!("`{name}` should extract")
+        })
+    })
+}
+
+/// How extracting one strategy the script built was refused
+///
+/// The mirror of [refused], for the same reason [strategy] is the mirror of
+/// [extracted]: the class name and the message both, since a test that only
+/// checked the class would not notice a message naming the wrong field.
+fn refused_strategy(globals: &Py<PyDict>, name: &str) -> (String, String) {
+    Python::attach(|py| {
+        let value = globals
+            .bind(py)
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        let error = collomatique_python::data::ConductorStrategy::from_py(&value)
+            .expect_err("this strategy is one the boundary must refuse");
+
+        (
+            error
+                .get_type(py)
+                .name()
+                .expect("an exception class has a name")
+                .to_string(),
+            error.value(py).to_string(),
+        )
+    })
+}
+
+/// The conductor strategy crosses the boundary whole, and refuses what means
+/// nothing
+///
+/// The vocabulary of §13, extracted the way `model.solve` will extract it. No
+/// document is opened: a strategy says how a solve is run and names no entity,
+/// which is exactly why this family is the one that is not a `Value`.
+#[test]
+fn the_conductor_strategy_crosses_the_boundary() {
+    use collomatique_strategies::{
+        ConductorStrategy as RawConductorStrategy, DefaultConfig, FuzzyConfig, IncrementalConfig,
+        WarmStartConfig,
+    };
+    use collomatique_time::TimeLimit;
+
+    let globals = run(include_str!("scripts/strategy.py"), |_| Ok(()));
+
+    let count = |value: u32| NonZeroU32::new(value).expect("the test writes non-zero counts");
+    let seconds = |value: u32| TimeLimit::seconds(count(value));
+
+    // The default pin: `clm.ConductorStrategy()` is the application's own
+    // « Recherche simple » — one worker, warm-start only.
+    assert_eq!(strategy(&globals, "bare"), RawConductorStrategy::default());
+
+    // And each bare sub-config is its own model default, which is what pins
+    // the numbers written out in `data.py` — `epoch_incumbent_time_limit=60`
+    // and the rest of them.
+    assert_eq!(
+        strategy(&globals, "all_bare"),
+        RawConductorStrategy {
+            worker_count: count(1),
+            default_config: Some(DefaultConfig::default()),
+            warm_start_config: Some(WarmStartConfig::default()),
+            incremental_config: Some(IncrementalConfig::default()),
+            fuzzy_config: Some(FuzzyConfig::default()),
+        }
+    );
+
+    // The presets are the application's own structures, converted. `optimize`
+    // asks this machine how many cores it has — and so does the rust side of
+    // this comparison, in the same process, so the two agree by construction
+    // rather than by luck.
+    assert_eq!(
+        strategy(&globals, "search"),
+        RawConductorStrategy::default()
+    );
+    assert_eq!(
+        strategy(&globals, "optimize"),
+        RawConductorStrategy::with_parallelism_defaults()
+    );
+
+    // A strategy that says something about everything it can, out and back.
+    let spelled_out = RawConductorStrategy {
+        worker_count: count(3),
+        default_config: Some(DefaultConfig {
+            time_limit: seconds(600),
+            incumbent_time_limit: seconds(120),
+        }),
+        warm_start_config: Some(WarmStartConfig {
+            time_limit: seconds(30),
+        }),
+        incremental_config: Some(IncrementalConfig {
+            l1_weight: 0.0,
+            distance_tolerance: 0.0,
+            epoch_time_limit: seconds(45),
+            epoch_incumbent_time_limit: TimeLimit::none(),
+        }),
+        fuzzy_config: Some(FuzzyConfig {
+            fuzzy_sigma: 0.0,
+            find_closest_tolerance: 2.5,
+            time_limit: TimeLimit::none(),
+            incumbent_time_limit: seconds(7),
+        }),
+    };
+    assert_eq!(strategy(&globals, "spelled_out"), spelled_out);
+
+    // And the other direction, which the presets exercise only for what they
+    // happen to hold: the value the boundary writes is one it reads back
+    // unchanged, the limits written as whole seconds included.
+    Python::attach(|py| {
+        let value = collomatique_python::data::ConductorStrategy::to_py(py, &spelled_out)
+            .expect("a strategy should convert to python");
+        assert_eq!(
+            collomatique_python::data::ConductorStrategy::from_py(&value)
+                .expect("and back out again"),
+            spelled_out
+        );
+    });
+
+    // The refusals, each with the sentence it raises. A solve runs on at least
+    // one worker, and a worker count is a count.
+    assert_eq!(
+        refused_strategy(&globals, "no_worker"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's worker_count is at least 1, and 0 was given".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused_strategy(&globals, "not_a_count"),
+        (
+            "TypeError".to_owned(),
+            "a ConductorStrategy's worker_count is a number of slots, and 'x' is not one"
+                .to_owned(),
+        )
+    );
+
+    // The time limits: zero is refused rather than read as no limit, and the
+    // sentence says where no limit is said instead. The path names the field
+    // the script wrote, not the sub-config's own class.
+    assert_eq!(
+        refused_strategy(&globals, "zero_limit"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's warm_start_config.time_limit is at least one second, and None \
+             is how no limit is said"
+                .to_owned(),
+        )
+    );
+    for name in ["negative_limit", "not_a_limit"] {
+        let (kind, message) = refused_strategy(&globals, name);
+        assert_eq!(kind, "TypeError");
+        assert!(
+            message.starts_with(
+                "a ConductorStrategy's warm_start_config.time_limit is a number of seconds or \
+                 None, and "
+            ),
+            "{message}"
+        );
+    }
+
+    // A price the solver pays cannot be negative, and a measurement cannot be
+    // infinite.
+    assert_eq!(
+        refused_strategy(&globals, "negative_weight"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's incremental_config.l1_weight is zero or more, and -1 is \
+             negative"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused_strategy(&globals, "infinite_sigma"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's fuzzy_config.fuzzy_sigma is a finite number, and inf is not one"
+                .to_owned(),
+        )
+    );
+
+    // And the ordinary shapes of wrong: a sub-config is read by its fields, so
+    // what is refused is an object without them — an object that is nothing of
+    // the sort, and one carrying half of them.
+    assert_eq!(
+        refused_strategy(&globals, "not_a_config"),
+        (
+            "TypeError".to_owned(),
+            "a ConductorStrategy is expected here, and 3 has no default_config.time_limit"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused_strategy(&globals, "half_a_config"),
+        (
+            "TypeError".to_owned(),
+            "a ConductorStrategy is expected here, and a half-written config has no \
+             default_config.time_limit"
+                .to_owned(),
+        )
+    );
+}
+
 /// A document builds its ILP model, and hands back a token for it
 ///
 /// The problem itself is `constraints-colloscopes`' business and is tested

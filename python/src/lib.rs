@@ -20,6 +20,7 @@ pub mod model;
 mod payload;
 pub mod refs;
 pub mod results;
+pub mod solve;
 pub mod transaction;
 pub mod values;
 
@@ -47,6 +48,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     model::register(m)?;
     refs::register(m)?;
     results::register(m)?;
+    solve::register(m)?;
     values::register(m)?;
 
     m.add_class::<Document>()?;

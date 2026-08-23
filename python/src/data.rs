@@ -36,6 +36,11 @@ use collomatique_state_colloscopes::{
     incompats, pairings, periods, settings, slot_pairings, slots, students, subjects, teachers,
     week_patterns, weeks,
 };
+use collomatique_strategies::{
+    ConductorStrategy as RawConductorStrategy, DefaultConfig as RawDefaultConfig,
+    FuzzyConfig as RawFuzzyConfig, IncrementalConfig as RawIncrementalConfig,
+    WarmStartConfig as RawWarmStartConfig,
+};
 use collomatique_time::WeekStart;
 
 use crate::Document;
@@ -417,6 +422,74 @@ fn checked_weight(site: Site<'_>, name: &str, number: f64) -> PyResult<f64> {
     if !number.is_finite() {
         return Err(PyValueError::new_err(format!(
             "{} is a finite weight, and {number} is not one",
+            site.field(name),
+        )));
+    }
+    if number < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "{} is zero or more, and {number} is negative",
+            site.field(name),
+        )));
+    }
+
+    Ok(number)
+}
+
+/// A field the solver counts in whole seconds, or `None` for no limit
+///
+/// Zero is refused rather than read as "no limit". `None` is how no limit is
+/// said here, and the model's own `TimeLimit` has no room for a zero on
+/// purpose: a raw `Option<u32>` would let `Some(0)` mean "stop immediately" in
+/// one reading and "run forever" in the other, and python must not resurrect
+/// that.
+fn time_limit(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<collomatique_time::TimeLimit> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(collomatique_time::TimeLimit::none());
+    }
+
+    let seconds: u32 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a number of seconds or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    NonZeroU32::new(seconds)
+        .map(collomatique_time::TimeLimit::seconds)
+        .ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "{} is at least one second, and None is how no limit is said",
+                site.field(name),
+            ))
+        })
+}
+
+/// A field that measures without a sign — a sigma, a tolerance
+///
+/// Zero is a value here: a tolerance of zero asks for the exact optimum, and a
+/// sigma of zero perturbs nothing. What is refused is a negative number, which
+/// no distance is, and a non-finite one, which no solver knob can carry.
+/// [checked_weight]'s shape, in the words a measurement wants rather than the
+/// ones a price does.
+fn nonnegative_number(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<f64> {
+    let value = field(site, name, obj)?;
+    let number: f64 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a number, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    if !number.is_finite() {
+        return Err(PyValueError::new_err(format!(
+            "{} is a finite number, and {number} is not one",
             site.field(name),
         )));
     }
@@ -2971,6 +3044,216 @@ impl Value for ColloscopeSolveConfig {
             config.objectify_cross_fixed_period,
         )?;
         kwargs.set_item("l1_anchor_weight", config.l1_anchor_weight)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One optional sub-config: `None` disables the substrategy, an object tunes it
+///
+/// The `Option` is the switch, so there is nothing to say about the absence
+/// itself. What is there is read at a site *inside* this field, so a refusal
+/// names the path a script wrote down — « a ConductorStrategy's
+/// incremental_config.epoch_time_limit » — rather than a class it never named.
+fn sub_config<T>(
+    site: Site<'_>,
+    name: &'static str,
+    obj: &Bound<'_, PyAny>,
+    read: impl Fn(Site<'_>, &Bound<'_, PyAny>) -> PyResult<T>,
+) -> PyResult<Option<T>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    read(site.inside(name), &value).map(Some)
+}
+
+/// The complete solve's knobs, read at the site the script wrote them
+fn default_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawDefaultConfig> {
+    Ok(RawDefaultConfig {
+        time_limit: time_limit(site, "time_limit", obj)?,
+        incumbent_time_limit: time_limit(site, "incumbent_time_limit", obj)?,
+    })
+}
+
+/// The warm start's one knob, read at the site the script wrote it
+fn warm_start_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawWarmStartConfig> {
+    Ok(RawWarmStartConfig {
+        time_limit: time_limit(site, "time_limit", obj)?,
+    })
+}
+
+/// The incremental solve's knobs, read at the site the script wrote them
+fn incremental_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawIncrementalConfig> {
+    Ok(RawIncrementalConfig {
+        // A price the solver pays per step away from the epoch before, so the
+        // weight helper's rules are exactly this field's.
+        l1_weight: weight(site, "l1_weight", obj)?,
+        distance_tolerance: nonnegative_number(site, "distance_tolerance", obj)?,
+        epoch_time_limit: time_limit(site, "epoch_time_limit", obj)?,
+        epoch_incumbent_time_limit: time_limit(site, "epoch_incumbent_time_limit", obj)?,
+    })
+}
+
+/// The fuzzy exploration's knobs, read at the site the script wrote them
+///
+/// `fuzzy_sigma` refuses a negative number here rather than deeper in: it
+/// becomes the standard deviation of a normal distribution inside the engine,
+/// which errors on a negative one, and this is the last place the field can
+/// still be named.
+fn fuzzy_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawFuzzyConfig> {
+    Ok(RawFuzzyConfig {
+        fuzzy_sigma: nonnegative_number(site, "fuzzy_sigma", obj)?,
+        find_closest_tolerance: nonnegative_number(site, "find_closest_tolerance", obj)?,
+        time_limit: time_limit(site, "time_limit", obj)?,
+        incumbent_time_limit: time_limit(site, "incumbent_time_limit", obj)?,
+    })
+}
+
+/// A time limit as python writes one: whole seconds, or `None` for no limit
+fn written_seconds(limit: collomatique_time::TimeLimit) -> Option<u32> {
+    limit.get_seconds().map(NonZeroU32::get)
+}
+
+/// The python value for one `DefaultConfig`
+fn default_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawDefaultConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("time_limit", written_seconds(config.time_limit))?;
+    kwargs.set_item(
+        "incumbent_time_limit",
+        written_seconds(config.incumbent_time_limit),
+    )?;
+
+    class(py, "DefaultConfig")?.call((), Some(&kwargs))
+}
+
+/// The python value for one `WarmStartConfig`
+fn warm_start_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawWarmStartConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("time_limit", written_seconds(config.time_limit))?;
+
+    class(py, "WarmStartConfig")?.call((), Some(&kwargs))
+}
+
+/// The python value for one `IncrementalConfig`
+fn incremental_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawIncrementalConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("l1_weight", config.l1_weight)?;
+    kwargs.set_item("distance_tolerance", config.distance_tolerance)?;
+    kwargs.set_item("epoch_time_limit", written_seconds(config.epoch_time_limit))?;
+    kwargs.set_item(
+        "epoch_incumbent_time_limit",
+        written_seconds(config.epoch_incumbent_time_limit),
+    )?;
+
+    class(py, "IncrementalConfig")?.call((), Some(&kwargs))
+}
+
+/// The python value for one `FuzzyConfig`
+fn fuzzy_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawFuzzyConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("fuzzy_sigma", config.fuzzy_sigma)?;
+    kwargs.set_item("find_closest_tolerance", config.find_closest_tolerance)?;
+    kwargs.set_item("time_limit", written_seconds(config.time_limit))?;
+    kwargs.set_item(
+        "incumbent_time_limit",
+        written_seconds(config.incumbent_time_limit),
+    )?;
+
+    class(py, "FuzzyConfig")?.call((), Some(&kwargs))
+}
+
+/// How a solve is run — the one value family with no document behind it
+///
+/// Not a [Value], and it cannot be one: that trait's `from_py` takes the
+/// document a field naming an entity is resolved against, and a strategy names
+/// none. Its callers hold no document either — a strategy is handed to a
+/// model, which was built from one long before. So the reading shape stays,
+/// marker struct and all, and only the argument goes.
+///
+/// The four sub-configs have no marker struct of their own. They are read and
+/// written by the free functions above, because a script never hands one over
+/// on its own: it hands over the strategy that holds it, which is the class a
+/// refusal has to name.
+pub struct ConductorStrategy;
+
+impl ConductorStrategy {
+    /// The python class name — the same role [Value::CLASS] plays
+    pub const CLASS: &'static str = "ConductorStrategy";
+
+    /// The strategy one python value names
+    pub fn from_py(obj: &Bound<'_, PyAny>) -> PyResult<RawConductorStrategy> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(RawConductorStrategy {
+            // `non_zero_count`'s sentence — « is a number of slots » — is
+            // exactly what a worker count is, so the helper is reused whole.
+            worker_count: non_zero_count(site, "worker_count", obj)?,
+            default_config: sub_config(site, "default_config", obj, default_config)?,
+            warm_start_config: sub_config(site, "warm_start_config", obj, warm_start_config)?,
+            incremental_config: sub_config(site, "incremental_config", obj, incremental_config)?,
+            fuzzy_config: sub_config(site, "fuzzy_config", obj, fuzzy_config)?,
+        })
+    }
+
+    /// The python value for one strategy
+    ///
+    /// A fresh object every call, and a plain one: this is what the two
+    /// presets of `solve.rs` hand back, so what a classmethod answers is an
+    /// ordinary value a script may then edit.
+    pub fn to_py<'py>(
+        py: Python<'py>,
+        strategy: &RawConductorStrategy,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("worker_count", strategy.worker_count.get())?;
+        kwargs.set_item(
+            "default_config",
+            strategy
+                .default_config
+                .as_ref()
+                .map(|config| default_config_to_py(py, config))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "warm_start_config",
+            strategy
+                .warm_start_config
+                .as_ref()
+                .map(|config| warm_start_config_to_py(py, config))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "incremental_config",
+            strategy
+                .incremental_config
+                .as_ref()
+                .map(|config| incremental_config_to_py(py, config))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "fuzzy_config",
+            strategy
+                .fuzzy_config
+                .as_ref()
+                .map(|config| fuzzy_config_to_py(py, config))
+                .transpose()?,
+        )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

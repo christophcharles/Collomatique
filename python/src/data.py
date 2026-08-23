@@ -89,6 +89,11 @@ __all__ = [
     "PeriodSolveConfig",
     "GroupListSolveConfig",
     "ColloscopeSolveConfig",
+    "DefaultConfig",
+    "WarmStartConfig",
+    "IncrementalConfig",
+    "FuzzyConfig",
+    "ConductorStrategy",
 ]
 
 
@@ -1205,3 +1210,149 @@ class ColloscopeSolveConfig:
         default_factory=dict)
     objectify_cross_fixed_period: float | None = 1000.0
     l1_anchor_weight: float = 1000.0
+
+
+@dataclass
+class DefaultConfig:
+    """How the complete solve is run.
+
+    The full branch-and-bound: it looks for the best colloscope it can find,
+    and it is the only substrategy that can prove there is no better one.
+    `ConductorStrategy(default_config=DefaultConfig())` is what enables it.
+
+    Both limits are counted in whole seconds. `time_limit` bounds the solve as
+    a whole; `incumbent_time_limit` bounds it from the moment it first holds a
+    colloscope, so a solve that finds one quickly and then grinds gives up
+    early. They are independent, and the solve ends at whichever deadline
+    comes first.
+
+    `None` is how "no limit" is said. `0` is not: it is refused when the
+    strategy is used, so that a limit and the absence of one never look alike.
+    """
+
+    time_limit: int | None = None
+    incumbent_time_limit: int | None = None
+
+
+@dataclass
+class WarmStartConfig:
+    """How the warm-start solve is run.
+
+    A first, cheap solve that looks only for *a* colloscope and not for a good
+    one; what it finds is handed to the solves that do optimise, as a place to
+    start. This is the one substrategy `ConductorStrategy()` enables on its
+    own.
+
+    `time_limit` bounds that search, in whole seconds, `None` for no limit and
+    `0` refused.
+    """
+
+    time_limit: int | None = None
+
+
+@dataclass
+class IncrementalConfig:
+    """How the incremental solve is run.
+
+    The other way to a first colloscope: the problem is solved in epochs, each
+    one anchored to what the epoch before it decided, which usually reaches a
+    better starting point than a warm start does. The two fill the same role,
+    so enabling both is redundant — `ConductorStrategy.optimize()` uses this
+    one alone.
+
+    `l1_weight` is what one step away from the previous epoch's decisions
+    costs: the larger it is, the stickier those decisions.
+    `distance_tolerance` is how close to the best an epoch has to get before
+    it may stop; `0.0` asks every epoch to be solved to proven optimality.
+    Both refuse a negative or non-finite number when the strategy is used.
+
+    `epoch_time_limit` and `epoch_incumbent_time_limit` bound each epoch, in
+    whole seconds, and the clock starts again at every epoch. `None` is no
+    limit, `0` is refused.
+    """
+
+    l1_weight: float = 1000.0
+    distance_tolerance: float = 10.0
+    epoch_time_limit: int | None = None
+    epoch_incumbent_time_limit: int | None = 60
+
+
+@dataclass
+class FuzzyConfig:
+    """How the fuzzy exploration is run.
+
+    What fills the worker slots the complete solve leaves idle: it perturbs
+    the colloscope in hand at random, repairs what the perturbation broke, and
+    keeps the result if it is better. It needs a colloscope to start from, so
+    it only means something next to a substrategy that produces one.
+
+    `fuzzy_sigma` is how hard each perturbation pushes — the default nudges
+    about one binary variable in eighty. `find_closest_tolerance` is how close
+    to the perturbed point the repair has to land before it may stop. Both
+    refuse a negative or non-finite number when the strategy is used.
+
+    `time_limit` and `incumbent_time_limit` bound each repair, in whole
+    seconds, `None` for no limit and `0` refused.
+    """
+
+    fuzzy_sigma: float = 0.2
+    find_closest_tolerance: float = 10.0
+    time_limit: int | None = None
+    incumbent_time_limit: int | None = None
+
+
+@dataclass
+class ConductorStrategy:
+    """How a solve is run: which substrategies, on how many worker slots.
+
+    §13 of `docs/python/new_api_design.md` is the design.
+    `model.solve(strategy)` takes one of these:
+
+        strategy = clm.ConductorStrategy.optimize()
+        run = model.solve(strategy)
+        outcome = run.wait()
+
+    Each `*_config` field both enables its substrategy and tunes it: `None`
+    disables it, an object enables it. `worker_count` is how many of them may
+    run at once; it counts from 1, and `0` is refused when the strategy is
+    used.
+
+    `ConductorStrategy()` is the application's « Recherche simple » — one
+    worker, warm-start only, which finds a colloscope and stops there. The two
+    classmethods below are the application's own presets.
+
+    A strategy is not stored on the model. It is an argument, and every solve
+    takes its own.
+    """
+
+    worker_count: int = 1
+    default_config: DefaultConfig | None = None
+    warm_start_config: WarmStartConfig | None = field(default_factory=WarmStartConfig)
+    incremental_config: IncrementalConfig | None = None
+    fuzzy_config: FuzzyConfig | None = None
+
+    @classmethod
+    def search(cls) -> ConductorStrategy:
+        """The « Recherche simple » preset: find a colloscope, fast.
+
+        Built on the rust side, out of the structure the application itself
+        opens its dialog with, and handed back as a plain `ConductorStrategy`
+        a script may then edit. So this cannot drift from the application: it
+        *is* the application's preset.
+        """
+        import collomatique
+
+        return collomatique._conductor_search()
+
+    @classmethod
+    def optimize(cls) -> ConductorStrategy:
+        """The « Optimisation complète » preset, sized to this machine.
+
+        The application's other preset, built the same way — everything on
+        except the warm start, which the incremental solve replaces. Its
+        worker count follows the number of cores this machine reports, so it
+        is not the same number everywhere.
+        """
+        import collomatique
+
+        return collomatique._conductor_optimize()
