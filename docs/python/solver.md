@@ -727,6 +727,16 @@ fn status_of(outcome: &Outcome) -> SolveStatus {
 }
 ```
 
+**Superseded by commits 9 and 10.** Running a real solve through this (commit 8)
+showed that three of the five states cannot occur. `model.solve` always runs a
+conductor, and `conductor_outcome` reports only `Optimal` (any incumbent) or
+`Stopped` (none), so `INFEASIBLE` and `ERROR` are unreachable and `STOPPED` means
+precisely « no solution ». What landed is four-way, and it is not this crate's to
+decide: `collomatique_strategies::verdict` computes it, the solve dialog reads the
+same one, its four French sentences live in `ui-text` beside the warnings', and
+`STOPPED` is spelled `NO_SOLUTION`. `status_of` is gone. The settled shape is
+`new_api_design.md` §10.3.
+
 ### G.3 `SolveProgress`
 
 ```rust
@@ -1122,6 +1132,11 @@ Linux-first: on Windows this binary discards console output (`windows_stdio`), s
    without the env arm: explicit beats injected; injected answers when no explicit;
    `set_engine(None)` restored after each).
 
+   The first of those two moved with the logic it covers: commit 9 took the table
+   down to `strategies/src/verdict/tests.rs`, where it is written against
+   `SolveVerdict` and `STOPPED` reads `NoSolution` (G.2 above). Nothing is left in
+   `python/src/solve/` to test — a 1:1 mirror match needs no test of its own.
+
 ### In `gtk4/tests` (end-to-end, new)
 
 **`gtk4/tests/e2e.rs`** — the crate root of the one e2e target, thin:
@@ -1191,26 +1206,40 @@ Following the series' granularity (one door or one family per commit):
 5. `python: the engine a solve re-executes` — Part E (engine.rs, `SolveError`/
    `NoEngine`, the re-exports, the `run_python_script` engine parameter with its
    rpc-engine call site, new `subprocesses` dep) + the engine unit tests. The
-   behavioral rung tests land with commit 9, the first door that reaches them — said
-   in the message.
+   behavioral rung tests land with commit 11, the first door that reaches them —
+   said in the message.
 6. `python: the model keeps the parameters a solution needs` — Part F.
 7. `python: solve on the model, the run handle and its outcome` — Part G + the
    `status_of` unit tests.
 8. `gtk4: run python straight from the command line` — Part H.
-9. `gtk4: end-to-end solve tests against the built binary` — Part I's e2e target,
-   its solve module and fixture script.
-10. `docs: record the solver landing` — mark §13.5 done in `new_api_design.md` and
-    fold in the refinements this step settled (the `FEASIBLE`/`OPTIMAL` split over
-    the conductor's raw `Optimal`, the injected-engine rung in the precedence and its
-    caller-decided parameter, the warnings' tuple shape and their sentences' home in
-    ui-text, wait/kill semantics, the CLI python doors, the e2e target).
+
+Commits 9 and 10 were not in this plan. Commit 8 was the first that could run a real
+solve, and it showed the five-way `SolveStatus` of G.2 to be three states too wide
+and, worse, a second private copy of a verdict the solve dialog was already
+computing for itself. The two commits move that verdict into `strategies`, where
+both front ends read it:
+
+9. `strategies: one verdict for a finished solve` — `SolveVerdict` and `verdict()` in
+   a new `strategies/src/verdict.rs`, with G.2's table moved down to its tests
+   (I.4), and the four French sentences in `ui-text` beside the warnings'.
+10. `gtk4, python: read the shared verdict` — the solve dialog's three labels become
+    one, its private `is_provably_optimal` goes, and python's `SolveStatus` becomes
+    a 1:1 mirror with `STOPPED` renamed `NO_SOLUTION`.
+
+11. `gtk4: end-to-end solve tests against the built binary` — Part I's e2e target,
+    its solve module and fixture script.
+12. `docs: record the solver landing` — mark §13.5 done in `new_api_design.md` and
+    fold in the refinements this step settled (the four-way verdict and its home in
+    `strategies`, the injected-engine rung in the precedence and its caller-decided
+    parameter, the warnings' tuple shape and their sentences' home in ui-text,
+    wait/kill semantics, the CLI python doors, the e2e target).
 
 ## Verification
 
 - After each commit: `cargo build` of the touched crates; the full suite
   (`cargo test --workspace`, foreground, 10-minute timeout, captured once to a
   scratchpad file and grepped) at the natural checkpoints — after commits 2, 4, 7
-  and 9. From commit 9 on, the suite includes the real end-to-end solve.
+  and 11. From commit 11 on, the suite includes the real end-to-end solve.
 - **User-side nix step**: commits 1, 3 and 5 add path dependencies, so `Cargo.lock`
   moves and `cargoHash` in `collomatique.nix` needs refreshing once the series lands
   (not predicting the diffs — just flagging the step exists; check `git status`

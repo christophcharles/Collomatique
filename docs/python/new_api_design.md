@@ -17,7 +17,7 @@ The requirements come from `docs/todos/todo_python_api.md`:
 ## 1. Architecture: a library first
 
 `collomatique` becomes a real importable Python module. The script API does not
-depend on a running GUI. There are two contexts, one API:
+depend on a running GUI. There are three contexts, one API:
 
 - **Standalone**: a plain Python interpreter imports the module.
 
@@ -54,6 +54,21 @@ depend on a running GUI. There are two contexts, one API:
   ```
 
   Getting the right document in both contexts is §9.1; writing it back is §9.2.
+
+- **From the command line**: the collomatique binary runs a script itself, with no
+  window and no GUI initialization at all.
+
+  ```
+  collomatique --python-file import.py
+  collomatique --python 'import collomatique as clm; print(clm.load("2026.collomatique"))'
+  ```
+
+  This is the standalone context, reached without packaging the wheel: nothing is
+  hosted, so `current_document()` is `None` and a script works on the files it names
+  itself. What it adds is that the interpreter is running *inside* a collomatique
+  binary, which is therefore an engine a solve can re-execute — the middle rung of
+  §10.3. `--python-no-engine` withholds it, which is what lets a script, or a test,
+  reach the rungs below.
 
 The embedded interpreter stops being the API's foundation and becomes *a runner*.
 
@@ -751,13 +766,17 @@ by the origin rule.
 
 ## 10. The solver
 
-Designed now, implemented as the last milestone. All configuration types are value
+Designed first, implemented last (§13.5). All configuration types are value
 dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
 
 - `ConductorStrategy` — sub-configs `DefaultConfig`, `WarmStartConfig`,
   `IncrementalConfig`, `FuzzyConfig`; classmethods `ConductorStrategy.search()`
   and `.optimize()` (the two GUI presets); `.warnings()` returns the preflight
-  `ConductorWarning`s.
+  `ConductorWarning`s as a tuple, in the model's own order — sorted by
+  declaration, which is the order the solve dialog lists them in. Their French
+  sentences are `collomatique_ui_text::solver::conductor_warning_text`, the same
+  function the solve dialog renders its list from, so `str(warning)` is what the
+  user would have read.
 - Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
   `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
 
@@ -866,16 +885,18 @@ scripts. The only thing that crosses is the file `export_mps` writes (§9.4). Th
 names inside it are already a de-facto contract through the GUI's own export, but
 that is a diagnostic file for a solver, not an API.
 
+### 10.3 The run, its outcome, and the engine
+
 Execution is subprocess-based, reusing `StrategySubprocess::spawn` — the
 battle-tested path, with hard cancellation and no GIL contention. The API is a run
 handle:
 
 ```python
-run = model.solve(strategy, on_progress=..., on_log=...)   # non-blocking
+run = model.solve(strategy, engine=..., on_progress=..., on_log=...)   # non-blocking
 run.progress()          # last known progress (async by design — no waiting)
 run.stop()              # cooperative stop → run finishes with best-so-far
 run.kill()              # hard kill
-outcome = run.wait()    # SolveOutcome: status, objective, bound, result
+outcome = run.wait()    # SolveOutcome: status, objective, bound, colloscope
 colloscope = outcome.colloscope     # a ColloscopeData value, NOT yet applied
 doc.colloscope.install(colloscope)  # lands through ops, one undo slot
 ```
@@ -883,11 +904,64 @@ doc.colloscope.install(colloscope)  # lands through ops, one undo slot
 Mid-solve incumbent accept (the GUI's "take best so far") is `run.stop()` + using
 the outcome.
 
+- **The run owns the engine process.** Dropping the handle kills it, so a script
+  holds it for as long as the solve should live. Two solves on one model are fine
+  and independent — each starts its own engine.
+- **`wait()` answers once and keeps answering.** A second wait hands back the very
+  same `SolveOutcome` object: a finished run has one outcome, not two. A run that
+  was `kill()`ed has none at all and raises `SolveError`, and so does an engine that
+  exits without reporting one. An exception raised by `on_progress` or `on_log`
+  comes out of `wait()` in place of the outcome, every time it is asked — the rule
+  `build_colloscope_model` already follows for its own log. Both callbacks run on
+  another thread, and neither may call `wait()`.
+- **`stop()` and `kill()` are safe to call late.** Stopping a run that has already
+  finished does nothing, which is the honest answer since the two race by design;
+  killing one twice, or killing one that finished, is fine, so a `finally:` that
+  tidies up need not ask first. Stopping a *killed* run raises: there is no longer
+  an engine to ask.
+- **Nothing is written to the document**, so a solve takes no undo slot. What it
+  produces is a value, and `doc.colloscope.install(...)` is what lands it.
+
+**One verdict, and the interface shows the same one.** `outcome.status` is a
+`SolveStatus` with exactly four values — `OPTIMAL`, `FEASIBLE`, `NO_SOLUTION`,
+`ERROR` — and it is deliberately *not* the status the solver reports about the
+problem it was handed. `collomatique_strategies::SolveStatus` calls a run optimal
+as soon as the conductor holds any incumbent, and never reports `Infeasible` or
+`Error` at all, so a script given the raw word would read a promise nobody made.
+
+The answer to « how did it go » is `collomatique_strategies::verdict`, which reads
+one finished outcome whole: an incumbent with a closed optimality gap is `Optimal`,
+an incumbent alone is `Feasible`, nothing in hand is `NoSolution` — whether the run
+was stopped before it found anything or the problem has no answer, which the
+conductor cannot tell apart either — and a run that broke down is `Error`.
+`NO_SOLUTION` therefore states the fact and not the cause. `ERROR` stays a status
+rather than an exception because such a run may still carry the best colloscope it
+had found by then, and raising would throw it away.
+
+That verdict lives in `strategies` rather than in either front end, and its four
+French sentences live in `collomatique_ui_text::solver::solve_verdict_text` beside
+the warnings'. The solve dialog and `str(outcome.status)` print the same sentence
+about the same run, which is the completeness requirement at the head of this
+document applied to what a user is *told* and not only to what they can do.
+
 **Engine location.** The subprocess mechanism re-executes a collomatique binary with
-`--rpc-engine`. Standalone, the interpreter is `python`, so the engine binary is
-located by: explicit `engine=` parameter > `COLLOMATIQUE_ENGINE` environment
-variable > error. Hosted, the host injects its own executable path; scripts never
-think about it.
+`--rpc-engine`, so a solve has to name one. Three rungs, tried in order, and nothing
+found is a loud `NoEngine` — a subclass of `SolveError` — rather than a guess:
+
+1. the call's own `engine=`, being the most local thing said about this solve;
+2. the engine the runner **injected**, being about this run rather than about the
+   machine;
+3. the `COLLOMATIQUE_ENGINE` environment variable, where an empty value counts as
+   unset.
+
+The middle rung is a parameter of `run_python_script`, decided by whoever starts the
+interpreter rather than by the module: a hosted script and a `--python-file` script
+both run inside a collomatique binary, which is therefore an engine, so both call
+sites pass `EngineExe::Current` — `rpc-engine`, which is what the GUI's script
+runner spawns, and the command-line branch of the gtk4 binary itself. A bare
+`python` importing the wheel injects nothing, so a standalone script names its
+engine or sets the variable. `--python-no-engine` (§1) withholds the injection,
+which is how a script — and `gtk4/tests/e2e/` — reaches the rungs below it.
 
 ## 11. Rust-side prerequisites
 
@@ -956,8 +1030,8 @@ nothing here blocks the new crate any more.
    over RPC and `InitMsg` is unchanged. `Process::spawn_pty` also takes an `&OsStr`
    command now, which retired `WorkerSpawnError::NonUtf8ExePath` — a path coming from a
    user's environment is not the same thing as `current_exe()`, and refusing a
-   non-UTF-8 one buys nothing. The `Explicit` arm has no caller yet; the Python solver
-   is the last migration milestone (§13.5).
+   non-UTF-8 one buys nothing. The `Explicit` arm's caller is the module's own engine
+   resolution, which landed with the solver (§10.3, §13.5).
 
 **No hosted-handoff prerequisite.** An earlier draft listed a fifth item: make the
 `RunPythonScript` path of `rpc-engine` stop sending `SetData` at script exit, and have
@@ -1025,12 +1099,35 @@ first.
    `ModelBuildError` (`c17507ed`, §10.2), and `model.export_mps` on top of the
    two of them (§9.4). The build door is shared with step 5, which hangs
    `model.solve` on the same object.
-5. Solver (last), including the engine-location mechanism. It adds `model.solve`
-   to the `ColloscopeModel` of step 4 — the config and the build are already
-   there — plus the run handle and `SolveOutcome` of §10. The landing door
-   gated out of the ops mirror lands here with it — `colloscope.install` —
-   since its payload only exists once a solve produces one. Group-list
-   generation is not part of this step (§10).
+5. Solver (last), including the engine-location mechanism — **done**, in eleven
+   commits, the last being the end-to-end tests (`8f3ff6f4`). The design it was
+   built from, door by door, is `docs/python/solver.md`; the refinements it
+   settled over this document's §1 and §10 are folded in above.
+
+   It added `model.solve` to the `ColloscopeModel` of step 4 — the config and the
+   build were already there — plus the run handle and the `SolveOutcome` of §10.3,
+   and with them the landing door the ops mirror had gated out,
+   `colloscope.install`, whose payload only exists once a solve has produced one.
+   Group-list generation stayed out, as §10 says.
+
+   The order was: the conductor warnings' French sentences into a new `ui-text`
+   crate, shared with the solve dialog (`d6d80d5c`); `colloscope.install`
+   (`b32621b8`); the strategy value family with its two presets (`38666fd8`) and
+   its preflight `warnings()` (`d880ae70`); the engine resolution with its
+   `SolveError`/`NoEngine` vocabulary (`717680df`); the parameters a built model
+   has to keep for a solution to be read back out of it (`8fd7b9d3`); then
+   `model.solve` itself, with the run handle and the outcome (`6ea8a6d5`).
+
+   Three things the plan had not foreseen. The gtk4 binary grew `--python`,
+   `--python-file` and `--python-no-engine` (`efb576ab`, §1): without them nothing
+   could run a new-API script outside the GUI, and the engine rungs could not be
+   told apart. The verdict a finished solve earns moved out of the two front ends
+   into `strategies`, and its sentences into `ui-text` (`1f4d9aae`, `a8678c4a`,
+   §10.3) — the solve dialog and the module had each been computing one, and the
+   module's was three states too wide. And the tests became a new end-to-end
+   target, `gtk4/tests/e2e.rs` (`8f3ff6f4`), which spawns the built binary once
+   per test: which engine a solve re-executes is a property of the *process* a
+   script runs in, and one interpreter cannot be in three of them at once.
 6. Migrate the three contract scripts to the new API (user-validated) — they gain an
    explicit `doc.save()`. The three ports are **done**: the old-API versions moved
    to `scripts/old_api/` (`e304580b`), and the new ones landed beside them in
