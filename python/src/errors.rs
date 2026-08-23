@@ -68,6 +68,13 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    ModelBuildError,
+    Error,
+    "The colloscope model could not be built."
+);
+
+create_exception!(
+    collomatique,
     NothingToUndo,
     Error,
     "undo() or redo() was called with nothing left in that direction."
@@ -278,6 +285,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("NoOrigin", py.get_type::<NoOrigin>())?;
     m.add("UpdateError", py.get_type::<UpdateError>())?;
     m.add("ExportError", py.get_type::<ExportError>())?;
+    m.add("ModelBuildError", py.get_type::<ModelBuildError>())?;
     m.add("NothingToUndo", py.get_type::<NothingToUndo>())?;
     m.add("StaleHandleError", py.get_type::<StaleHandleError>())?;
     m.add("NotHosted", py.get_type::<NotHosted>())?;

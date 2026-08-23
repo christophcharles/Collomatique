@@ -13852,3 +13852,114 @@ fn the_solve_config_crosses_the_boundary() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// A document builds its ILP model, and hands back a token for it
+///
+/// The problem itself is `constraints-colloscopes`' business and is tested
+/// there; what this says is that python reaches that builder with the config
+/// the script wrote, that what comes back carries the counts of the model that
+/// was really built, that the build log arrives line by line, and that a
+/// callback which raises is heard without the build being torn in half.
+///
+/// The document is the two-filling fixture: its automatic group list is what
+/// gives the problem something to work out, so a student added to it is an
+/// edit the model cannot fail to notice — which is how the script says the
+/// model it holds is a snapshot and not a view.
+#[test]
+fn a_document_builds_its_colloscope_model() {
+    use collomatique_constraints_colloscopes::{
+        GroupListRecompute, GroupListSolveData, SolveConfig,
+    };
+
+    let dir = workspace("build-model");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let globals = run(include_str!("scripts/build_model.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // The same build, run here: the script's document was edited at the end and
+    // never saved, so the file on disk is still the one it opened.
+    let data = reload(&source);
+    let built = SolveConfig::default()
+        .build_model(data.get_inner_data(), &mut |_line| {})
+        .expect("the fixture's model builds");
+    let stats = built.stats();
+
+    let automatic = data
+        .get_inner_data()
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .find(|(_id, group_list)| !group_list.is_prefilled())
+        .map(|(id, _group_list)| id)
+        .expect("the fixture holds an automatic list");
+
+    // The repr's two numbers, each summed over the three kinds the modeler
+    // distinguishes.
+    let counts = |stats: &collomatique_constraints_colloscopes::ModelStats| {
+        (
+            stats.base_variable_count + stats.constraint_extra_count + stats.objective_extra_count,
+            stats.user_constraint_count
+                + stats.constraint_defining_constraint_count
+                + stats.objective_defining_constraint_count,
+        )
+    };
+
+    let (variables, constraints) = counts(&stats);
+
+    // A problem with nothing in it would make the comparisons above and below
+    // say nothing, so the fixture has to be worth building.
+    assert!(variables > 0);
+    assert!(constraints > 0);
+
+    assert_eq!(
+        global::<String>(&globals, "shown"),
+        format!("<ColloscopeModel: {variables} variables, {constraints} constraints>")
+    );
+
+    // The same, for the model the anchored config builds. The plain build has
+    // no objective at all, so it is this one that says the objective half of
+    // both counts is in the repr — and that the group-list half of the config
+    // reached the builder, since the anchor is what it asked for.
+    let anchored_config = SolveConfig {
+        group_lists: BTreeMap::from([(
+            automatic,
+            GroupListSolveData {
+                recompute: Some(GroupListRecompute {
+                    previous_values_as_objective: true,
+                }),
+            },
+        )]),
+        ..SolveConfig::default()
+    };
+    let anchored_stats = anchored_config
+        .build_model(data.get_inner_data(), &mut |_line| {})
+        .expect("the anchored model builds")
+        .stats();
+    assert!(anchored_stats.objective_extra_count > 0);
+    assert!(anchored_stats.objective_defining_constraint_count > 0);
+
+    let (anchored_variables, anchored_constraints) = counts(&anchored_stats);
+    assert_eq!(
+        global::<String>(&globals, "anchored_shown"),
+        format!(
+            "<ColloscopeModel: {anchored_variables} variables, \
+             {anchored_constraints} constraints>"
+        )
+    );
+
+    // The log the script collected is the builder's own, verbatim: the first
+    // line rust's own build emits is the first line python was handed.
+    let mut first = None;
+    let _ = SolveConfig::default().build_model(data.get_inner_data(), &mut |line| {
+        first.get_or_insert_with(|| line.to_owned());
+    });
+    let lines = global::<Vec<String>>(&globals, "lines");
+    assert_eq!(lines.first(), first.as_ref());
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}

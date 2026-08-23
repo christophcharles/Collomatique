@@ -19,9 +19,10 @@ use crate::collections::{
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
-    Cancelled, CaveatedOverwrite, Error, ExportError, IdCeilingExceeded, LoadError, NoDocument,
-    NoOrigin, NothingToUndo, SaveError, UpdateError,
+    Cancelled, CaveatedOverwrite, Error, ExportError, IdCeilingExceeded, LoadError,
+    ModelBuildError, NoDocument, NoOrigin, NothingToUndo, SaveError, UpdateError,
 };
+use crate::model::ColloscopeModel;
 use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
 
@@ -1058,5 +1059,95 @@ impl Document {
         // the interpreter over (`host.rs`, `dialogs.rs`).
         py.detach(|| collomatique_xlsx::write_xlsx(&inner, &path, &xlsx_config))
             .map_err(|e| ExportError::new_err(format!("{}: {e}", path.display())))
+    }
+
+    /// Builds the ILP problem a solve would attack
+    ///
+    /// ```python
+    /// config = collomatique.ColloscopeSolveConfig()
+    /// model = doc.build_colloscope_model(config)
+    ///
+    /// model = doc.build_colloscope_model(config, on_log=print)
+    /// ```
+    ///
+    /// `config` says which periods and which group lists are recomputed, and
+    /// what a dropped constraint or a previous value is worth as an objective
+    /// term — a `ColloscopeSolveConfig`, the same vocabulary the application's
+    /// own solve dialog fills in. It is required: the application never solves
+    /// without passing that dialog, and a script that wants everything
+    /// recomputed writes `ColloscopeSolveConfig()` and says so.
+    ///
+    /// What comes back is a `ColloscopeModel` — a token for a built problem,
+    /// not a view of one. It is detached, like a value: a snapshot of the
+    /// document as it stands now, which later edits neither change nor
+    /// invalidate. `model.export_mps(path)` writes it out for a solver to read.
+    ///
+    /// `on_log` is called with one line of the build log at a time, the log the
+    /// application shows while it builds; `None` discards it. There is no
+    /// progress here — a build has lines, not a proportion. A callback that
+    /// raises does not tear the build in half: the build runs to its end, the
+    /// callback is not called again, and the exception comes out of this call
+    /// with no model built.
+    ///
+    /// Nothing is written to the document, so a build takes no undo slot. A
+    /// problem the builder refuses to assemble raises `ModelBuildError`.
+    #[pyo3(signature = (config, *, on_log=None))]
+    fn build_colloscope_model(
+        slf: Py<Self>,
+        py: Python<'_>,
+        config: &Bound<'_, PyAny>,
+        on_log: Option<Py<PyAny>>,
+    ) -> PyResult<ColloscopeModel> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it, like
+        // `export_xlsx`'s configuration and for the same reason (§5).
+        let config = crate::data::ColloscopeSolveConfig::from_py(&slf, config)?;
+
+        // Copied out of the borrow: the build below runs with the GIL
+        // released, and it must not hold the document while another thread
+        // could be handed it.
+        let inner = {
+            let doc = slf.borrow(py);
+            doc.data().get_inner_data().clone()
+        };
+
+        // What the log callback raised, if it raised. The builder takes an
+        // infallible `FnMut`, so a raising callback cannot stop the build
+        // half-way through — the first exception is kept here, the callback is
+        // not called again, and the build is left to finish (§10.2).
+        let mut failure: Option<PyErr> = None;
+        let mut log = |line: &str| {
+            let Some(callback) = on_log.as_ref() else {
+                return;
+            };
+            if failure.is_some() {
+                return;
+            }
+
+            // The GIL is released for the whole build, so each line takes it
+            // back for the length of one call and gives it up again.
+            Python::attach(|py| {
+                if let Err(error) = callback.call1(py, (line,)) {
+                    failure = Some(error);
+                }
+            });
+        };
+
+        // Released for the duration: building the model of a whole colloscope
+        // is the longest thing this module does, and a script that watches it
+        // through `on_log` is watching a build that is really running.
+        let built = py.detach(|| config.build_model(&inner, &mut log));
+
+        // The callback's exception wins over whatever the build made of it:
+        // the script asked for the lines and one of them was refused, so no
+        // model is handed back.
+        if let Some(failure) = failure {
+            return Err(failure);
+        }
+
+        built
+            .map(ColloscopeModel::new)
+            .map_err(ModelBuildError::new_err)
     }
 }

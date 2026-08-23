@@ -16,6 +16,7 @@ pub mod errors;
 pub mod handles;
 pub mod host;
 pub mod ids;
+pub mod model;
 mod payload;
 pub mod refs;
 pub mod results;
@@ -25,6 +26,7 @@ pub mod values;
 pub use dialogs::{Dialogs, FileRequest, set_dialogs};
 pub use document::Document;
 pub use host::{Host, set_host};
+pub use model::ColloscopeModel;
 pub use transaction::Transaction;
 
 /// The `collomatique` python module, for registration in an interpreter's inittab.
@@ -42,6 +44,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     errors::register(m)?;
     host::register(m)?;
     ids::register(m)?;
+    model::register(m)?;
     refs::register(m)?;
     results::register(m)?;
     values::register(m)?;
