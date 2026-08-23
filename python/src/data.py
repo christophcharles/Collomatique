@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from collomatique import (
         AutomaticGroups,
         Color,
+        ConductorWarning,
         Enforcement,
         Filling,
         GroupList,
@@ -1356,3 +1357,21 @@ class ConductorStrategy:
         import collomatique
 
         return collomatique._conductor_optimize()
+
+    def warnings(self) -> tuple[ConductorWarning, ...]:
+        """What is wrong with this strategy, seen before anything runs.
+
+        A tuple of `ConductorWarning` members, empty when there is nothing to
+        say, in a fixed order. These are the very remarks the application's
+        solve dialog shows, and `str()` of one is the sentence it shows:
+
+            for w in strategy.warnings():
+                print(w)
+
+        None of them stops a solve. A strategy that warns still runs — a
+        warning says the setup wastes work or never proves it is done, and
+        what to do about that is the script's call.
+        """
+        import collomatique
+
+        return collomatique._conductor_warnings(self)

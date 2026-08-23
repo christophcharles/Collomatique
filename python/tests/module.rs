@@ -14192,6 +14192,77 @@ fn the_conductor_strategy_crosses_the_boundary() {
     );
 }
 
+/// The conductor's preflight warnings, as a script reads them
+///
+/// The eight remarks of `ConductorStrategy.warnings()`: that they come out in
+/// the model's own order, that they compare and hash the way a script expects
+/// of a member, and that the sentence each one prints as is the very one the
+/// application's dialog shows — asserted against `ui-text`'s own function, so
+/// python cannot end up with a second set of words.
+#[test]
+fn the_conductor_warnings_are_preflight() {
+    use collomatique_strategies::{ConductorStrategy as RawConductorStrategy, ConductorWarning};
+
+    /// The eight warnings and the names python knows them by
+    ///
+    /// Written out rather than derived, since the point is to pin the two
+    /// halves of the conversion against each other: a match in `solve.rs`
+    /// would only agree with itself.
+    const NAMES: [(ConductorWarning, &str); 8] = [
+        (ConductorWarning::NoStrategyEnabled, "NO_STRATEGY_ENABLED"),
+        (ConductorWarning::NoOptimizing, "NO_OPTIMIZING"),
+        (ConductorWarning::NoSeed, "NO_SEED"),
+        (ConductorWarning::StarvedFuzzy, "STARVED_FUZZY"),
+        (ConductorWarning::WontFinish, "WONT_FINISH"),
+        (ConductorWarning::ColdFuzzy, "COLD_FUZZY"),
+        (ConductorWarning::RedundantWarmStart, "REDUNDANT_WARM_START"),
+        (ConductorWarning::OverwhelmedCpu, "OVERWHELMED_CPU"),
+    ];
+
+    let globals = run(include_str!("scripts/strategy_warnings.py"), |_| Ok(()));
+
+    // The script asserted the shapes it could decide for itself. What is left
+    // is what only this side knows: the words, and the preset whose warnings
+    // depend on the machine the test runs on.
+    assert_eq!(
+        global::<BTreeMap<String, String>>(&globals, "sentences"),
+        NAMES
+            .into_iter()
+            .map(|(warning, name)| (
+                name.to_owned(),
+                collomatique_ui_text::solver::conductor_warning_text(warning).to_owned(),
+            ))
+            .collect::<BTreeMap<_, _>>(),
+    );
+
+    // « Optimisation complète » says nothing about its shape, but on a machine
+    // with one or two cores its single slot is taken by the default worker and
+    // the fuzzers never get one. Which of the two it is, is the application's
+    // own answer, read here from the very structure the preset is built from.
+    let optimize = RawConductorStrategy::with_parallelism_defaults();
+    let named = |warning: ConductorWarning| {
+        NAMES
+            .into_iter()
+            .find_map(|(candidate, name)| (candidate == warning).then_some(name.to_owned()))
+            .expect("every warning has a python name")
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "optimize_names"),
+        optimize
+            .warnings()
+            .into_iter()
+            .map(named)
+            .collect::<Vec<_>>(),
+    );
+
+    // And a strategy that cannot be read at all is refused where it is read,
+    // with the sentence `solve` will refuse it with.
+    assert_eq!(
+        global::<String>(&globals, "malformed"),
+        "a ConductorStrategy's worker_count is at least 1, and 0 was given",
+    );
+}
+
 /// A document builds its ILP model, and hands back a token for it
 ///
 /// The problem itself is `constraints-colloscopes`' business and is tested
