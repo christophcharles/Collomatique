@@ -558,11 +558,11 @@ cost is that a hosted script which edits and forgets the call does nothing — b
 failure is visible (the GUI says "Aucune modification effectuée"), whereas an implicit
 send fails by pushing something the author did not mean to push.
 
-The engine's automatic send is not removed for this: it stays until `python-old/` goes,
-and goes with it (§13, step 6). It fires on the old module's own shared `AppState`
-having been modified, which a script using this module never touches, so it cannot fire
-for a new-API script — §11 works this through. The two live side by side in the
-meantime, each serving its own module's scripts.
+The engine's automatic send went with `python-old/` (§13, step 6). It fired on the old
+module's own shared `AppState` having been modified, which a script using this module
+never touches, so it could never fire for a new-API script — §11 works this through —
+and the two lived side by side, each serving its own module's scripts, until the old
+crate left.
 
 Sending is a **module-level function taking any document**, because its subject is the
 host slot, not the document:
@@ -1057,22 +1057,23 @@ the runner expose the send to the module instead. It is not needed. That send is
 conditioned on the old module's shared `AppState` having been modified (`state.can_undo()`
 in `rpc-engine/src/lib.rs`), and that `Arc<Mutex<AppState>>` is `python-old`'s own
 structure, handed to `run_python_script` as its file state. The new crate has its own
-document and never touches it, so the automatic send cannot fire for a new-API script;
-it disappears with `python-old/` and the `RunPythonScript` glue that feeds it (§13.6).
-The explicit `send_to_host` / `doc.save()` of §9.2 therefore needs nothing removed
-first.
+document and never touches it, so the automatic send could not fire for a new-API
+script; it went with `python-old/`, together with the `AppState` the `RunPythonScript`
+glue built to feed it (§13.6). The explicit `send_to_host` / `doc.save()` of §9.2
+therefore needed nothing removed first.
 
 ## 12. Crate layout
 
-- `python-old/` — the current `python/` crate, renamed; Python module name
-  `collomatique_old`. Frozen, untouched otherwise.
+- `python-old/` — the old `python/` crate, renamed; Python module name
+  `collomatique_old`. Frozen for the transition, then **removed** once the three
+  contract scripts had been ported (§13, step 6).
 - `python/` — the new API crate, module name `collomatique`. Builds as rlib (for
   embedding) and cdylib (for the wheel). Ships the value-dataclass `.py` source; in
   embedded mode the runner materializes it (`PyModule::from_code`) so hosted
   scripts need no filesystem package. Takes a new `rfd` dependency for §9.3.
-- `python-runner/` — the executor: interpreter lifecycle, inittab registration of
-  *both* modules during the transition, the document handoff to hosted scripts.
-  `rpc-engine` depends on this crate only.
+- `python-runner/` — the executor: interpreter lifecycle, inittab registration (of
+  *both* modules during the transition, of `collomatique` alone since), the document
+  handoff to hosted scripts. `rpc-engine` depends on this crate only.
 
 ## 13. Migration
 
@@ -1153,9 +1154,11 @@ first.
    `scripts/` — the Pronote web import (`aee006b1`), the custom xlsx export
    (`0479324e`) and the full draft import (`321acd1c`). The user ran all three on
    real documents: the web import and the full import write byte-identical files
-   on the old and the new API, and the xlsx export was checked visually. What
-   remains of this step is retiring `python-old/` and its registration, and with
-   it the engine's automatic send-back (§11).
+   on the old and the new API, and the xlsx export was checked visually. The
+   step is closed: `python-old/` and its registration are gone — the crate, its
+   workspace entry, its inittab line and the `file_state` argument of
+   `run_python_script` — and with them the old-API copies under `scripts/old_api/`
+   and the engine's automatic send-back (§11).
 
 Standalone packaging (wheel + nix environment) can land any time after step 3; no
 step depends on it.

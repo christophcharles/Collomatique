@@ -110,7 +110,7 @@ Le projet est un workspace Rust composé des crates suivantes :
 | `sqlite-state/` | Persistance SQLite (SQLx) |
 | `storage/` | Sérialisation des fichiers (JSON) |
 | `gtk4/` | Interface graphique GTK4/Adwaita (Relm4) |
-| `python-old/` | Bindings Python (PyO3), utilisés notamment pour l'import Pronote |
+| `python/` | Bindings Python (PyO3), utilisés notamment pour l'import Pronote |
 | `rpc/` et `rpc-engine/` | Protocole RPC pour la communication entre processus |
 | `time/` | Types pour représenter les jours, heures, etc dans Collomatique |
 | `ops/` | Opérations de haut-niveau (GUI et Python) sur l'état de l'application |

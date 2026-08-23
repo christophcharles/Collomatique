@@ -498,27 +498,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "collomatique-python-old"
-version = "0.1.0-alpha.1.99"
-dependencies = [
- "anyhow",
- "chrono",
- "collomatique-ops",
- "collomatique-rpc",
- "collomatique-state",
- "collomatique-state-colloscopes",
- "collomatique-time",
- "non-empty-string",
- "pyo3",
-]
-
-[[package]]
 name = "collomatique-python-runner"
 version = "0.1.0-alpha.1.99"
 dependencies = [
  "anyhow",
  "collomatique-python",
- "collomatique-python-old",
  "pyo3",
 ]
 
@@ -574,7 +558,6 @@ dependencies = [
  "collomatique-ilp-modeler",
  "collomatique-python-runner",
  "collomatique-rpc",
- "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",

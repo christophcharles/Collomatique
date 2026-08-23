@@ -109,7 +109,7 @@ fn main() -> Result<(), anyhow::Error> {
         let engine =
             (!args.python_no_engine).then_some(collomatique_python_runner::EngineExe::Current);
         collomatique_python_runner::initialize();
-        return collomatique_python_runner::run_python_script(code, None, None, engine);
+        return collomatique_python_runner::run_python_script(code, None, engine);
     }
 
     if let Some(mode) = args.debug {

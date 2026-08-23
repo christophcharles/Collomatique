@@ -398,9 +398,7 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
                 ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data),
                 _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
             };
-            let host = std::sync::Arc::new(RpcHost { data: data.clone() });
-            let app_state = collomatique_state::AppState::new(data);
-            let shared = std::sync::Arc::new(std::sync::Mutex::new(app_state));
+            let host = std::sync::Arc::new(RpcHost { data });
 
             eprintln!("Running Python script...");
             collomatique_python_runner::initialize();
@@ -410,28 +408,13 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             // itself.
             collomatique_python_runner::run_python_script(
                 script,
-                Some(shared.clone()),
                 Some(host),
                 Some(collomatique_python_runner::EngineExe::Current),
             )?;
 
-            // Send back if modified
-            //
-            // This is the old module's automatic send: it fires when the state
-            // *it* hands its scripts was modified, which a script using the new
-            // module never touches. It goes with `python-old/`, and until then a
-            // new-API script sends only when it says so
-            // (`docs/python/new_api_design.md` §9.2).
-            {
-                use collomatique_state::traits::Manager;
-                let state = shared.lock().unwrap();
-                if state.can_undo() {
-                    eprintln!("Sending final file data...");
-                    let data_stream = InternalDataStream::from(state.get_data());
-                    send_command(CmdMsg::SetData(data_stream))
-                        .map_err(|e| anyhow!("Error on SetData: {}", e))?;
-                }
-            }
+            // Nothing is sent back here: a script sends when it says so
+            // (`docs/python/new_api_design.md` §9.2), through the `send` of
+            // `RpcHost` above.
         }
         InitMsg::SolveColloscope => {
             try_solve()?;

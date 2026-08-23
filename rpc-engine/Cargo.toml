@@ -7,7 +7,6 @@ authors.workspace = true
 [dependencies]
 collomatique-rpc = { path = "../rpc" }
 collomatique-python-runner = { path = "../python-runner" }
-collomatique-state = { path = "../state" }
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
 collomatique-constraints-colloscopes = { path = "../constraints-colloscopes" }
 collomatique-ilp = { path = "../ilp", features = ["serde", "collo_cbc"] }
