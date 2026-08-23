@@ -1306,7 +1306,7 @@ class FuzzyConfig:
 class ConductorStrategy:
     """How a solve is run: which substrategies, on how many worker slots.
 
-    §13 of `docs/python/new_api_design.md` is the design.
+    §10 of `docs/python/new_api_design.md` is the design.
     `model.solve(strategy)` takes one of these:
 
         strategy = clm.ConductorStrategy.optimize()
