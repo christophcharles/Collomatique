@@ -8,8 +8,7 @@ use relm4::{adw, gtk};
 use std::num::NonZeroU32;
 
 use collomatique_strategies::{
-    ConductorStrategy, ConductorWarning, DefaultConfig, FuzzyConfig, IncrementalConfig,
-    WarmStartConfig,
+    ConductorStrategy, DefaultConfig, FuzzyConfig, IncrementalConfig, WarmStartConfig,
 };
 
 pub struct Dialog {
@@ -989,7 +988,9 @@ impl Dialog {
         let mut guard = self.warnings.guard();
         guard.clear();
         for warning in self.strategy.warnings() {
-            guard.push_back(warning_message(warning).to_string());
+            guard.push_back(
+                collomatique_ui_text::solver::conductor_warning_text(warning).to_string(),
+            );
         }
     }
 
@@ -1027,45 +1028,6 @@ fn make_time_limit(enabled: bool, secs: u32) -> collomatique_time::TimeLimit {
             .unwrap_or_default()
     } else {
         collomatique_time::TimeLimit::none()
-    }
-}
-
-fn warning_message(warning: ConductorWarning) -> &'static str {
-    match warning {
-        ConductorWarning::NoStrategyEnabled => {
-            "Aucune stratégie n'est activée : rien ne sera exécuté."
-        }
-        ConductorWarning::NoOptimizing => {
-            "Aucune stratégie d'optimisation n'est activée : le solveur cherchera une solution \
-             réalisable sans tenter de l'améliorer."
-        }
-        ConductorWarning::NoSeed => {
-            "L'exploration aléatoire est activée mais aucune stratégie ne produit de solution \
-             initiale (démarrage à chaud ou résolution incrémentale) : elle ne démarrera jamais et \
-             le solveur s'arrêtera immédiatement."
-        }
-        ConductorWarning::StarvedFuzzy => {
-            "L'exploration aléatoire est activée mais l'unique tâche est occupée par la stratégie \
-             par défaut : elle n'aura jamais de créneau libre. Augmentez le nombre de tâches en \
-             parallèle."
-        }
-        ConductorWarning::WontFinish => {
-            "La stratégie par défaut est désactivée : sans elle, aucune borne ne prouve \
-             l'optimalité et le solveur tournera indéfiniment."
-        }
-        ConductorWarning::ColdFuzzy => {
-            "L'exploration aléatoire est activée sans solution initiale (démarrage à chaud ou \
-             résolution incrémentale) : elle ne se déclenchera qu'une fois la stratégie par défaut \
-             bien avancée et sera donc souvent inutile."
-        }
-        ConductorWarning::RedundantWarmStart => {
-            "Le démarrage à chaud et la résolution incrémentale sont tous deux activés : la \
-             résolution incrémentale fournit généralement un meilleur point de départ ; le \
-             démarrage à chaud n'est utile que pour obtenir rapidement une solution."
-        }
-        ConductorWarning::OverwhelmedCpu => {
-            "Le nombre de tâches en parallèle dépasse le nombre de cœurs du processeur."
-        }
     }
 }
 

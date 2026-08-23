@@ -11,20 +11,39 @@
 //! A rule only applies to students enrolled in both subjects, and it is either
 //! a hard constraint or an objective for the solver to optimize — the `.soft`
 //! flag. The periods a rule does not apply to are its `.excluded_periods`.
+//!
+//! Written through `add`, `update` and `remove`. The family sits at the leaf of
+//! the reference graph — nothing in the document points at a pairing rule — so
+//! a removal takes nothing with it and no write of this family ever makes the
+//! cascade repair anything.
+//!
+//! Unlike the incompatibilities', though, the ops here keep a refusal of their
+//! own, and it reaches a script as `PairingsError`: a rule naming a subject
+//! that runs no interrogations is vacuous — there is no interrogation for the
+//! implication to be about — and the model refuses it on either end. That is a
+//! statement about the document and not about the value, which is why
+//! [crate::data::PairingRuleData] leaves it to the write. What the model could
+//! otherwise object to is caught on this side, where the message can say which
+//! argument was wrong: a dead rule is the argument convention's business
+//! ([crate::handles::argument]), and a dead subject or a dead excluded period
+//! is the value boundary's.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
-use collomatique_state_colloscopes::InnerData;
+use collomatique_ops::{PairingsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::PairingRuleId as RawPairingRuleId;
 use collomatique_state_colloscopes::pairings::RulePart;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::periods::Period;
 use crate::collections::subjects::Subject;
+use crate::data::{PairingRuleData, Value as _};
 use crate::errors::StaleHandleError;
-use crate::handles::{Handle, RuleSide, handle_iterator, named, no_such, quoted};
+use crate::handles::{Handle, RuleSide, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, PairingRuleId};
+use crate::results::{AddResult, OpResult};
 
 /// The pairing rules of one document, in id order
 ///
@@ -95,8 +114,96 @@ impl Pairings {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a pairing rule, and hands back the handle of the new one
+    ///
+    /// Takes a `PairingRuleData` — the whole of what a rule is, since the
+    /// entity and the op payload are the same type here — and answers an
+    /// `AddResult`, whose `created` is the `PairingRule` the document just
+    /// minted.
+    ///
+    /// ```python
+    /// doc.pairings.add(collomatique.PairingRuleData(
+    ///     collomatique.PairingRuleSideData(maths),
+    ///     collomatique.PairingRuleSideData(physics, should_have=False)))
+    /// ```
+    ///
+    /// Both ends must name a subject that runs interrogations: an implication
+    /// about a subject with no colles is vacuous, and the model refuses it with
+    /// a `PairingsError`. That the two ends name *different* subjects is the
+    /// value's own invariant, and it is refused a step earlier, when the
+    /// `PairingRuleData` is read.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let rule = PairingRuleData::from_py(&self.doc, data)?;
+
+        crate::results::created::<PairingRule>(
+            py,
+            &self.doc,
+            UpdateOp::Pairings(PairingsUpdateOp::AddNewPairingRule(rule)),
+            |new_id| match new_id {
+                NewId::PairingRuleId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a pairing rule whole
+    ///
+    /// The op carries the whole value, so this replaces every field at once:
+    /// what the `PairingRuleData` says is what the rule becomes, both ends
+    /// included. The id stays, and so does every handle naming it — but the
+    /// `PairingRuleSide` views keep reading the rule's *current* ends, which is
+    /// the point of their being views.
+    ///
+    /// The rule is resolved before the value is read, so a call that is wrong
+    /// about both says which rule it could not find rather than what was wrong
+    /// with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<PairingRule>(&self.doc, key)?;
+        let rule = PairingRuleData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::Pairings(PairingsUpdateOp::UpdatePairingRule(id, rule)),
+        )
+    }
+
+    /// Removes a pairing rule
+    ///
+    /// Nothing in the document points at a pairing rule, so the removal takes
+    /// nothing with it and the warnings are always empty. Handles naming it go
+    /// stale, like every other removal's, and so do the two side views it
+    /// handed out.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<PairingRule>(&self.doc, key)?;
+
+        self.write(
+            py,
+            UpdateOp::Pairings(PairingsUpdateOp::DeletePairingRule(id)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.Pairings count={}>", self.__len__(py))
+    }
+}
+
+impl Pairings {
+    /// Writes through the document the view came from
+    ///
+    /// The two mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

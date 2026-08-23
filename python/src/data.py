@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from collomatique import (
         AutomaticGroups,
         Color,
+        ConductorWarning,
         Enforcement,
         Filling,
         GroupList,
@@ -86,6 +87,14 @@ __all__ = [
     "ColloscopeData",
     "WeekData",
     "DocumentData",
+    "PeriodSolveConfig",
+    "GroupListSolveConfig",
+    "ColloscopeSolveConfig",
+    "DefaultConfig",
+    "WarmStartConfig",
+    "IncrementalConfig",
+    "FuzzyConfig",
+    "ConductorStrategy",
 ]
 
 
@@ -108,8 +117,8 @@ def _every_other_week() -> Periodicity:
 class TeacherData:
     """A teacher, detached from the document.
 
-    `doc.teachers[...].to_data()` hands one back, and the teacher mutators will
-    take one:
+    `doc.teachers[...].to_data()` hands one back, and `doc.teachers.add` and
+    `doc.teachers.update` take one:
 
         clm.TeacherData("Emmy", "Noether", email="noether@lycee.fr",
                         subjects={maths})
@@ -131,7 +140,7 @@ class TeacherData:
 
     A teacher may only be declared in a subject that holds interrogations. That
     is a statement about the document rather than about this value, so it is the
-    write that refuses it, not this class.
+    write that refuses it, with a `TeachersError`, and not this class.
     """
 
     firstname: str
@@ -145,7 +154,9 @@ class TeacherData:
 class StudentData:
     """A student, detached from the document.
 
-    The same card as `TeacherData`, with a different set at the end:
+    The same card as `TeacherData`, with a different set at the end.
+    `doc.students[...].to_data()` hands one back, and `doc.students.add` and
+    `doc.students.update` take one:
 
         clm.StudentData("Harry", "Potter", tel="0601020304",
                         excluded_periods={first_period})
@@ -161,7 +172,10 @@ class StudentData:
 
     Which subjects a student takes is not here. The model keeps that in a
     junction table of its own, keyed by period and subject, which python reads
-    and writes as `doc.assignments`.
+    and writes as `doc.assignments`. Excluding a period through this class is
+    therefore a write that reaches those rows: nobody can be assigned in a
+    period they take no part in, so `doc.students.update` unassigns them there
+    and reports it.
     """
 
     firstname: str
@@ -207,8 +221,8 @@ class InterrogationData:
 class SubjectData:
     """A subject, detached from the document.
 
-    `doc.subjects[...].to_data()` hands one back, and the subject mutators will
-    take one:
+    `doc.subjects[...].to_data()` hands one back, and `doc.subjects.add` and
+    `doc.subjects.update` take one:
 
         clm.SubjectData("Spé maths")
 
@@ -235,6 +249,14 @@ class SubjectData:
     `doc.subjects.set_period_status(subject, period, active)`, and adding a
     subject that skips a period is therefore two calls, which a transaction
     makes one undo step.
+
+    Rewriting the rest of the value through `doc.subjects.update` is a write
+    that reaches most of the document. Setting `interrogation` to `None`
+    dismantles everything that needed those colles — the teachers who held them,
+    their slots in the subject, its group-list associations, its balancing
+    options and the pairing rules naming it — and lengthening `duration` far
+    enough to push a late slot past midnight takes that slot. The result
+    reports it either way.
     """
 
     name: str
@@ -246,8 +268,8 @@ class SubjectData:
 class WeekPatternData:
     """A week pattern, detached from the document.
 
-    `doc.week_patterns[...].to_data()` hands one back, and the pattern mutators
-    will take one:
+    `doc.week_patterns[...].to_data()` hands one back, and
+    `doc.week_patterns.add` and `doc.week_patterns.update` take one:
 
         clm.WeekPatternData("Semaines paires", excluded_weeks={w1, w3})
 
@@ -267,6 +289,11 @@ class WeekPatternData:
     A week that runs no interrogations of its own may perfectly well be in the
     set. The model keeps the two apart, so that switching such a week back on
     brings back the pattern it had.
+
+    Adding a week to the set through `doc.week_patterns.update` is a write that
+    reaches the colloscope: a slot following the pattern holds no interrogation
+    on a week the pattern switches off, so the colles already written in those
+    cells go and the result reports it.
     """
 
     name: str
@@ -277,8 +304,8 @@ class WeekPatternData:
 class SlotData:
     """A slot, detached from the document.
 
-    `doc.slots[...].to_data()` hands one back, and the slot mutators will take
-    one:
+    `doc.slots[...].to_data()` hands one back, and `doc.slots.add` and
+    `doc.slots.update` take one:
 
         clm.SlotData(maths, snape, clm.Weekday.THURSDAY, datetime.time(14, 0))
 
@@ -329,8 +356,8 @@ class SlotData:
 class IncompatData:
     """An incompatibility, detached from the document.
 
-    `doc.incompats[...].to_data()` hands one back, and the incompatibility
-    mutators will take one:
+    `doc.incompats[...].to_data()` hands one back, and `doc.incompats.add` and
+    `doc.incompats.update` take one:
 
         clm.IncompatData("Lundi Midi", maths, slots=[clm.TimeSlot(
             clm.Weekday.MONDAY, datetime.time(12, 0), 60)])
@@ -402,8 +429,8 @@ def _automatic_filling() -> AutomaticGroups:
 class GroupListData:
     """A group list, detached from the document.
 
-    `doc.group_lists[...].to_data()` hands one back, and the group list
-    mutators will take one:
+    `doc.group_lists[...].to_data()` hands one back, and
+    `doc.group_lists.add` and `doc.group_lists.update` take one:
 
         clm.GroupListData(
             "Maisons",
@@ -442,6 +469,13 @@ class GroupListData:
     `len(group_names)` groups, and no student may appear in two of them; both
     are checked when the value is used, by the model's own constructor, whose
     message is the one a script meets.
+
+    The value carries the whole list, so `doc.group_lists.update` rewrites the
+    filling with the parameters: the model seals the two together, and there is
+    no writing one without the other. That write reaches the colloscope, which
+    is measured against the list — fewer groups than a colle names, a student
+    the list starts excluding, or a filling that stops being automatic all cost
+    what no longer fits, and the result reports it.
     """
 
     name: str = "Liste"
@@ -480,8 +514,8 @@ class PairingRuleSideData:
 class PairingRuleData:
     """A pairing rule, detached from the document.
 
-    `doc.pairings[...].to_data()` hands one back, and the pairing rule
-    mutators will take one:
+    `doc.pairings[...].to_data()` hands one back, and `doc.pairings.add` and
+    `doc.pairings.update` take one:
 
         clm.PairingRuleData(clm.PairingRuleSideData(maths),
                             clm.PairingRuleSideData(physics))
@@ -544,8 +578,8 @@ class SlotPairingRuleSideData:
 class SlotPairingRuleData:
     """A slot pairing rule, detached from the document.
 
-    `doc.slot_pairings[...].to_data()` hands one back, and the slot pairing
-    rule mutators will take one:
+    `doc.slot_pairings[...].to_data()` hands one back, and
+    `doc.slot_pairings.add` and `doc.slot_pairings.update` take one:
 
         clm.SlotPairingRuleData(clm.SlotPairingRuleSideData(first_slot),
                                 clm.SlotPairingRuleSideData(second_slot))
@@ -589,7 +623,8 @@ class LimitsData:
     """The limits a student's interrogation schedule is held to, detached.
 
     `doc.settings.global_limits.to_data()` and the `Limits` sub-views hand one
-    back, and the settings mutators will take one:
+    back, and `doc.settings.set_global_limits` and
+    `doc.settings.set_student_limits` take one:
 
         clm.LimitsData(
             interrogations_per_week_min=clm.Limit(2, clm.Enforcement.STRICT))
@@ -624,7 +659,8 @@ class BalancingData:
     """The balancing goals one subject's colles are scheduled under, detached.
 
     `doc.balancing.global_options.to_data()` and the `BalancingOptions`
-    sub-views hand one back, and the balancing mutators will take one:
+    sub-views hand one back, and `doc.balancing.set_global` and
+    `doc.balancing.set_subject` take one:
 
         clm.BalancingData(
             teacher_rotation=clm.Enforcement.OBJECTIVE,
@@ -690,8 +726,8 @@ def _stripes_color() -> Color:
 class ExportGlobalConfigData:
     """The settings shared by every sheet of the export, detached.
 
-    `doc.export_config.global_config.to_data()` hands one back, and the
-    export mutators will take one:
+    `doc.export_config.global_config.to_data()` hands one back, and
+    `doc.export_config.set_global` takes one:
 
         clm.ExportGlobalConfigData(stripes_color=clm.Color(240, 240, 245))
 
@@ -752,8 +788,8 @@ def _annotation_color() -> Color:
 class ExportColloscopeConfigData:
     """The settings of the colloscope sheet, detached.
 
-    `doc.export_config.colloscope_config.to_data()` hands one back, and the
-    export mutators will take one:
+    `doc.export_config.colloscope_config.to_data()` hands one back, and
+    `doc.export_config.set_colloscope_config` takes one:
 
         clm.ExportColloscopeConfigData(
             sheet_name="Colles", no_interrogation_color=clm.Color(200, 200, 200))
@@ -802,7 +838,8 @@ class ExportStudentGroupsConfigData:
     """The settings of one per-student-groups sheet, detached.
 
     `doc.export_config.all_groups_config.to_data()` and the two sibling
-    views hand one back, and the export mutators will take one.
+    views hand one back, and `doc.export_config.set_all_groups_config` and
+    its two siblings take one.
 
     The model has no one default for this shape: each of the three sheets is
     born through its own constructor, and the dataclass mirrors them as three
@@ -814,7 +851,10 @@ class ExportStudentGroupsConfigData:
 
     `sheet_name` names the sheet in the workbook, and it is required: it is
     the one field that says *which* sheet a value is for, and the classmethods
-    above are how the application's own defaults are spelled.
+    above are how the application's own defaults are spelled. Which sheet a
+    value is *written* to is the setter it is handed to and never this field:
+    `set_automatic_groups_config` writes the automatic-groups sheet whatever
+    name the value carries.
 
     `orientation` is `None` when the sheet's orientation is auto-detected from
     the group count when the export is written — the model's own rule, so
@@ -866,7 +906,7 @@ class ExportGroupListConfigData:
     """The settings of the per-group-list sheets, detached.
 
     `doc.export_config.per_group_list_config.to_data()` hands one back, and
-    the export mutators will take one:
+    `doc.export_config.set_per_group_list_config` takes one:
 
         clm.ExportGroupListConfigData(center_vertically=True)
 
@@ -888,10 +928,12 @@ class ExportGroupListConfigData:
 class ExportConfigData:
     """The whole export configuration, detached.
 
-    `doc.export_config.to_data()` hands one back, and the coarse door will
-    take one when it lands. No export op takes it: the eleven mutators each
-    patch one field of the document's own configuration, so a whole-tree value
-    has no write to go to in this milestone.
+    `doc.export_config.to_data()` hands one back, and the coarse door takes
+    one: a `DocumentData` holds one of these, so `doc.replace_all` writes a
+    whole export configuration at once. No export op takes it — the eleven
+    mutators each patch one field of the document's own configuration.
+    `doc.export_xlsx(path, config)` takes one as well, and stores nothing: it
+    says how to write that one workbook, and the document keeps its own.
 
     The tree mirrors the model's own shape: the settings shared by every sheet
     in `global_config`, then the five switches that say which sheets are part
@@ -925,8 +967,9 @@ class ExportConfigData:
 class ColloscopeData:
     """The whole colloscope, detached.
 
-    `doc.colloscope.to_data()` hands one back, and the ops mirror's
-    `doc.colloscope.install` will take one when it lands:
+    `doc.colloscope.to_data()` hands one back and `doc.colloscope.install`
+    takes one whole; `doc.colloscope.set_interrogation` and
+    `doc.colloscope.set_group_list` are the row-by-row doors, one row each:
 
         clm.ColloscopeData(
             interrogations={(first_slot, first_week): {0, 2}},
@@ -1037,10 +1080,11 @@ class DocumentData:
     The two junction tables hold the stored rows only: an absent row is
     simply not there, exactly as the model stores it.
 
-    The coarse door's `doc.replace_all(tree, label)` — step 4 of the
-    migration — will take one of these back. Nothing in this milestone does:
-    `snapshot()` is a read, and a tree only ever travels out of the document.
-    A script that wants one section still calls the handle's own `to_data()`.
+    The coarse door's `doc.replace_all(tree, label)` takes one of these back,
+    as a single undo step. A tree can rename, delete and rewire, but it cannot
+    add: every id in it has to name an entity the document already holds, and
+    ids have no constructor. A script that wants one section still calls the
+    handle's own `to_data()`.
     """
 
     first_week: datetime.date | None = None
@@ -1066,3 +1110,268 @@ class DocumentData:
     subject_balancing: dict[SubjectId, BalancingData] = field(default_factory=dict)
     colloscope: ColloscopeData = field(default_factory=ColloscopeData)
     export_config: ExportConfigData = field(default_factory=ExportConfigData)
+
+
+@dataclass
+class PeriodSolveConfig:
+    """What one period is to a solve.
+
+    A `ColloscopeSolveConfig` holds one of these per period it says something
+    about. A period it does not name is recomputed from scratch, which is what
+    both fields default to.
+
+    `recompute` is whether the solver works out this period's interrogations
+    again. A period that is not recomputed keeps exactly what the document
+    holds there: those values are handed to the solver pinned.
+
+    `use_current_values` says what the values already there are worth, and it
+    means something on both sides of `recompute`. On a period that *is*
+    recomputed, the solve is anchored softly to them, so the result stays as
+    close to the current colloscope as the rest of the problem allows. On a
+    period that is not, it says the pinned values may be relied upon: the
+    constraints that reach across the pin survive — priced as soft penalties
+    when `objectify_cross_fixed_period` names a weight, kept hard when it is
+    `None` — instead of being dropped, which is what happens without it.
+
+    All four combinations therefore mean something, which is why this is two
+    independent booleans rather than one switch.
+    """
+
+    recompute: bool = True
+    use_current_values: bool = False
+
+
+@dataclass
+class GroupListSolveConfig:
+    """What one automatic group list is to a solve.
+
+    A `ColloscopeSolveConfig` holds one of these per group list it says
+    something about. A list it does not name is recomputed freely, which is
+    what both fields default to.
+
+    Only an automatic list belongs here. A prefilled list has no groups to
+    work out — somebody wrote them — so naming one is refused when the config
+    is used, rather than quietly ignored.
+
+    `recompute` is whether the solver fills this list again. A list that is
+    not recomputed keeps the groups the document holds: they are pinned.
+
+    `previous_values_as_objective` anchors the recomputed groups softly to
+    the ones already there, so a student stays where they were unless the
+    rest of the problem pays for moving them. It only means something on a
+    list that *is* recomputed: `recompute=False` together with
+    `previous_values_as_objective=True` is refused when the config is used,
+    since there would be nothing for the anchor to hold on to.
+    """
+
+    recompute: bool = True
+    previous_values_as_objective: bool = False
+
+
+@dataclass
+class ColloscopeSolveConfig:
+    """What a solve recomputes, and what it must leave alone.
+
+    §10 of `docs/python/new_api_design.md` is the design.
+    `doc.build_colloscope_model(config)` takes one of these, and the model it
+    hands back is what the MPS export writes:
+
+        config = clm.ColloscopeSolveConfig()
+        model = doc.build_colloscope_model(config)
+        model.export_mps("probleme.mps")
+
+    `clm.ColloscopeSolveConfig()` recomputes everything from scratch, and
+    that is what an empty `periods` and an empty `group_lists` mean: a period
+    or a group list the config does not name gets the default of its own
+    class. A config only ever spells out what departs from that.
+
+    `periods` and `group_lists` are keyed by entity, and take handles and ids
+    interchangeably, like every other place in this API that names one. A
+    mapping that names the same period or the same list twice, once in each
+    spelling, is refused when the config is used, rather than quietly keeping
+    the last entry.
+
+    `objectify_cross_fixed_period` is what a constraint reaching across a
+    pinned period is worth: a weight prices it as a soft penalty, and `None`
+    keeps it hard — which drops it wherever the pin makes it unsatisfiable.
+    `l1_anchor_weight` is what one step away from an anchored current value
+    costs, for the anchors `use_current_values` and
+    `previous_values_as_objective` ask for.
+
+    Both weights are the model's own defaults. A weight that is negative or
+    not finite is refused when the config is used; zero is allowed, and means
+    the term is written and prices nothing.
+
+    A config is not stored on the document. It is an argument, and every
+    build takes its own.
+    """
+
+    periods: dict[Period | PeriodId, PeriodSolveConfig] = field(default_factory=dict)
+    group_lists: dict[GroupList | GroupListId, GroupListSolveConfig] = field(
+        default_factory=dict)
+    objectify_cross_fixed_period: float | None = 1000.0
+    l1_anchor_weight: float = 1000.0
+
+
+@dataclass
+class DefaultConfig:
+    """How the complete solve is run.
+
+    The full branch-and-bound: it looks for the best colloscope it can find,
+    and it is the only substrategy that can prove there is no better one.
+    `ConductorStrategy(default_config=DefaultConfig())` is what enables it.
+
+    Both limits are counted in whole seconds. `time_limit` bounds the solve as
+    a whole; `incumbent_time_limit` bounds it from the moment it first holds a
+    colloscope, so a solve that finds one quickly and then grinds gives up
+    early. They are independent, and the solve ends at whichever deadline
+    comes first.
+
+    `None` is how "no limit" is said. `0` is not: it is refused when the
+    strategy is used, so that a limit and the absence of one never look alike.
+    """
+
+    time_limit: int | None = None
+    incumbent_time_limit: int | None = None
+
+
+@dataclass
+class WarmStartConfig:
+    """How the warm-start solve is run.
+
+    A first, cheap solve that looks only for *a* colloscope and not for a good
+    one; what it finds is handed to the solves that do optimise, as a place to
+    start. This is the one substrategy `ConductorStrategy()` enables on its
+    own.
+
+    `time_limit` bounds that search, in whole seconds, `None` for no limit and
+    `0` refused.
+    """
+
+    time_limit: int | None = None
+
+
+@dataclass
+class IncrementalConfig:
+    """How the incremental solve is run.
+
+    The other way to a first colloscope: the problem is solved in epochs, each
+    one anchored to what the epoch before it decided, which usually reaches a
+    better starting point than a warm start does. The two fill the same role,
+    so enabling both is redundant — `ConductorStrategy.optimize()` uses this
+    one alone.
+
+    `l1_weight` is what one step away from the previous epoch's decisions
+    costs: the larger it is, the stickier those decisions.
+    `distance_tolerance` is how close to the best an epoch has to get before
+    it may stop; `0.0` asks every epoch to be solved to proven optimality.
+    Both refuse a negative or non-finite number when the strategy is used.
+
+    `epoch_time_limit` and `epoch_incumbent_time_limit` bound each epoch, in
+    whole seconds, and the clock starts again at every epoch. `None` is no
+    limit, `0` is refused.
+    """
+
+    l1_weight: float = 1000.0
+    distance_tolerance: float = 10.0
+    epoch_time_limit: int | None = None
+    epoch_incumbent_time_limit: int | None = 60
+
+
+@dataclass
+class FuzzyConfig:
+    """How the fuzzy exploration is run.
+
+    What fills the worker slots the complete solve leaves idle: it perturbs
+    the colloscope in hand at random, repairs what the perturbation broke, and
+    keeps the result if it is better. It needs a colloscope to start from, so
+    it only means something next to a substrategy that produces one.
+
+    `fuzzy_sigma` is how hard each perturbation pushes — the default nudges
+    about one binary variable in eighty. `find_closest_tolerance` is how close
+    to the perturbed point the repair has to land before it may stop. Both
+    refuse a negative or non-finite number when the strategy is used.
+
+    `time_limit` and `incumbent_time_limit` bound each repair, in whole
+    seconds, `None` for no limit and `0` refused.
+    """
+
+    fuzzy_sigma: float = 0.2
+    find_closest_tolerance: float = 10.0
+    time_limit: int | None = None
+    incumbent_time_limit: int | None = None
+
+
+@dataclass
+class ConductorStrategy:
+    """How a solve is run: which substrategies, on how many worker slots.
+
+    §10 of `docs/python/new_api_design.md` is the design.
+    `model.solve(strategy)` takes one of these:
+
+        strategy = clm.ConductorStrategy.optimize()
+        run = model.solve(strategy)
+        outcome = run.wait()
+
+    Each `*_config` field both enables its substrategy and tunes it: `None`
+    disables it, an object enables it. `worker_count` is how many of them may
+    run at once; it counts from 1, and `0` is refused when the strategy is
+    used.
+
+    `ConductorStrategy()` is the application's « Recherche simple » — one
+    worker, warm-start only, which finds a colloscope and stops there. The two
+    classmethods below are the application's own presets.
+
+    A strategy is not stored on the model. It is an argument, and every solve
+    takes its own.
+    """
+
+    worker_count: int = 1
+    default_config: DefaultConfig | None = None
+    warm_start_config: WarmStartConfig | None = field(default_factory=WarmStartConfig)
+    incremental_config: IncrementalConfig | None = None
+    fuzzy_config: FuzzyConfig | None = None
+
+    @classmethod
+    def search(cls) -> ConductorStrategy:
+        """The « Recherche simple » preset: find a colloscope, fast.
+
+        Built on the rust side, out of the structure the application itself
+        opens its dialog with, and handed back as a plain `ConductorStrategy`
+        a script may then edit. So this cannot drift from the application: it
+        *is* the application's preset.
+        """
+        import collomatique
+
+        return collomatique._conductor_search()
+
+    @classmethod
+    def optimize(cls) -> ConductorStrategy:
+        """The « Optimisation complète » preset, sized to this machine.
+
+        The application's other preset, built the same way — everything on
+        except the warm start, which the incremental solve replaces. Its
+        worker count follows the number of cores this machine reports, so it
+        is not the same number everywhere.
+        """
+        import collomatique
+
+        return collomatique._conductor_optimize()
+
+    def warnings(self) -> tuple[ConductorWarning, ...]:
+        """What is wrong with this strategy, seen before anything runs.
+
+        A tuple of `ConductorWarning` members, empty when there is nothing to
+        say, in a fixed order. These are the very remarks the application's
+        solve dialog shows, and `str()` of one is the sentence it shows:
+
+            for w in strategy.warnings():
+                print(w)
+
+        None of them stops a solve. A strategy that warns still runs — a
+        warning says the setup wastes work or never proves it is done, and
+        what to do about that is the script's call.
+        """
+        import collomatique
+
+        return collomatique._conductor_warnings(self)

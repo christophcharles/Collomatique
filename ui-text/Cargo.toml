@@ -6,6 +6,7 @@ authors.workspace = true
 
 [dependencies]
 collomatique-state-colloscopes = { path = "../state-colloscopes" }
+collomatique-strategies = { path = "../strategies" }
 collomatique-storage = { path = "../storage" }
 collomatique-time = { path = "../time" }
 chrono.workspace = true

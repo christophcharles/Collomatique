@@ -9,8 +9,8 @@ use std::time::{Duration, Instant};
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
-    ConductorPayload, ConductorProgress, ConductorStatus, ConductorStrategy, OPTIMALITY_GAP_EPS,
-    Solution, SolveStatus, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
+    ConductorPayload, ConductorProgress, ConductorStatus, ConductorStrategy, Solution, SolveStatus,
+    SolveVerdict, Strategy, StrategyKind, StrategyOutcome, StrategyProgressData,
     VarOrderSerializable,
 };
 use collomatique_subprocesses::{EngineExe, StrategySubprocess};
@@ -42,6 +42,10 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     // a dedicated "Initialisation..." screen and hides the normal solve content meanwhile.
     initializing: bool,
     end_with_error: bool,
+    // What the last finished run amounts to, `None` until one finishes. Computed by
+    // `collomatique_strategies::verdict` rather than here, so the scripting api reports the same
+    // thing about the same run.
+    verdict: Option<SolveVerdict>,
     show_debug: bool,
     global_debug_view: Controller<DebugView>,
     title: String,
@@ -338,26 +342,15 @@ where
                                                 ),
                                             },
                                         },
+                                        // One label for the three sentences that were three labels:
+                                        // only ever one of them could be visible at a time.
                                         gtk::Label {
                                             set_margin_top: 15,
-                                            set_label: "Solution optimale trouvée !",
                                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                                             #[watch]
-                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_some() && model.is_provably_optimal(),
-                                        },
-                                        gtk::Label {
-                                            set_margin_top: 15,
-                                            set_label: "Solution trouvée !",
-                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                                            set_label: model.verdict.map_or("", collomatique_ui_text::solver::solve_verdict_text),
                                             #[watch]
-                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_some() && !model.is_provably_optimal(),
-                                        },
-                                        gtk::Label {
-                                            set_margin_top: 15,
-                                            set_label: "Pas de solution !",
-                                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
-                                            #[watch]
-                                            set_visible: !model.is_running && model.conductor_status.best_solution.is_none(),
+                                            set_visible: !model.is_running && model.verdict.is_some(),
                                         },
                                     },
                                     gtk::Box {
@@ -528,6 +521,7 @@ where
             is_running: false,
             initializing: false,
             end_with_error: false,
+            verdict: None,
             show_debug: false,
             global_debug_view,
             title: settings.title,
@@ -567,6 +561,7 @@ where
                 self.is_running = true;
                 self.initializing = true;
                 self.end_with_error = false;
+                self.verdict = None;
                 self.show_debug = false;
                 self.last_line = String::new();
 
@@ -754,6 +749,10 @@ where
                 self.run_end = Some(Instant::now());
                 self.subprocess = None;
 
+                // Before the incumbent is taken out of the outcome below: the verdict is read
+                // from the whole of it, solution included.
+                self.verdict = Some(collomatique_strategies::verdict(&outcome));
+
                 let usable =
                     !matches!(outcome.status, SolveStatus::Error | SolveStatus::Infeasible);
                 let best_solution = if usable {
@@ -905,19 +904,6 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
         match self.conductor_status.best_bound {
             Some(bound) => format!("{:.1}", bound),
             None => "-".to_string(),
-        }
-    }
-
-    /// Provably optimal: a feasible incumbent exists and the best bound has met it within tolerance.
-    /// Sense-independent — the bound brackets the optimum, so the gap is |objective − bound|. Only
-    /// meaningful at final display time; the mid-solve bound can be transiently sign-flipped.
-    fn is_provably_optimal(&self) -> bool {
-        match (
-            &self.conductor_status.best_solution,
-            self.conductor_status.best_bound,
-        ) {
-            (Some(sol), Some(bound)) => (sol.objective - bound).abs() <= OPTIMALITY_GAP_EPS,
-            _ => false,
         }
     }
 

@@ -182,6 +182,50 @@ fn document_of(globals: &Bound<'_, PyDict>) -> Py<collomatique_python::Document>
         .expect("`doc` is a collomatique document")
 }
 
+/// The exception one refused write raised, put where the script can see it
+///
+/// The write surface publishes nothing the model can refuse yet, so the test
+/// drives the door the mirror will drive — the raw `Document::update` — and
+/// hands the script what it raised.
+fn refused_write(
+    py: Python<'_>,
+    globals: &Bound<'_, PyDict>,
+    name: &str,
+    op: collomatique_ops::UpdateOp,
+) {
+    let doc = document_of(globals);
+    let error = match doc.borrow_mut(py).update(py, op) {
+        Ok(_) => panic!("`{name}` is a write the model must refuse"),
+        Err(error) => error,
+    };
+
+    globals
+        .set_item(name, error.value(py))
+        .expect("the exception should go into the namespace");
+}
+
+/// The result one applied write handed back, put where the script can see it
+///
+/// The mirror of [refused_write]. The write surface publishes no cascading op
+/// yet, so the test drives the door the families will drive — the raw
+/// `Document::update` — and hands the script the `OpResult` it answered.
+fn applied_write(
+    py: Python<'_>,
+    globals: &Bound<'_, PyDict>,
+    name: &str,
+    op: collomatique_ops::UpdateOp,
+) {
+    let doc = document_of(globals);
+    let result = doc
+        .borrow_mut(py)
+        .update(py, op)
+        .unwrap_or_else(|_| panic!("`{name}` is a write the model must accept"));
+
+    globals
+        .set_item(name, Py::new(py, result).expect("an OpResult converts"))
+        .expect("the result should go into the namespace");
+}
+
 /// One global, extracted into the rust shape the test compares against
 fn global<T>(globals: &Py<PyDict>, name: &str) -> T
 where
@@ -500,6 +544,304 @@ fn the_first_week_is_written_read_back_and_cleared() {
     // The refused tuesday left nothing behind, and the clear really cleared.
     let cleared = reload(&cleared_target);
     assert_eq!(cleared.get_inner_data().params.periods.first_week, None);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The periods and the weeks are added, resized, cut, merged and removed
+///
+/// The fifteenth and last family of the ops mirror, and the calendar every
+/// other family stands on: `doc.periods` gains `add`, `set_week_count`,
+/// `remove_with_weeks`, `cut` and `merge_with_previous` beside the first-week
+/// pair that opened the mirror, and `doc.weeks` gains `set_status` and
+/// `set_annotation`.
+///
+/// The example holds no colle at all, so the three the cascades need are
+/// written by the script itself, through the surface piece 13 published — one
+/// on a week whose colles it switches off, one on a week the cut hands over,
+/// and one on a week a shrink drops. What rust asserts here is that the example
+/// really carries the shapes the script leans on: three periods, weeks enough
+/// in the second to cut it after the sixth, a week each pattern pair leaves out
+/// exactly once, and a subject with an enrolment row on the third period and no
+/// group list there — the one the script excludes, so that the removal cascade
+/// has an exclusion to repair beside its rows and its associations.
+///
+/// Rust reads back the file the script saved after the cut and the merge, and
+/// before the removal: the year the script left, period by period and week by
+/// week. The second period's own week ids, in their own order, are what says the
+/// cut and the merge really cancelled out.
+#[test]
+fn periods_and_weeks_are_added_resized_cut_merged_and_removed() {
+    use collomatique_ops::{ColloscopeUpdateOp, GeneralPlanningUpdateOp, SubjectsUpdateOp};
+    use collomatique_state_colloscopes::weeks::WeekDesc;
+    use collomatique_state_colloscopes::{PeriodId, WeekId};
+
+    let dir = workspace("calendar-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let weeks_of = |params: &collomatique_state_colloscopes::colloscope_params::Parameters,
+                    period: PeriodId| {
+        params
+            .weeks
+            .weeks_for_period(period)
+            .into_iter()
+            .flatten()
+            .map(|(week_id, _week)| *week_id)
+            .collect::<Vec<_>>()
+    };
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert_eq!(period_ids.len(), 3, "the script names three periods");
+    let original: Vec<Vec<WeekId>> = period_ids
+        .iter()
+        .map(|period| weeks_of(params, *period))
+        .collect();
+    assert!(
+        original[1].len() > 7,
+        "the script cuts the second period after its sixth week, and needs a tail"
+    );
+
+    // Every week of the example is left out by exactly one of its two patterns,
+    // which is what makes each week the script drops free exactly one exclusion
+    // — the assertion its `pattern_skipping` makes on its own side.
+    for week in params.week_ids() {
+        assert_eq!(
+            params
+                .week_patterns
+                .week_pattern_map
+                .values()
+                .filter(|pattern| pattern.excluded_weeks.contains(&week))
+                .count(),
+            1,
+            "exactly one of the example's patterns should skip each week"
+        );
+    }
+
+    // A colle can only be written where the model allows one *and* the slot's
+    // subject uses a group list with a group to name — the script's
+    // `writable_cell`, and the predicate the shrink point below is read off.
+    let writable = |week: WeekId| {
+        let Some((period, _position)) = params.weeks.week_position(week) else {
+            return false;
+        };
+        params.slots.subjects_with_slots().any(|subject| {
+            let bound = params
+                .group_lists
+                .subjects_associations
+                .get(&(period, subject))
+                .and_then(|group_list| params.group_lists.group_list_map.get(group_list))
+                .map(|group_list| group_list.params().group_names.len())
+                .unwrap_or(0);
+            bound > 0
+                && params
+                    .slots
+                    .slots_for_subject(subject)
+                    .into_iter()
+                    .flatten()
+                    .any(|(slot, _slot_desc)| params.is_interrogation_possible(*slot, week))
+        })
+    };
+
+    // The script shrinks the third period to just before the last week a colle
+    // can stand on, so that the colle it wrote there goes with the weeks.
+    let kept = original[2]
+        .iter()
+        .rposition(|week| writable(*week))
+        .expect("the third period holds a week a colle can be written on");
+    assert!(
+        original[2].len() - kept > 1,
+        "the shrink drops more than one week, so the removals' order shows"
+    );
+    assert!(
+        original[1].iter().take(6).any(|week| writable(*week))
+            && original[1].iter().skip(6).any(|week| writable(*week)),
+        "the second period holds a writable week on each side of the cut"
+    );
+
+    // The subject the script takes off the third period: one the example gives
+    // an enrolment row there and no group list, so its exclusion drops the row
+    // and nothing else — and the period removal that follows has an exclusion
+    // to repair beside its rows and its associations.
+    let spare = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .find(|subject| {
+            params
+                .assignments
+                .students(period_ids[2], *subject)
+                .is_some()
+                && !params
+                    .group_lists
+                    .subjects_associations
+                    .contains(&(period_ids[2], *subject))
+        })
+        .expect("the example gives a subject a row on the third period and no group list");
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .all(|subject| subject.excluded_periods.is_empty()),
+        "no subject of the example excludes a period, so the script's is the only one"
+    );
+
+    // The french labels this family's operations carry, so that the script's
+    // undo assertions pin the operations' own names and not merely some
+    // strings. Only the variant is read, so the payloads below are the nearest
+    // ones to hand — and the two ops that name their own direction get one
+    // label each way.
+    let label = |op: GeneralPlanningUpdateOp| op.get_desc().1;
+    let some_period = period_ids[0];
+    let add_label = label(GeneralPlanningUpdateOp::AddNewPeriod(1));
+    let week_count_label = label(GeneralPlanningUpdateOp::UpdatePeriodWeekCount(
+        some_period,
+        1,
+    ));
+    let remove_label = label(GeneralPlanningUpdateOp::DeletePeriodAndWeeks(some_period));
+    let cut_label = label(GeneralPlanningUpdateOp::CutPeriod(some_period, 1));
+    let merge_label = label(GeneralPlanningUpdateOp::MergeWithPreviousPeriod(
+        some_period,
+    ));
+    let status_off_label = label(GeneralPlanningUpdateOp::UpdateWeekStatus(
+        some_period,
+        0,
+        false,
+    ));
+    let annotate_label = label(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+        some_period,
+        0,
+        Some(
+            "Vacances"
+                .to_owned()
+                .try_into()
+                .expect("a word is not the empty string"),
+        ),
+    ));
+    let clear_annotation_label = label(GeneralPlanningUpdateOp::UpdateWeekAnnotation(
+        some_period,
+        0,
+        None,
+    ));
+
+    // The two writes of other families the script makes, each carrying its own
+    // family's name: the colles the cascades need, and the exclusion the
+    // removal repairs.
+    let colle_label = ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+        params
+            .slots
+            .subjects_with_slots()
+            .flat_map(|subject| {
+                params
+                    .slots
+                    .slots_for_subject(subject)
+                    .into_iter()
+                    .flatten()
+            })
+            .map(|(slot, _slot_desc)| *slot)
+            .next()
+            .expect("the example holds slots"),
+        original[0][0],
+        BTreeSet::new(),
+    )
+    .get_desc()
+    .1;
+    let exclude_label = SubjectsUpdateOp::UpdatePeriodStatus(spare, period_ids[2], false)
+        .get_desc()
+        .1;
+
+    run(include_str!("scripts/calendar_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("week_count_label", &week_count_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        globals.set_item("cut_label", &cut_label)?;
+        globals.set_item("merge_label", &merge_label)?;
+        globals.set_item("status_off_label", &status_off_label)?;
+        globals.set_item("annotate_label", &annotate_label)?;
+        globals.set_item("clear_annotation_label", &clear_annotation_label)?;
+        globals.set_item("colle_label", &colle_label)?;
+        globals.set_item("exclude_label", &exclude_label)?;
+        Ok(())
+    });
+
+    // The year the script left: the three periods it opened with, then the one
+    // it added and the empty one after it.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params;
+    let after_periods: Vec<_> = after.periods.period_ids().collect();
+
+    assert_eq!(after_periods.len(), period_ids.len() + 2);
+    assert_eq!(after_periods[..3], period_ids[..]);
+    assert_eq!(weeks_of(after, after_periods[0]), original[0]);
+    assert_eq!(
+        weeks_of(after, after_periods[1]),
+        original[1],
+        "the cut and the merge cancelled out, week for week and in order",
+    );
+    assert_eq!(weeks_of(after, after_periods[2]), original[2][..kept]);
+
+    // The period the script grew to five weeks and shrank back to three: the
+    // two it kept are the ones it was made with, and the third is the one it
+    // annotated and switched the colles off on.
+    let fresh = weeks_of(after, after_periods[3]);
+    assert_eq!(fresh.len(), 3);
+    assert!(fresh.iter().all(|week| !original.concat().contains(week)));
+    assert_eq!(
+        after
+            .weeks
+            .weeks_desc_vec_for_period(after_periods[3])
+            .expect("the added period holds weeks"),
+        vec![
+            WeekDesc::new(true),
+            WeekDesc::new(true),
+            WeekDesc {
+                interrogations: false,
+                annotation: Some(
+                    "Vacances"
+                        .to_owned()
+                        .try_into()
+                        .expect("a word is not the empty string")
+                ),
+            },
+        ],
+    );
+    assert!(weeks_of(after, after_periods[4]).is_empty());
+
+    // Two of the three colles are still there — the third stood on a week the
+    // shrink dropped — and the one the cut handed over and the merge brought
+    // back is on the tail of the second period, where it was written.
+    let cells: Vec<_> = written.get_inner_data().colloscope.iter().collect();
+    assert_eq!(cells.len(), 2);
+    assert!(cells.iter().all(
+        |((_slot, week), groups)| *groups == &BTreeSet::from([0]) && original[1].contains(week)
+    ));
+    assert!(
+        cells
+            .iter()
+            .any(|((_slot, week), _groups)| original[1][6..].contains(week)),
+        "the colle the cut carried is on a week of the tail",
+    );
+
+    // The exclusion the script made is what the file holds, and the row it
+    // dropped is gone with it.
+    assert_eq!(
+        after
+            .subjects
+            .ordered_subject_list
+            .get(&spare)
+            .expect("the subject is still there")
+            .excluded_periods,
+        BTreeSet::from([period_ids[2]]),
+    );
+    assert!(after.assignments.students(period_ids[2], spare).is_none());
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
@@ -1164,6 +1506,2016 @@ fn a_removed_period_makes_its_handles_stale() {
                 )
                 .expect("the last period of the example is removable");
         },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A refused write names its family, its op and its case
+///
+/// The typed update errors of `docs/python/new_api_design.md` §6, end to end:
+/// the class comes from the family, and the three attributes from the two
+/// levels under it. None of it is written out variant by variant — the mapping
+/// is walked off the model's own serde shape — so this test is what says the
+/// walk finds the same thing the model put there.
+///
+/// The four refusals cover what the walk has to get right: two families, so the
+/// class table is exercised rather than assumed; a case carrying one id, which
+/// must reach the script as the very `PeriodId` it is holding; a case carrying
+/// nothing; and a case carrying two numbers, which must come in the model's own
+/// order.
+///
+/// They are applied from here rather than from the script because no python
+/// mutator can be refused yet — the two first-week ops are the whole write
+/// surface, and neither can fail.
+#[test]
+fn a_refused_write_names_its_family_its_op_and_its_case() {
+    let dir = workspace("refused");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let first = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    let doomed = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+    let first_week_count = params
+        .weeks
+        .week_count_for_period(first)
+        .expect("the first period has weeks");
+    let doomed_subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+
+    // A refusal needs something the model can say no to, and the surest one is
+    // an entity that is not there any more.
+    assert_ne!(first, doomed, "the example has more than one period");
+
+    run_stages(
+        &[
+            include_str!("scripts/refused_before.py"),
+            include_str!("scripts/refused_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::GeneralPlanning(
+                        collomatique_ops::GeneralPlanningUpdateOp::DeletePeriodAndWeeks(doomed),
+                    ),
+                )
+                .expect("the last period of the example is removable");
+
+            refused_write(
+                py,
+                globals,
+                "dead_period",
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::UpdatePeriodWeekCount(doomed, 3),
+                ),
+            );
+            refused_write(
+                py,
+                globals,
+                "no_previous",
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::MergeWithPreviousPeriod(first),
+                ),
+            );
+            refused_write(
+                py,
+                globals,
+                "too_long",
+                collomatique_ops::UpdateOp::GeneralPlanning(
+                    collomatique_ops::GeneralPlanningUpdateOp::CutPeriod(
+                        first,
+                        first_week_count + 5,
+                    ),
+                ),
+            );
+
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    collomatique_ops::UpdateOp::Subjects(
+                        collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                    ),
+                )
+                .expect("a subject of the example is removable");
+            refused_write(
+                py,
+                globals,
+                "dead_subject",
+                collomatique_ops::UpdateOp::Subjects(
+                    collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed_subject),
+                ),
+            );
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A cascade hands back every repair it made, and what needed it
+///
+/// The piece §5 promises beyond the sentence: `kind` and `details` are the
+/// repair as structured data — the model's own name for it and its coordinates,
+/// as ids — and `parent` is the repair that needed this one, so the warning list
+/// reads as the tree it came from.
+///
+/// The write is applied from here rather than from the script because no python
+/// mutator cascades yet: the two first-week ops are the whole write surface.
+/// Deleting a subject of the example is the write that produces every shape at
+/// once — slots that go with it, teachers that stop interrogating in it (a
+/// repair carrying a `rebuilt` teacher the script must not see), and a slot
+/// pairing rule that goes because one of the slots did, which is the parent link.
+#[test]
+fn a_cascade_reports_every_repair_and_what_needed_it() {
+    let dir = workspace("cascade");
+    let source = example_copy(&dir, "source.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let paired: BTreeSet<_> = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .values()
+        .flat_map(|rule| [rule.antecedent().slot_id, rule.consequent().slot_id])
+        .collect();
+
+    // The subject whose removal exercises the whole shape: several slots, one of
+    // them named by a slot pairing rule that must go with it. Handed to the
+    // script as its place in the user order, since a script reads its own ids
+    // off the document and rust cannot mint one for it.
+    let (doomed_index, doomed) = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .enumerate()
+        .find(|(_index, subject)| {
+            let slots: Vec<_> = params
+                .slots
+                .slots_for_subject(*subject)
+                .into_iter()
+                .flatten()
+                .map(|(slot_id, _slot)| *slot_id)
+                .collect();
+            slots.len() > 1 && slots.iter().any(|slot| paired.contains(slot))
+        })
+        .expect("the example has a subject with several slots, one of them paired");
+
+    run_stages(
+        &[
+            include_str!("scripts/cascade_before.py"),
+            include_str!("scripts/cascade_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("doomed_index", doomed_index)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "result",
+                collomatique_ops::UpdateOp::Subjects(
+                    collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed),
+                ),
+            );
+        },
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The incompatibilities are added, rewritten and removed from python
+///
+/// The first family of the ops mirror, and the debut of `AddResult`: an `add`
+/// answers the subclass carrying the handle of what it made, while the two
+/// other ops answer the plain `OpResult` — with no `created` at all rather than
+/// one holding `None`.
+///
+/// The family was picked first because nothing in the document points at an
+/// incompatibility: no write of it cascades, so what this test says is about
+/// the wiring and not about the model. Its refusals are the two the surface
+/// itself owns — a dead or foreign argument, and a value naming an entity this
+/// document does not hold — because those are the only ones the three ops have
+/// (`crate::collections::incompats`).
+///
+/// Rust reads back the file the script saved after its last write: the one
+/// incompatibility the example did not have is the one the script asked for,
+/// field by field.
+#[test]
+fn incompatibilities_are_added_rewritten_and_removed() {
+    let dir = workspace("incompats-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.incompats.incompat_map.keys().collect();
+
+    // The two entities the script names — its first subject and its first week
+    // pattern, in the order the script walks them.
+    let subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .next()
+        .expect("the example has subjects");
+    let pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .next()
+        .expect("the example has week patterns");
+
+    let at = |hour: u32, minute: u32| {
+        collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(hour, minute, 0).expect("a real time of day"),
+        )
+        .expect("a whole minute")
+    };
+    let monday_at = |hour: u32| {
+        collomatique_time::SlotWithDuration::new(
+            collomatique_time::SlotStart {
+                weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+                start_time: at(hour, 0),
+            },
+            collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+        )
+        .expect("an hour from a whole hour is a window")
+    };
+
+    // What the script's last write asked for, built here so that the comparison
+    // is with the incompatibility a reader of this test can see written out.
+    let written_out = collomatique_state_colloscopes::incompats::Incompatibility {
+        subject_id: subject,
+        name: "Lundi Midi (par id)".to_owned(),
+        slots: vec![monday_at(12), monday_at(13)],
+        minimum_free_slots: NonZeroU32::new(2).expect("two is not zero"),
+        week_pattern_id: Some(pattern),
+    };
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::IncompatibilitiesUpdateOp| op.get_desc().1;
+    let some_incompat = *before.iter().next().expect("the example has incompats");
+    let add_label = label(collomatique_ops::IncompatibilitiesUpdateOp::AddNewIncompat(
+        written_out.clone(),
+    ));
+    let update_label = label(collomatique_ops::IncompatibilitiesUpdateOp::UpdateIncompat(
+        some_incompat,
+        written_out.clone(),
+    ));
+    let remove_label = label(collomatique_ops::IncompatibilitiesUpdateOp::DeleteIncompat(
+        some_incompat,
+    ));
+
+    run(include_str!("scripts/incompats_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds everything it opened with, plus the
+    // one incompatibility it wrote — and that one is what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.incompats.incompat_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _incompat)| !before.contains(id))
+        .map(|(_id, incompat)| incompat.clone())
+        .collect();
+
+    assert_eq!(added, vec![written_out]);
+    assert_eq!(after.len(), before.len() + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The pairing rules are added, rewritten and removed from python
+///
+/// The second family of the ops mirror, and the twin of
+/// [incompatibilities_are_added_rewritten_and_removed]: nothing points at a
+/// pairing rule either, so a write of this family repairs nothing and the three
+/// ops are again wiring rather than model.
+///
+/// What this family has and the incompatibilities' has not is a refusal of its
+/// own — a rule about a subject that runs no interrogations is vacuous — so
+/// this is also the first family test that meets its own `PairingsError` and
+/// reads the op, the case and the subject the model named off it. The example
+/// holds subjects of both kinds, which is why the write test reads it rather
+/// than [pairings_document], the fixture the read test needed for lack of any
+/// rule at all.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// one rule the example did not have is the one the script asked for, field by
+/// field.
+#[test]
+fn pairing_rules_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::pairings::{PairingRule, RulePart};
+
+    let dir = workspace("pairings-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.pairings.pairing_rule_map.keys().collect();
+
+    // The subjects the script names, in the order it walks them: the three
+    // first that run colles, and the first that runs none. Both kinds have to
+    // be there — the second is the whole of what `PairingsError` is asserted on
+    // — so the fixture is checked before the script leans on it.
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 3,
+        "the script names three subjects that run colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+
+    // What the script's last accepted write asked for, built here so that the
+    // comparison is with the rule a reader of this test can see written out.
+    let written_out = PairingRule::new(
+        RulePart {
+            subject_id: with_colles[2],
+            should_have: false,
+        },
+        RulePart {
+            subject_id: with_colles[0],
+            should_have: true,
+        },
+        BTreeSet::from([first_period]),
+        true,
+    )
+    .expect("the antecedent and the consequent name different subjects");
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::PairingsUpdateOp| op.get_desc().1;
+    let some_rule = unsafe { collomatique_state_colloscopes::PairingRuleId::new(1) };
+    let add_label = label(collomatique_ops::PairingsUpdateOp::AddNewPairingRule(
+        written_out.clone(),
+    ));
+    let update_label = label(collomatique_ops::PairingsUpdateOp::UpdatePairingRule(
+        some_rule,
+        written_out.clone(),
+    ));
+    let remove_label = label(collomatique_ops::PairingsUpdateOp::DeletePairingRule(
+        some_rule,
+    ));
+
+    run(include_str!("scripts/pairings_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds everything it opened with, plus the
+    // one pairing rule it wrote — and that one is what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.pairings.pairing_rule_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _rule)| !before.contains(id))
+        .map(|(_id, rule)| rule.clone())
+        .collect();
+
+    assert_eq!(added, vec![written_out]);
+    assert_eq!(after.len(), before.len() + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The slot pairing rules are added, rewritten and removed from python
+///
+/// The third family of the ops mirror, and the twin of
+/// [pairing_rules_are_added_rewritten_and_removed] one level down: nothing
+/// points at a slot pairing rule either, so a write of this family repairs
+/// nothing, and the family keeps exactly one refusal for the model — the two
+/// slots of a rule must be on the same subject, which is what the script's
+/// `SlotPairingsError` assertions read the op, the case and the two slots off.
+///
+/// The example is what both this and [the_slot_pairing_rules_read_back_rule_by_rule]
+/// read: it carries slot pairing rules of its own, so the foreign-handle
+/// refusal here is sharper than the subject-level one could be — the rule
+/// `other` hands out carries an id this document really does hold, and it is
+/// refused all the same.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// one rule the example did not have is the one the script asked for, field by
+/// field.
+#[test]
+fn slot_pairing_rules_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::slot_pairings::{SlotPairingRule, SlotRulePart};
+
+    let dir = workspace("slot-pairings-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.slot_pairings.slot_pairing_rule_map.keys().collect();
+
+    // The slots the script names, picked the way it picks them: the first three
+    // of the first subject that runs at least three. A slot of some other
+    // subject has to exist too — it is the whole of what `SlotPairingsError` is
+    // asserted on — so the fixture is checked before the script leans on it.
+    let slots_of = |subject_id| -> Vec<_> {
+        params
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+            .map(|(slot_id, _slot)| *slot_id)
+            .collect()
+    };
+    let subject = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .find(|subject_id| slots_of(*subject_id).len() >= 3)
+        .expect("the script needs a subject running three slots");
+    let slots = slots_of(subject);
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .keys()
+            .any(|other| other != subject && !slots_of(other).is_empty()),
+        "the script needs a slot of another subject"
+    );
+
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+
+    // What the script's last accepted write asked for, built here so that the
+    // comparison is with the rule a reader of this test can see written out.
+    let written_out = SlotPairingRule::new(
+        SlotRulePart {
+            slot_id: slots[2],
+            should_have: false,
+        },
+        SlotRulePart {
+            slot_id: slots[0],
+            should_have: true,
+        },
+        BTreeSet::from([first_period]),
+        true,
+    )
+    .expect("the antecedent and the consequent name different slots");
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::SlotPairingsUpdateOp| op.get_desc().1;
+    let some_rule = unsafe { collomatique_state_colloscopes::SlotPairingRuleId::new(1) };
+    let add_label =
+        label(collomatique_ops::SlotPairingsUpdateOp::AddNewSlotPairingRule(written_out.clone()));
+    let update_label = label(
+        collomatique_ops::SlotPairingsUpdateOp::UpdateSlotPairingRule(
+            some_rule,
+            written_out.clone(),
+        ),
+    );
+    let remove_label =
+        label(collomatique_ops::SlotPairingsUpdateOp::DeleteSlotPairingRule(some_rule));
+
+    run(include_str!("scripts/slot_pairings_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds everything it opened with, plus the
+    // one slot pairing rule it wrote — and that one is what it asked for.
+    let written = reload(&target);
+    let after = &written
+        .get_inner_data()
+        .params
+        .slot_pairings
+        .slot_pairing_rule_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _rule)| !before.contains(id))
+        .map(|(_id, rule)| rule.clone())
+        .collect();
+
+    assert_eq!(added, vec![written_out]);
+    assert_eq!(after.len(), before.len() + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The limits are set, overridden and un-overridden from python
+///
+/// The fourth family of the ops mirror, and the first whose entities are not
+/// entities at all: the global entry and the per-student overrides are records
+/// the document holds one of, so the three ops are whole-entry writes and there
+/// is nothing to add or to count. What the script pins on that is the
+/// whole-entry rule itself — a field left at `None` in an override *disables*
+/// the global limit rather than inheriting it — read back through the resolved
+/// view it holds across every write.
+///
+/// The family keeps one refusal for the model, and it is the one op whose
+/// address may be right and whose request may still be wrong: removing an
+/// override a student does not have. That is what the script's `SettingsError`
+/// assertions read the op, the case and the student off; a student this
+/// document does not hold never reaches the model at all.
+///
+/// The example is what [the_settings_read_back_entry_by_entry] reads too: one
+/// override (Hermione's) and one student without one (Harry), which is the
+/// whole resolution shape and exactly what the two writes need.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// global entry it installed, the override it gave Harry, and Hermione's own,
+/// which no write of the script ever named.
+#[test]
+fn the_limits_are_set_overridden_and_un_overridden() {
+    use collomatique_state_colloscopes::settings::{Limits, SoftParam};
+
+    let dir = workspace("settings-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same students the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let student_named = |surname: &str| {
+        params
+            .students
+            .student_map
+            .iter()
+            .find(|(_id, student)| student.desc.surname == surname)
+            .unwrap_or_else(|| panic!("the example has {surname}"))
+            .0
+    };
+    let harry = student_named("Potter");
+    let hermione = student_named("Granger");
+
+    // The one override the example ships, and the one student without one:
+    // the fixture is checked before the script leans on it.
+    let hermione_before = params
+        .settings
+        .students
+        .get(&hermione)
+        .expect("Hermione has an override")
+        .clone();
+    assert!(
+        params.settings.students.get(&harry).is_none(),
+        "the script needs a student inheriting the global entry"
+    );
+    let before = params.settings.students.len();
+
+    // What the script's two last accepted writes asked for, built here so that
+    // the comparison is with the entries a reader of this test can see written
+    // out. Both leave fields at `None`, which is the whole-entry rule: they
+    // disable those limits rather than inheriting them.
+    let new_global = Limits {
+        interrogations_per_week_min: None,
+        interrogations_per_week_max: Some(SoftParam {
+            soft: false,
+            value: 3,
+        }),
+        max_interrogations_per_day: None,
+    };
+    let harry_override = Limits {
+        interrogations_per_week_min: Some(SoftParam {
+            soft: false,
+            value: 1,
+        }),
+        interrogations_per_week_max: None,
+        max_interrogations_per_day: Some(SoftParam {
+            soft: true,
+            value: std::num::NonZeroU32::new(2).expect("two is not zero"),
+        }),
+    };
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::SettingsUpdateOp| op.get_desc().1;
+    let global_label = label(collomatique_ops::SettingsUpdateOp::UpdateGlobalLimits(
+        new_global.clone(),
+    ));
+    let student_label = label(collomatique_ops::SettingsUpdateOp::UpdateStudentLimits(
+        harry,
+        harry_override.clone(),
+    ));
+    let remove_label = label(collomatique_ops::SettingsUpdateOp::RemoveStudentLimits(
+        harry,
+    ));
+
+    run(include_str!("scripts/settings_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("global_label", &global_label)?;
+        globals.set_item("student_label", &student_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds the two entries it wrote, and the one
+    // it never named is untouched.
+    let written = reload(&target);
+    let settings = &written.get_inner_data().params.settings;
+
+    assert_eq!(settings.global, new_global);
+    assert_eq!(settings.students.get(&harry), Some(&harry_override));
+    assert_eq!(settings.students.get(&hermione), Some(&hermione_before));
+    assert_eq!(settings.students.len(), before + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The balancing options are set, overridden and un-overridden from python
+///
+/// The fifth family of the ops mirror, and the settings' twin: the global entry
+/// and the per-subject overrides are records the document holds one of, so the
+/// three ops are whole-entry writes and there is nothing to add or to count.
+/// The whole-entry rule is what the script pins on that — a goal left at `None`
+/// in an override is *not pursued*, rather than inherited from the global entry
+/// — read back through the resolved view it holds across every write.
+///
+/// Where the twin has one refusal for the model, this family has two, one per
+/// addressed op, and both need a subject the document already holds: only a
+/// subject that runs interrogations may carry an override at all, and removing
+/// an override a subject does not have is refused rather than quietly done.
+/// That is what the script's two `BalancingError` assertions read the op, the
+/// case and the subject off; a subject this document does not hold never
+/// reaches the model at all.
+///
+/// The example is what [the_balancing_read_back_entry_by_entry] reads too, and
+/// it has all three subjects this needs: Métamorphose with an override, which
+/// no write of the script names, Arithmancie without one, and the Quidditch
+/// training, which runs no interrogations and so can never have one.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// global entry it installed, the override it gave Arithmancie, and
+/// Métamorphose's own.
+#[test]
+fn the_balancing_options_are_set_overridden_and_un_overridden() {
+    use collomatique_state_colloscopes::balancing::BalancingOptions;
+    use collomatique_state_colloscopes::settings::SoftParam;
+
+    let dir = workspace("balancing-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same subjects the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let subject_named = |name: &str| {
+        params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .find(|(_id, subject)| subject.parameters.name == name)
+            .unwrap_or_else(|| panic!("the example has {name}"))
+            .0
+    };
+    let metamorphose = subject_named("Métamorphose");
+    let arithmancie = subject_named("Arithmancie");
+    let quidditch = subject_named("Entrainement de Quidditch");
+
+    // One of the overrides the example ships, the subject without one, and the
+    // subject that runs no interrogations: the fixture is checked before the
+    // script leans on it.
+    let metamorphose_before = params
+        .balancing
+        .subjects
+        .get(&metamorphose)
+        .expect("Métamorphose has an override")
+        .clone();
+    assert!(
+        params.balancing.subjects.get(&arithmancie).is_none(),
+        "the script needs a subject inheriting the global entry"
+    );
+    assert!(
+        params
+            .subjects
+            .find_subject(quidditch)
+            .expect("the Quidditch training is a subject")
+            .parameters
+            .interrogation_parameters
+            .is_none(),
+        "the script needs a subject that cannot carry an override"
+    );
+    let before = params.balancing.subjects.len();
+
+    // What the script's two last accepted writes asked for, built here so that
+    // the comparison is with the entries a reader of this test can see written
+    // out. Both leave goals at `None`, which is the whole-entry rule: those
+    // goals are not pursued rather than inherited. A `SoftParam` that is `soft`
+    // is the `OBJECTIVE` spelling, and one that is not is `STRICT`.
+    let strict = || {
+        Some(SoftParam {
+            soft: false,
+            value: (),
+        })
+    };
+    let new_global = BalancingOptions {
+        teacher_rotation: None,
+        slot_rotation: strict(),
+        avoid_twice_in_a_row: None,
+        year_teacher_rotation: true,
+        period_teacher_rotation: false,
+    };
+    let arithmancie_override = BalancingOptions {
+        teacher_rotation: strict(),
+        slot_rotation: None,
+        avoid_twice_in_a_row: None,
+        year_teacher_rotation: false,
+        period_teacher_rotation: true,
+    };
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::BalancingUpdateOp| op.get_desc().1;
+    let global_label = label(collomatique_ops::BalancingUpdateOp::UpdateGlobalOptions(
+        new_global.clone(),
+    ));
+    let subject_label = label(collomatique_ops::BalancingUpdateOp::UpdateSubjectOptions(
+        arithmancie,
+        arithmancie_override.clone(),
+    ));
+    let remove_label = label(collomatique_ops::BalancingUpdateOp::RemoveSubjectOptions(
+        arithmancie,
+    ));
+
+    run(include_str!("scripts/balancing_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("global_label", &global_label)?;
+        globals.set_item("subject_label", &subject_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds the two entries it wrote, and the one
+    // it never named is untouched.
+    let written = reload(&target);
+    let balancing = &written.get_inner_data().params.balancing;
+
+    assert_eq!(balancing.global, new_global);
+    assert_eq!(
+        balancing.subjects.get(&arithmancie),
+        Some(&arithmancie_override)
+    );
+    assert_eq!(
+        balancing.subjects.get(&metamorphose),
+        Some(&metamorphose_before)
+    );
+    assert_eq!(balancing.subjects.len(), before + 1);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The export configuration is rewritten section by section from python
+///
+/// The sixth family of the ops mirror, and the last of its leaves: eleven
+/// setters over one atom of pure value data. Nothing here names an entity, so
+/// there is no argument convention to exercise and no refusal for the model to
+/// make — `ExportConfigUpdateError` has no variants at all — and the only way a
+/// call of this family fails is the value boundary, which the script drives
+/// through every shape the configuration holds.
+///
+/// What the script pins instead is the granularity: one setter writes one
+/// field of the configuration and leaves the ten others alone, and above all
+/// the flags sit *beside* the sections they gate, so switching a sheet off
+/// keeps everything its section holds. The document it starts from is
+/// [export_config_document], away from the default on every field, so a write
+/// that did nothing could not pass for one that did.
+///
+/// Rust reads back the file the script saved after its eleven accepted writes
+/// and compares the whole configuration with the one written out here.
+#[test]
+fn the_export_configuration_is_rewritten_section_by_section() {
+    use collomatique_ops::ExportConfigUpdateOp;
+    use collomatique_state_colloscopes::export_config::{
+        ColloscopeConfig, Color, ExportConfig, GlobalConfig, PageOrientation, PerGroupListConfig,
+        PerStudentGroupsConfig,
+    };
+
+    let dir = workspace("export-config-write");
+    let source = dir.join("export_config.collomatique");
+    export_config_document(&source);
+    let target = dir.join("written.collomatique");
+
+    // The french labels the eleven operations carry, in the order the script
+    // writes them, so that its undo assertions pin the operations' own names
+    // and not merely some strings. Only the variant is read, so the payloads
+    // are the emptiest ones to hand.
+    let label = |op: ExportConfigUpdateOp| op.get_desc().1;
+    let labels = vec![
+        label(ExportConfigUpdateOp::UpdateGlobalConfig(
+            GlobalConfig::default(),
+        )),
+        label(ExportConfigUpdateOp::UpdateColloscopeEnabled(true)),
+        label(ExportConfigUpdateOp::UpdateAllGroupsEnabled(true)),
+        label(ExportConfigUpdateOp::UpdateAutomaticGroupsEnabled(false)),
+        label(ExportConfigUpdateOp::UpdatePrefilledGroupsEnabled(false)),
+        label(ExportConfigUpdateOp::UpdatePerGroupListEnabled(true)),
+        label(ExportConfigUpdateOp::UpdateColloscopeConfig(
+            ColloscopeConfig::default(),
+        )),
+        label(ExportConfigUpdateOp::UpdateAllGroupsConfig(
+            PerStudentGroupsConfig::default_all_groups(),
+        )),
+        label(ExportConfigUpdateOp::UpdateAutomaticGroupsConfig(
+            PerStudentGroupsConfig::default_automatic_groups(),
+        )),
+        label(ExportConfigUpdateOp::UpdatePrefilledGroupsConfig(
+            PerStudentGroupsConfig::default_prefilled_groups(),
+        )),
+        label(ExportConfigUpdateOp::UpdatePerGroupListConfig(
+            PerGroupListConfig::default(),
+        )),
+    ];
+
+    // The eleven operations are eleven undo slots, so the labels must tell them
+    // apart: a script undoing its way back through them would not notice two
+    // of them sharing a sentence.
+    assert_eq!(
+        labels.iter().collect::<BTreeSet<_>>().len(),
+        labels.len(),
+        "the eleven operations name themselves apart"
+    );
+
+    run(include_str!("scripts/export_config_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("labels", &labels)?;
+        Ok(())
+    });
+
+    // What the script's eleven writes asked for, written out here so that the
+    // comparison is with a configuration a reader of this test can see whole.
+    let expected = ExportConfig {
+        global: GlobalConfig {
+            background_color: Color {
+                red: 16,
+                green: 17,
+                blue: 18,
+            },
+            stripes_color_enabled: true,
+            stripes_color: Color {
+                red: 19,
+                green: 20,
+                blue: 21,
+            },
+        },
+        colloscope_enabled: true,
+        all_groups_enabled: true,
+        automatic_groups_enabled: false,
+        prefilled_groups_enabled: false,
+        per_group_list_enabled: true,
+        colloscope_config: ColloscopeConfig {
+            sheet_name: "Colles".into(),
+            extra_info_column_enabled: true,
+            extra_info_column_name: "Remarques".into(),
+            teacher_email_enabled: true,
+            teacher_email: "Courriel".into(),
+            teacher_tel_enabled: false,
+            teacher_tel: "Téléphone".into(),
+            orientation: PageOrientation::Landscape,
+            display_week_dates: true,
+            display_annotations: true,
+            no_interrogation_color: Color {
+                red: 22,
+                green: 23,
+                blue: 24,
+            },
+            annotation_color_enabled: true,
+            annotation_color: Color {
+                red: 25,
+                green: 26,
+                blue: 27,
+            },
+            // The map the value carried is the whole of the sheet's afterwards:
+            // the label the fixture ships is gone, and these two are all there
+            // is.
+            extra_colors: BTreeMap::from([
+                (
+                    "Vacances".to_owned(),
+                    Color {
+                        red: 28,
+                        green: 29,
+                        blue: 30,
+                    },
+                ),
+                (
+                    "Examens".to_owned(),
+                    Color {
+                        red: 31,
+                        green: 32,
+                        blue: 33,
+                    },
+                ),
+            ]),
+        },
+        all_groups_config: PerStudentGroupsConfig {
+            sheet_name: "Groupes".into(),
+            orientation: Some(PageOrientation::Portrait),
+            show_emails: true,
+            show_tel: false,
+        },
+        automatic_groups_config: PerStudentGroupsConfig::default_automatic_groups(),
+        // The one the script wrote with the *all-groups* default: the setter is
+        // the address, and the name a value carries is a field like any other.
+        prefilled_groups_config: PerStudentGroupsConfig::default_all_groups(),
+        per_group_list_config: PerGroupListConfig {
+            orientation: PageOrientation::Portrait,
+            show_emails: true,
+            show_tel: true,
+            center_vertically: false,
+        },
+    };
+
+    // Every field of it is away from what the document opened with, so no write
+    // of the eleven could have been a no-op that passed for one.
+    let opened = reload(&source).get_inner_data().export_config.clone();
+    assert_ne!(expected.global, opened.global);
+    assert_ne!(expected.colloscope_enabled, opened.colloscope_enabled);
+    assert_ne!(expected.all_groups_enabled, opened.all_groups_enabled);
+    assert_ne!(
+        expected.automatic_groups_enabled,
+        opened.automatic_groups_enabled
+    );
+    assert_ne!(
+        expected.prefilled_groups_enabled,
+        opened.prefilled_groups_enabled
+    );
+    assert_ne!(
+        expected.per_group_list_enabled,
+        opened.per_group_list_enabled
+    );
+    assert_ne!(expected.colloscope_config, opened.colloscope_config);
+    assert_ne!(expected.all_groups_config, opened.all_groups_config);
+    assert_ne!(
+        expected.automatic_groups_config,
+        opened.automatic_groups_config
+    );
+    assert_ne!(
+        expected.prefilled_groups_config,
+        opened.prefilled_groups_config
+    );
+    assert_ne!(expected.per_group_list_config, opened.per_group_list_config);
+
+    let written = reload(&target);
+    assert_eq!(&written.get_inner_data().export_config, &expected);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The teachers are added, rewritten and removed from python
+///
+/// The seventh family of the ops mirror, and the first whose writes cascade: a
+/// slot names the teacher who holds it and cannot do without one, so both the
+/// `update` that drops a subject from a teacher's set and the `remove` that
+/// takes the teacher away leave slots with nobody to hold them, and the model
+/// deletes those slots. This is therefore the first family test that reads
+/// piece B's structured warnings off a family's own surface rather than off a
+/// removal rust made behind the script's back.
+///
+/// The example is picked over a fixture of its own because it already holds
+/// every shape this needs: teachers with slots in two subjects, a teacher two
+/// of whose slots are related by a slot pairing rule — the parent link — and
+/// subjects that run no colles at all, which is what `TeachersError` is
+/// asserted on. Each of those is checked here before the script leans on it.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// two teachers the example did not have are the two the script asked for,
+/// field by field.
+#[test]
+fn teachers_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::PersonWithContact;
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::teachers::Teacher;
+
+    let dir = workspace("teachers-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.teachers.teacher_map.keys().collect();
+
+    // The subjects the script names, in the order it walks them: the two first
+    // that run colles, and the first that runs none. Both kinds have to be
+    // there — the second is the whole of what `TeachersError` is asserted on.
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 2,
+        "the script names two subjects that run colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    let paired: BTreeSet<_> = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .values()
+        .flat_map(|rule| [rule.antecedent().slot_id, rule.consequent().slot_id])
+        .collect();
+
+    // What each teacher holds, as the script sees it: the subjects their slots
+    // sit in, and whether any of those slots is named by a slot pairing rule.
+    let slots_of = |teacher_id| {
+        params
+            .slots
+            .all_slots()
+            .filter(move |(_slot_id, slot)| slot.teacher_id == teacher_id)
+    };
+
+    // The teacher the script prunes: two subjects, slots in each, and none of
+    // those slots paired — so the `update` that drops one subject deletes
+    // exactly that subject's slots and the warning list is one flat row of
+    // `DeleteSlot`.
+    let (pruned_index, pruned) = params
+        .teachers
+        .teacher_map
+        .keys()
+        .enumerate()
+        .find(|(_index, teacher_id)| {
+            let held: BTreeSet<_> = slots_of(*teacher_id)
+                .map(|(_slot_id, slot)| slot.subject_id)
+                .collect();
+            held.len() >= 2 && slots_of(*teacher_id).all(|(id, _slot)| !paired.contains(id))
+        })
+        .expect("the example has a teacher holding slots in two subjects, none of them paired");
+
+    // The teacher the script removes: slots of their own, one of them named by
+    // a slot pairing rule that must go with it — the parent link the warning
+    // tree is asserted on. Never the pruned one, whose slots the script has
+    // already thinned by then.
+    let (doomed_index, _doomed) = params
+        .teachers
+        .teacher_map
+        .keys()
+        .enumerate()
+        .find(|(_index, teacher_id)| {
+            *teacher_id != pruned && slots_of(*teacher_id).any(|(id, _slot)| paired.contains(id))
+        })
+        .expect("the example has another teacher holding a paired slot");
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::TeachersUpdateOp| op.get_desc().1;
+    let some_teacher = unsafe { collomatique_state_colloscopes::TeacherId::new(1) };
+    let add_label = label(collomatique_ops::TeachersUpdateOp::AddNewTeacher(
+        Teacher::default(),
+    ));
+    let update_label = label(collomatique_ops::TeachersUpdateOp::UpdateTeacher(
+        some_teacher,
+        Teacher::default(),
+    ));
+    let remove_label = label(collomatique_ops::TeachersUpdateOp::DeleteTeacher(
+        some_teacher,
+    ));
+
+    run(include_str!("scripts/teachers_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("pruned_index", pruned_index)?;
+        globals.set_item("doomed_index", doomed_index)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // What the script's two adds asked for, as they stood when it saved: the
+    // first was rewritten twice after being created, the second never touched.
+    let written_out = vec![
+        Teacher {
+            desc: PersonWithContact {
+                surname: "Noether".to_owned(),
+                firstname: "Emmy".to_owned(),
+                tel: None,
+                email: None,
+            },
+            subjects: BTreeSet::from([with_colles[0]]),
+        },
+        Teacher {
+            desc: PersonWithContact {
+                surname: "Rusard".to_owned(),
+                firstname: "Argus".to_owned(),
+                tel: None,
+                email: None,
+            },
+            subjects: BTreeSet::new(),
+        },
+    ];
+
+    // The document the script saved holds everything it opened with, plus the
+    // two teachers it wrote — and those two are what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.teachers.teacher_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _teacher)| !before.contains(id))
+        .map(|(_id, teacher)| teacher.clone())
+        .collect();
+
+    assert_eq!(added, written_out);
+    assert_eq!(after.len(), before.len() + 2);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The students are added, rewritten and removed from python
+///
+/// The eighth family of the ops mirror, and the widest cascade so far: a
+/// student's name is written down in the assignment rows they sit in, in the
+/// prefilled groups that hold them, and in their own entry of the settings, and
+/// removing them takes it out of every one of those at once. None of those
+/// sites dies of it — a row that lost a name is still a row — so the warning
+/// list is flat where the teachers' was a tree, and this test says both things.
+/// The `update` cascades too, and without anybody being removed: a student who
+/// now sits a period out cannot be assigned in it.
+///
+/// Unlike the teachers next door, this family keeps no refusal for the model:
+/// the two things `StudentsUpdateOp` can object to — a student id and an
+/// excluded period id — are both caught above the write, so the script asserts
+/// them as a stale handle and not as a `StudentsError`.
+///
+/// The example is picked over a fixture of its own because it already holds
+/// every shape this needs: one student with a limits override, students in
+/// prefilled group lists, and assignment rows over several periods. Each of
+/// those is checked here before the script leans on it.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// two students the example did not have are the two the script asked for,
+/// field by field.
+#[test]
+fn students_are_added_rewritten_and_removed() {
+    use collomatique_state_colloscopes::PersonWithContact;
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::Student;
+
+    let dir = workspace("students-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let before: BTreeSet<_> = params.students.student_map.keys().collect();
+
+    // The last period, which the script's second add excludes: it is written
+    // out, so rust has to name the same one the script did.
+    let last_period = params
+        .periods
+        .period_ids()
+        .last()
+        .expect("the example has periods");
+
+    // Where each student is assigned, as the script reads it off
+    // `doc.assignments`: the periods of the rows naming them, and how many rows
+    // that is.
+    let rows_of = |student_id| {
+        params
+            .assignments
+            .iter()
+            .filter(move |(_period, _subject, students)| students.contains(&student_id))
+    };
+    let periods_of = |student_id| {
+        rows_of(student_id)
+            .map(|(period, _subject, _students)| period)
+            .collect::<BTreeSet<_>>()
+    };
+
+    // The student the script removes: the one the settings hold an override
+    // for, which the example has exactly one of. They must also be held by a
+    // prefilled group list and sit in assignment rows — the three kinds of site
+    // whose repairs the script reads apart.
+    let mut overridden = params.settings.students.keys();
+    let doomed = overridden
+        .next()
+        .expect("the example holds one per-student limits override");
+    assert!(
+        overridden.next().is_none(),
+        "the script reads the override count down to zero, so there is one"
+    );
+    let doomed_index = params
+        .students
+        .student_map
+        .keys()
+        .position(|id| id == doomed)
+        .expect("the overridden student is a student");
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .values()
+            .any(|group_list| group_list.filling().contains_student(doomed)),
+        "the removed student is held by a prefilled group list"
+    );
+    assert!(
+        rows_of(doomed).next().is_some(),
+        "the removed student sits in assignment rows"
+    );
+
+    // The student the script excludes from a period: assigned over at least two
+    // periods, so that the repair can be seen to take one period's rows and
+    // leave the others alone. Never the removed one, whose rows the script
+    // asserts whole.
+    let (excluded_index, excluded) = params
+        .students
+        .student_map
+        .keys()
+        .enumerate()
+        .find(|(_index, student_id)| *student_id != doomed && periods_of(*student_id).len() >= 2)
+        .expect("the example has a student assigned over two periods");
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .values()
+            .any(|group_list| group_list.filling().contains_student(excluded)),
+        "the excluded student is held by a group list the exclusion must leave alone"
+    );
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operation's own name and not merely some string. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: collomatique_ops::StudentsUpdateOp| op.get_desc().1;
+    let some_student = unsafe { collomatique_state_colloscopes::StudentId::new(1) };
+    let add_label = label(collomatique_ops::StudentsUpdateOp::AddNewStudent(
+        Student::default(),
+    ));
+    let update_label = label(collomatique_ops::StudentsUpdateOp::UpdateStudent(
+        some_student,
+        Student::default(),
+    ));
+    let remove_label = label(collomatique_ops::StudentsUpdateOp::DeleteStudent(
+        some_student,
+    ));
+
+    run(include_str!("scripts/students_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("excluded_index", excluded_index)?;
+        globals.set_item("doomed_index", doomed_index)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        Ok(())
+    });
+
+    // What the script's two adds asked for, as they stood when it saved: the
+    // first was rewritten twice after being created, the second never touched.
+    let written_out = vec![
+        Student {
+            desc: PersonWithContact {
+                surname: "Tonks".to_owned(),
+                firstname: "Nymphadora".to_owned(),
+                tel: None,
+                email: None,
+            },
+            excluded_periods: BTreeSet::new(),
+        },
+        Student {
+            desc: PersonWithContact {
+                surname: "Black".to_owned(),
+                firstname: "Sirius".to_owned(),
+                tel: None,
+                email: None,
+            },
+            excluded_periods: BTreeSet::from([last_period]),
+        },
+    ];
+
+    // The document the script saved holds everything it opened with, plus the
+    // two students it wrote — and those two are what it asked for.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.students.student_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _student)| !before.contains(id))
+        .map(|(_id, student)| student.clone())
+        .collect();
+
+    assert_eq!(added, written_out);
+    assert_eq!(after.len(), before.len() + 2);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The assignments are written one student, one row and one period at a time
+///
+/// The ninth family of the ops mirror, and the only one with no value class at
+/// all: a row is the three ids it is made of, so `set`, `set_all` and
+/// `duplicate_previous_period` are argument-convention wiring and nothing else.
+/// Nothing in the document points *at* a row either, so every one of those
+/// writes answers an empty warning list — which is what this test says of each
+/// of them, family by family being the point at which such a claim is worth
+/// making.
+///
+/// The three refusals the model keeps are all here. Two are reachable from the
+/// write surface as it stands — a student the period excludes, and the first
+/// period having nothing before it — and the third is not: a subject stops
+/// running on a period through the subjects family, which is a later piece. So
+/// this runs in two stages, with rust switching that period off in between, the
+/// way [a_refused_write_names_its_family_its_op_and_its_case] does.
+///
+/// The example is picked over a fixture of its own because it already holds
+/// what this needs: three periods, a row for every (period, subject) pair on
+/// the first two of them, and subjects that only some of the students take.
+/// Each of those is checked here before the script leans on it.
+///
+/// Rust reads back the file the script saved after its last accepted write, and
+/// compares the whole assignments table with one it computes itself from the
+/// document the script opened.
+#[test]
+fn the_assignments_are_written_one_student_a_row_and_a_period_at_a_time() {
+    use collomatique_ops::{AssignmentsUpdateOp, StudentsUpdateOp, SubjectsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::students::Student;
+    use collomatique_state_colloscopes::{PeriodId, StudentId, SubjectId};
+
+    let dir = workspace("assignments-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert!(
+        period_ids.len() >= 3,
+        "the script writes on two periods and leaves a third for the second stage"
+    );
+    let first_period = period_ids[0];
+    let second_period = period_ids[1];
+    let last_period = *period_ids.last().expect("the example has periods");
+
+    let students: BTreeSet<_> = params.students.student_map.keys().collect();
+    let subject_ids: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+
+    // The row at one address, absent rows included — an absent row is the empty
+    // one, which is exactly what python reads there.
+    let row = |period, subject| {
+        params
+            .assignments
+            .students(period, subject)
+            .cloned()
+            .unwrap_or_default()
+    };
+
+    // The subject the script rewrites: some students take it on the first
+    // period and some do not, so both directions of `set` have something to do
+    // there.
+    let (partial_index, partial) = subject_ids
+        .iter()
+        .enumerate()
+        .map(|(index, subject)| (index, *subject))
+        .find(|(_index, subject)| {
+            let members = row(first_period, *subject);
+            !members.is_empty() && members.len() < students.len()
+        })
+        .expect("the example has a subject not every student takes");
+
+    // `duplicate_previous_period` rewrites the rows the period already has, so
+    // the script's whole-table assertion needs one everywhere on both periods.
+    for subject in &subject_ids {
+        assert!(
+            !row(first_period, *subject).is_empty(),
+            "every subject has a row on the first period"
+        );
+        assert!(
+            !row(second_period, *subject).is_empty(),
+            "every subject has a row on the second period"
+        );
+    }
+
+    // The student the script excludes from the second period: one the partial
+    // row holds there, so that the exclusion has something to take away and the
+    // copy afterwards has something to leave alone.
+    let (excluded_index, excluded) = params
+        .students
+        .student_map
+        .keys()
+        .enumerate()
+        .find(|(_index, student)| row(second_period, partial).contains(student))
+        .expect("the partial row of the second period holds somebody");
+
+    // The french labels the operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings.
+    // Only the variant and the flag are read, so the ids below are the nearest
+    // ones to hand.
+    let label = |op: AssignmentsUpdateOp| op.get_desc().1;
+    let assign_label = label(AssignmentsUpdateOp::Assign(
+        first_period,
+        excluded,
+        partial,
+        true,
+    ));
+    let unassign_label = label(AssignmentsUpdateOp::Assign(
+        first_period,
+        excluded,
+        partial,
+        false,
+    ));
+    let assign_all_label = label(AssignmentsUpdateOp::AssignAll(first_period, partial, true));
+    let unassign_all_label = label(AssignmentsUpdateOp::AssignAll(first_period, partial, false));
+    let duplicate_label = label(AssignmentsUpdateOp::DuplicatePreviousPeriod(second_period));
+    // The one write of another family the script makes: the exclusion it needs
+    // before it can be refused over an absent student.
+    let student_update_label = StudentsUpdateOp::UpdateStudent(excluded, Student::default())
+        .get_desc()
+        .1;
+
+    run_stages(
+        &[
+            include_str!("scripts/assignments_write_before.py"),
+            include_str!("scripts/assignments_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("partial_index", partial_index)?;
+            globals.set_item("excluded_index", excluded_index)?;
+            globals.set_item("assign_label", &assign_label)?;
+            globals.set_item("unassign_label", &unassign_label)?;
+            globals.set_item("assign_all_label", &assign_all_label)?;
+            globals.set_item("unassign_all_label", &unassign_all_label)?;
+            globals.set_item("duplicate_label", &duplicate_label)?;
+            globals.set_item("student_update_label", &student_update_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                        partial,
+                        last_period,
+                        false,
+                    )),
+                )
+                .expect("a subject of the example can stop running on a period");
+        },
+    );
+
+    // What the script asked for, as it stood when it saved: the first period's
+    // partial row holds every student, the second period's rows are the first
+    // period's minus the one student it excluded there, and the third period is
+    // untouched.
+    let mut written_out: BTreeMap<(PeriodId, SubjectId), BTreeSet<StudentId>> = params
+        .assignments
+        .iter()
+        .map(|(period, subject, members)| ((period, subject), members.clone()))
+        .collect();
+    written_out.insert((first_period, partial), students.clone());
+    for subject in &subject_ids {
+        let mut copied = written_out
+            .get(&(first_period, *subject))
+            .cloned()
+            .unwrap_or_default();
+        copied.remove(&excluded);
+        assert!(
+            !copied.is_empty(),
+            "a copied row keeps students, so none of them is stored as absent"
+        );
+        written_out.insert((second_period, *subject), copied);
+    }
+
+    let written = reload(&target);
+    let after: BTreeMap<_, _> = written
+        .get_inner_data()
+        .params
+        .assignments
+        .iter()
+        .map(|(period, subject, members)| ((period, subject), members.clone()))
+        .collect();
+
+    assert_eq!(after, written_out);
+
+    // And the exclusion the script wrote through the students family, which is
+    // what made the second period's rows differ from the first's.
+    assert_eq!(
+        written
+            .get_inner_data()
+            .params
+            .students
+            .student_map
+            .get(&excluded)
+            .expect("the excluded student is still in the document")
+            .excluded_periods,
+        BTreeSet::from([second_period]),
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The week patterns are added, rewritten and removed from python
+///
+/// The tenth family of the ops mirror, and the one whose removal *keeps* what
+/// pointed at it: a slot follows a pattern to know which weeks it runs on and
+/// an incompatibility follows one to know which weeks it applies on, and both
+/// hold it in a field whose empty value is the legal « toutes les semaines ».
+/// So the cascade clears the reference and the two rows survive, running every
+/// week from then on — the divergence from the legacy cleaning that `ops/` pins
+/// from the other side, said here from a script's.
+///
+/// The `update` cascades the other way about, into the colloscope: excluding a
+/// week makes interrogations impossible on it for every slot following the
+/// pattern, so the colles already written there go. The example has no
+/// colloscope and the write surface has no way to make one yet — that family is
+/// a later piece — so this runs in two stages, with rust writing the one colle
+/// in between, the way [a_cascade_reports_every_repair_and_what_needed_it]
+/// does.
+///
+/// Nothing else needs a fixture of its own: the example holds two patterns with
+/// one slot each, which is what the removal is about, and no incompatibility
+/// follows a pattern, which the script fixes for itself through `doc.incompats`
+/// — a published mutator, and the write whose undo slot carries another
+/// family's name.
+///
+/// Rust reads back the file the script saved after its last accepted write: the
+/// two patterns the example did not have are the two the script asked for,
+/// field by field.
+#[test]
+fn week_patterns_are_added_rewritten_and_removed() {
+    use collomatique_ops::{
+        ColloscopeUpdateOp, IncompatibilitiesUpdateOp, UpdateOp, WeekPatternsUpdateOp,
+    };
+    use collomatique_state_colloscopes::week_patterns::WeekPattern;
+
+    let dir = workspace("week-patterns-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let pattern_ids: Vec<_> = params.week_patterns.week_pattern_map.keys().collect();
+    assert!(
+        pattern_ids.len() >= 2,
+        "the script removes one pattern and narrows another"
+    );
+
+    // The slots following each pattern. The script finds them for itself, by
+    // reading `slot.week_pattern`; what rust asserts is that there is exactly
+    // one to find, since that is what the script's counting leans on.
+    let followers = |pattern| {
+        params
+            .slots
+            .all_slots()
+            .filter(move |(_id, slot)| slot.week_pattern == Some(pattern))
+            .map(|(id, _slot)| *id)
+            .collect::<Vec<_>>()
+    };
+    for pattern in &pattern_ids {
+        assert_eq!(
+            followers(*pattern).len(),
+            1,
+            "every pattern of the example is followed by exactly one slot"
+        );
+    }
+    assert!(
+        params
+            .incompats
+            .incompat_map
+            .values()
+            .all(|incompat| incompat.week_pattern_id.is_none()),
+        "no incompatibility of the example follows a pattern, so the script points one at it"
+    );
+
+    // The pattern the script removes, and the one it narrows in the second
+    // stage. Handed over as places in the patterns' own order, since a script
+    // reads its own ids off the document and rust cannot mint one for it.
+    let followed_index = 0usize;
+    let cell_pattern_index = 1usize;
+    let cell_pattern = pattern_ids[cell_pattern_index];
+    let cell_slot = followers(cell_pattern)[0];
+
+    // The cell rust writes between the stages: the first week that slot is
+    // really active on, which is where a colle may be written at all.
+    let (cell_week_index, cell_week) = params
+        .week_ids()
+        .enumerate()
+        .find(|(_index, week)| params.is_interrogation_possible(cell_slot, *week))
+        .expect("the slot is active on at least one week of its pattern");
+
+    // The first two weeks, which the script's `add` switches off, and the third,
+    // which its first rewrite switches off instead.
+    let early_weeks: Vec<_> = params.week_ids().take(3).collect();
+    assert_eq!(
+        early_weeks.len(),
+        3,
+        "the script names the first three weeks"
+    );
+
+    // The french labels the three operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: WeekPatternsUpdateOp| op.get_desc().1;
+    let some_pattern = pattern_ids[0];
+    let blank = WeekPattern {
+        name: String::new(),
+        excluded_weeks: BTreeSet::new(),
+    };
+    let add_label = label(WeekPatternsUpdateOp::AddNewWeekPattern(blank.clone()));
+    let update_label = label(WeekPatternsUpdateOp::UpdateWeekPattern(
+        some_pattern,
+        blank.clone(),
+    ));
+    let remove_label = label(WeekPatternsUpdateOp::DeleteWeekPattern(some_pattern));
+
+    // The one write of another family the script makes: the incompatibility it
+    // points at the doomed pattern, so that the removal has both of its kinds of
+    // site to repair.
+    let (some_incompat, incompat) = params
+        .incompats
+        .incompat_map
+        .iter()
+        .next()
+        .expect("the example holds incompatibilities");
+    let incompat_label = IncompatibilitiesUpdateOp::UpdateIncompat(some_incompat, incompat.clone())
+        .get_desc()
+        .1;
+
+    run_stages(
+        &[
+            include_str!("scripts/week_patterns_write_before.py"),
+            include_str!("scripts/week_patterns_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("followed_index", followed_index)?;
+            globals.set_item("cell_pattern_index", cell_pattern_index)?;
+            globals.set_item("cell_week_index", cell_week_index)?;
+            globals.set_item("add_label", &add_label)?;
+            globals.set_item("update_label", &update_label)?;
+            globals.set_item("remove_label", &remove_label)?;
+            globals.set_item("incompat_label", &incompat_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "prepared",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                    cell_slot,
+                    cell_week,
+                    BTreeSet::from([0]),
+                )),
+            );
+        },
+    );
+
+    // What the script's two adds asked for, as they stood when it saved: the
+    // first was rewritten twice after being created, the second never touched.
+    let written_out = vec![
+        WeekPattern {
+            name: "Semaines de rentrée".to_owned(),
+            excluded_weeks: BTreeSet::from([early_weeks[0], early_weeks[1]]),
+        },
+        blank,
+    ];
+
+    // The document the script saved holds everything it opened with, plus the
+    // two patterns it wrote — and those two are what it asked for.
+    let written = reload(&target);
+    let after = &written
+        .get_inner_data()
+        .params
+        .week_patterns
+        .week_pattern_map;
+    let added: Vec<_> = after
+        .iter()
+        .filter(|(id, _pattern)| !pattern_ids.contains(id))
+        .map(|(_id, pattern)| pattern.clone())
+        .collect();
+
+    assert_eq!(added, written_out);
+    assert_eq!(after.len(), pattern_ids.len() + 2);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The slots are added, rewritten, moved and removed from python
+///
+/// The eleventh family of the ops mirror, and the first whose value is larger
+/// than what its ops carry: a `SlotData` names its subject, and a slot cannot
+/// change subject. So the `add` reads that field — `AddNewSlot` takes the
+/// subject beside the slot payload — and the `update` refuses a value naming
+/// another one, which is the `ValueError` the script pins beside the model's own
+/// refusals. It is also the first family with a position, so it brings two
+/// mutators nothing else has: `move_up` and `move_down`, whose ends of the list
+/// refuse.
+///
+/// The removal cascade needs a colle, and a colloscope cell is written through
+/// the colloscope family, which is a later piece — so this runs in two stages,
+/// with rust writing the one colle in between, the way
+/// [a_cascade_reports_every_repair_and_what_needed_it] does. The slot it writes
+/// on is the antecedent of the example's first slot pairing rule, so the second
+/// stage has a cell and a rule on one slot: the removal repairs both, and the
+/// `update` that puts the slot on a narrowing pattern repairs the cell alone.
+///
+/// The first stage needs no fixture of its own: it finds the subjects that run
+/// colles and the one that runs none, a teacher of the first and a stranger to
+/// it, off the document. What rust asserts here is that the example really holds
+/// those shapes.
+///
+/// Rust reads back the file the script saved after its last accepted write of
+/// the first stage: the slot the example did not have is the one the script
+/// asked for, field by field, and it sits last among its subject's slots.
+#[test]
+fn slots_are_added_rewritten_moved_and_removed() {
+    use collomatique_ops::{ColloscopeUpdateOp, SlotsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::slots::Slot;
+
+    let dir = workspace("slots-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    // The subjects the script names, in the order it walks them: the two first
+    // that run colles, and the first that runs none — the second is what the
+    // `SubjectHasNoInterrogation` refusal is asserted on.
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 2,
+        "the script names two subjects that run colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    let held = with_colles[0];
+    let slots_of_held: Vec<_> = params
+        .slots
+        .slots_for_subject(held)
+        .into_iter()
+        .flatten()
+        .map(|(slot_id, _slot)| *slot_id)
+        .collect();
+    assert!(
+        slots_of_held.len() >= 2,
+        "the script moves a slot around this subject's list and refuses at both ends"
+    );
+
+    // The teacher the script builds its slot around, and the stranger to that
+    // subject the `TeacherDoesNotTeachInSubject` refusal is asserted on. Both
+    // are the first of their kind, which is what the script picks too.
+    let teaches = params
+        .teachers
+        .teacher_map
+        .iter()
+        .find(|(_id, teacher)| teacher.subjects.contains(&held))
+        .map(|(id, _teacher)| id)
+        .expect("the example has a teacher of its first subject with colles");
+    assert!(
+        params
+            .teachers
+            .teacher_map
+            .values()
+            .any(|teacher| !teacher.subjects.contains(&held)),
+        "the script needs a teacher who is a stranger to that subject"
+    );
+
+    let pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .next()
+        .expect("the example has week patterns");
+
+    // The slot the second stage is about: the antecedent of the first slot
+    // pairing rule. It must be named by that rule and by no other, since the
+    // script asserts the removal's warning list entry by entry, and it must
+    // carry no pattern of its own, since the script puts one on it.
+    let cell_slot = params
+        .slot_pairings
+        .slot_pairing_rule_map
+        .values()
+        .next()
+        .map(|rule| rule.antecedent().slot_id)
+        .expect("the example has slot pairing rules");
+    assert_eq!(
+        params
+            .slot_pairings
+            .slot_pairing_rule_map
+            .iter()
+            .filter(|(_id, other)| other.antecedent().slot_id == cell_slot
+                || other.consequent().slot_id == cell_slot)
+            .count(),
+        1,
+        "exactly one rule names that slot, so the removal repairs exactly one",
+    );
+    assert_eq!(
+        params
+            .slots
+            .find_slot(cell_slot)
+            .expect("a rule names a live slot")
+            .week_pattern,
+        None,
+        "the second stage puts a pattern on that slot, so it starts with none",
+    );
+
+    // The cell rust writes between the stages: the first week that slot is
+    // really active on, which is where a colle may be written at all.
+    let (cell_week_index, cell_week) = params
+        .week_ids()
+        .enumerate()
+        .find(|(_index, week)| params.is_interrogation_possible(cell_slot, *week))
+        .expect("the slot is active on at least one week");
+
+    // The french labels the five operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings. Only
+    // the variant is read, so the payloads below are the nearest ones to hand.
+    let label = |op: SlotsUpdateOp| op.get_desc().1;
+    let blank = params
+        .slots
+        .find_slot(cell_slot)
+        .expect("a rule names a live slot")
+        .clone();
+    let add_label = label(SlotsUpdateOp::AddNewSlot(held, blank.clone()));
+    let update_label = label(SlotsUpdateOp::UpdateSlot(cell_slot, blank));
+    let remove_label = label(SlotsUpdateOp::DeleteSlot(cell_slot));
+    let move_up_label = label(SlotsUpdateOp::MoveSlotUp(cell_slot));
+    let move_down_label = label(SlotsUpdateOp::MoveSlotDown(cell_slot));
+
+    run_stages(
+        &[
+            include_str!("scripts/slots_write_before.py"),
+            include_str!("scripts/slots_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("cell_week_index", cell_week_index)?;
+            globals.set_item("add_label", &add_label)?;
+            globals.set_item("update_label", &update_label)?;
+            globals.set_item("remove_label", &remove_label)?;
+            globals.set_item("move_up_label", &move_up_label)?;
+            globals.set_item("move_down_label", &move_down_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "prepared",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                    cell_slot,
+                    cell_week,
+                    BTreeSet::from([0]),
+                )),
+            );
+        },
+    );
+
+    // What the script's one add asked for, as it stood when it saved: created
+    // with one value and rewritten twice, then moved up and back down again.
+    let written_out = Slot {
+        subject_id: held,
+        teacher_id: teaches,
+        start_time: collomatique_time::SlotStart {
+            weekday: collomatique_time::Weekday(chrono::Weekday::Mon),
+            start_time: collomatique_time::WholeMinuteTime::new(
+                chrono::NaiveTime::from_hms_opt(8, 0, 0).expect("a real time of day"),
+            )
+            .expect("a whole minute"),
+        },
+        extra_info: String::new(),
+        week_pattern: Some(pattern),
+        cost: -2,
+    };
+
+    // The document the script saved holds everything it opened with, plus the
+    // one slot it wrote — last in its subject's list, which is where the two
+    // moves left it.
+    let written = reload(&target);
+    let after: Vec<_> = written
+        .get_inner_data()
+        .params
+        .slots
+        .slots_for_subject(held)
+        .into_iter()
+        .flatten()
+        .map(|(slot_id, slot)| (*slot_id, slot.clone()))
+        .collect();
+
+    assert_eq!(after.len(), slots_of_held.len() + 1);
+    let (added_id, added) = after.last().expect("the subject holds slots").clone();
+    assert!(!slots_of_held.contains(&added_id));
+    assert_eq!(added, written_out);
+    assert_eq!(
+        after
+            .iter()
+            .take(slots_of_held.len())
+            .map(|(id, _slot)| *id)
+            .collect::<Vec<_>>(),
+        slots_of_held,
+        "the two moves cancelled out, so the subject's own slots are where they were",
     );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
@@ -5546,6 +7898,796 @@ fn a_removed_group_list_stales_the_values_that_name_it() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// The group lists are added, rewritten, associated and removed from python
+///
+/// The twelfth family of the ops mirror: `doc.group_lists` gains `add`,
+/// `update` and `remove` for the lists themselves, and `set_association` and
+/// `duplicate_previous_period` for the table beside them. An `update` carries
+/// the whole list, parameters and filling together, because that is what the op
+/// carries — so a filling that changes shape is an ordinary rewrite here.
+///
+/// Every cascade of this family runs through the colloscope, which the write
+/// surface cannot reach yet: a colle names a group *number* measured against
+/// the list its coordinate uses, and a placement names the group a student
+/// landed in. So this runs in two stages, with rust writing that material in
+/// between — the served list turned automatic, a placement row, and one colle
+/// at a coordinate the list bounds — the way
+/// [a_cascade_reports_every_repair_and_what_needed_it] does. The fourth write
+/// in between belongs to the subjects, also a later piece: it stops the served
+/// subject from running on one period, which is the only way the second of the
+/// family's model refusals is reachable at all.
+///
+/// The first stage needs no fixture of its own: it finds the list one single
+/// subject uses, the subject that runs no colles, and its own students off the
+/// document. What rust asserts here is that the example really holds those
+/// shapes.
+///
+/// Rust reads back the file the script saved after its last accepted write of
+/// the first stage: the list the example did not have is the one the script
+/// asked for, field by field, and the association table is exactly the one it
+/// opened with — the script cleared rows and put them back through both
+/// `set_association` and `duplicate_previous_period`.
+#[test]
+fn group_lists_are_added_rewritten_associated_and_removed() {
+    use collomatique_ops::{ColloscopeUpdateOp, GroupListsUpdateOp, SubjectsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::group_lists::{GroupList, GroupListFilling};
+
+    let dir = workspace("group-lists-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let period_ids: Vec<_> = params.periods.period_ids().collect();
+    assert!(
+        period_ids.len() >= 3,
+        "the script copies onto the second period and leaves a third for the \
+         second stage's exclusion"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .all(|subject| subject.excluded_periods.is_empty()),
+        "the script's copy assertion covers every subject that runs colles"
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .values()
+            .any(|subject| subject.parameters.interrogation_parameters.is_none()),
+        "the script needs a subject that runs no interrogations"
+    );
+
+    // The rows one list serves, in the association table's own key order.
+    let rows_of = |list| {
+        params
+            .group_lists
+            .subjects_associations
+            .iter()
+            .filter(move |(_key, group_list)| **group_list == list)
+            .map(|(key, _group_list)| key)
+            .collect::<Vec<_>>()
+    };
+
+    // The list the whole test is about: the one exactly one subject uses, and
+    // on every period. One subject, so that the removal's unassignments are
+    // countable; every period, so that the first is free for the script's
+    // association writes and the second for its copy.
+    let (served_index, served) = params
+        .group_lists
+        .group_list_map
+        .keys()
+        .enumerate()
+        .find(|(_index, list)| {
+            let rows = rows_of(*list);
+            let subjects: BTreeSet<_> = rows.iter().map(|(_period, subject)| *subject).collect();
+            subjects.len() == 1 && rows.len() == period_ids.len()
+        })
+        .expect("the example has a list one single subject uses on every period");
+    let served_rows = rows_of(served);
+    let served_subject = served_rows[0].1;
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .get(&served)
+            .expect("the list was just read off the table")
+            .params()
+            .group_names
+            .len()
+            > 2,
+        "the second stage writes a colle naming group 2 in that list"
+    );
+
+    // The two students the second stage's placement row holds, and the cell it
+    // is measured against: the first week one of the served subject's slots is
+    // really active on, at a coordinate that subject's list serves.
+    let placed: Vec<_> = params.students.student_map.keys().take(2).collect();
+    assert_eq!(placed.len(), 2, "the placement row holds two students");
+
+    let (cell_period, cell_slot, cell_week) = params
+        .slots
+        .slots_for_subject(served_subject)
+        .into_iter()
+        .flatten()
+        .flat_map(|(slot_id, _slot)| {
+            params
+                .walk_weeks()
+                .map(move |(period, week, _week)| (period, *slot_id, week))
+        })
+        .find(|(period, slot, week)| {
+            params.is_interrogation_possible(*slot, *week)
+                && params
+                    .group_lists
+                    .subjects_associations
+                    .get(&(*period, served_subject))
+                    == Some(&served)
+        })
+        .expect("the served subject has a slot active on a week its list serves");
+
+    // The period the second stage's refusal is asserted on: not the cell's, so
+    // that the colle the script leans on survives the exclusion.
+    let gone_period = *period_ids
+        .iter()
+        .find(|period| **period != cell_period)
+        .expect("the example has more than one period");
+
+    // The french labels the six operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings.
+    // Only the variant — and, for the association, whether it names a list — is
+    // read, so the payloads below are the nearest ones to hand.
+    let label = |op: GroupListsUpdateOp| op.get_desc().1;
+    let blank = params
+        .group_lists
+        .group_list_map
+        .get(&served)
+        .expect("the list was just read off the table")
+        .clone();
+    let add_label = label(GroupListsUpdateOp::AddNewGroupList(blank.clone()));
+    let update_label = label(GroupListsUpdateOp::UpdateGroupList(served, blank));
+    let remove_label = label(GroupListsUpdateOp::DeleteGroupList(served));
+    let assign_label = label(GroupListsUpdateOp::AssignGroupListToSubject(
+        cell_period,
+        served_subject,
+        Some(served),
+    ));
+    let unassign_label = label(GroupListsUpdateOp::AssignGroupListToSubject(
+        cell_period,
+        served_subject,
+        None,
+    ));
+    let duplicate_label = label(GroupListsUpdateOp::DuplicatePreviousPeriod(cell_period));
+
+    // The list the second stage reads: the served one, automatic and otherwise
+    // untouched, so that it can hold a placement row at all.
+    let automatic = GroupList::new(
+        params
+            .group_lists
+            .group_list_map
+            .get(&served)
+            .expect("the list was just read off the table")
+            .params()
+            .clone(),
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::new(),
+        },
+    )
+    .expect("an automatic filling asks nothing of the group names");
+
+    run_stages(
+        &[
+            include_str!("scripts/group_lists_write_before.py"),
+            include_str!("scripts/group_lists_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("served_index", served_index)?;
+            globals.set_item("add_label", &add_label)?;
+            globals.set_item("update_label", &update_label)?;
+            globals.set_item("remove_label", &remove_label)?;
+            globals.set_item("assign_label", &assign_label)?;
+            globals.set_item("unassign_label", &unassign_label)?;
+            globals.set_item("duplicate_label", &duplicate_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            applied_write(
+                py,
+                globals,
+                "prepared_filling",
+                UpdateOp::GroupLists(GroupListsUpdateOp::UpdateGroupList(
+                    served,
+                    automatic.clone(),
+                )),
+            );
+            applied_write(
+                py,
+                globals,
+                "prepared_placements",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+                    served,
+                    BTreeMap::from([(placed[0], 0), (placed[1], 2)]),
+                )),
+            );
+            applied_write(
+                py,
+                globals,
+                "prepared_cell",
+                UpdateOp::Colloscope(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+                    cell_slot,
+                    cell_week,
+                    BTreeSet::from([0, 2]),
+                )),
+            );
+            // The subjects are a later piece of the mirror, so the one thing
+            // the second stage cannot say for itself is said here.
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                        served_subject,
+                        gone_period,
+                        false,
+                    )),
+                )
+                .expect("a subject of the example can stop running on a period");
+        },
+    );
+
+    // The document the script saved holds everything it opened with, plus the
+    // one list it wrote — and the association table it opened with, since every
+    // row it cleared it put back.
+    let written = reload(&target);
+    let after = &written.get_inner_data().params.group_lists;
+    let added: Vec<_> = after
+        .group_list_map
+        .iter()
+        .filter(|(id, _list)| !params.group_lists.group_list_map.contains(id))
+        .map(|(_id, list)| list.clone())
+        .collect();
+
+    assert_eq!(added.len(), 1);
+    let added = &added[0];
+    assert_eq!(added.params().name, "Maisons");
+    assert_eq!(
+        added.params().group_names.len(),
+        3,
+        "the script's last accepted rewrite gave it three unnamed groups"
+    );
+    assert!(added.params().group_names.iter().all(|name| name.is_none()));
+    assert_eq!(
+        added.filling(),
+        &GroupListFilling::Prefilled {
+            groups: vec![
+                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                    students: BTreeSet::from([placed[0]]),
+                },
+                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                    students: BTreeSet::from([placed[1]]),
+                },
+                collomatique_state_colloscopes::group_lists::PrefilledGroup {
+                    students: BTreeSet::new(),
+                },
+            ],
+        }
+    );
+    assert_eq!(
+        after.group_list_map.len(),
+        params.group_lists.group_list_map.len() + 1
+    );
+    assert_eq!(
+        after.subjects_associations.iter().collect::<Vec<_>>(),
+        params
+            .group_lists
+            .subjects_associations
+            .iter()
+            .collect::<Vec<_>>(),
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The colloscope is written row by row, erased, and refuses what cannot sit
+/// in it
+///
+/// The thirteenth family of the ops mirror: `doc.colloscope` gains
+/// `set_interrogation` and `set_group_list` for its two sparse tables, and
+/// `erase` and `erase_group_lists` for emptying them. The family's fifth op,
+/// `install`, stays gated out — it is the solver's landing door.
+///
+/// Nothing in the document points at a colloscope row, so no write here can
+/// break anything: every result the script reads carries an empty `warnings`,
+/// and there is no cascade to assert. What there is instead is the sparse
+/// shape on the write — an empty iterable and an empty mapping are the absent
+/// row, which is what clears one — and five of the six refusals the model
+/// keeps for this family.
+///
+/// The sixth needs a subject that skips a period, which is the subjects family
+/// and a later piece, so it runs in a second stage with rust doing that write
+/// in between — the way
+/// [group_lists_are_added_rewritten_associated_and_removed] does for the same
+/// reason.
+///
+/// The example carries no colloscope at all, so everything the script reads
+/// back is its own doing. The coordinate it writes on is the first cell a
+/// colle can really sit on whose subject holds a group list there, in the
+/// collections' own orders; rust finds it by the same rule and checks the two
+/// sides agree through the indices the script leaves behind.
+///
+/// Rust reads back the file the script saved once both tables held a row: the
+/// one cell, and the placement row of the automatic list the example did not
+/// have and the script added.
+#[test]
+fn the_colloscope_is_written_row_by_row_and_erased() {
+    use collomatique_ops::{ColloscopeUpdateOp, GroupListsUpdateOp, SubjectsUpdateOp, UpdateOp};
+    use collomatique_state_colloscopes::group_lists::GroupListFilling;
+
+    let dir = workspace("colloscope-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let inner = data.get_inner_data();
+    let params = &inner.params;
+
+    assert_eq!(
+        inner.colloscope.iter().count(),
+        0,
+        "the script opens on a document with no colloscope at all"
+    );
+    assert_eq!(
+        inner.colloscope.group_lists_iter().count(),
+        0,
+        "the script opens on a document with no colloscope at all"
+    );
+    assert!(
+        params.students.student_map.len() >= 3,
+        "the script places two students and needs a third to be excluded"
+    );
+    assert!(
+        params
+            .walk_weeks()
+            .any(|(_period, _id, week)| !week.interrogations),
+        "the script needs a week no slot runs on"
+    );
+
+    // The coordinate the script writes on, found by the rule the script uses:
+    // the slots in `doc.slots` order, the weeks in theirs, and the first pair a
+    // colle can sit on whose subject holds a group list on that week's period —
+    // the list being what the group numbers are measured against.
+    let (cell_subject, cell_slot, cell_week) = params
+        .subjects
+        .ordered_subject_list
+        .keys()
+        .flat_map(|subject_id| {
+            params
+                .slots
+                .slots_for_subject(subject_id)
+                .into_iter()
+                .flatten()
+                .map(move |(slot_id, _slot)| (subject_id, *slot_id))
+        })
+        .flat_map(|(subject_id, slot_id)| {
+            params
+                .week_ids()
+                .map(move |week_id| (subject_id, slot_id, week_id))
+        })
+        .find(|(subject_id, slot_id, week_id)| {
+            params.is_interrogation_possible(*slot_id, *week_id)
+                && params
+                    .weeks
+                    .week_position(*week_id)
+                    .is_some_and(|(period_id, _pos)| {
+                        params
+                            .group_lists
+                            .subjects_associations
+                            .get(&(period_id, *subject_id))
+                            .is_some()
+                    })
+        })
+        .expect("the example has a slot active on a week its subject holds a list on");
+    let (cell_period, _pos) = params
+        .weeks
+        .week_position(cell_week)
+        .expect("the week was just walked");
+    let cell_list = *params
+        .group_lists
+        .subjects_associations
+        .get(&(cell_period, cell_subject))
+        .expect("the coordinate was chosen for holding an association");
+    assert!(
+        params
+            .group_lists
+            .group_list_map
+            .get(&cell_list)
+            .expect("an association names a list the document holds")
+            .params()
+            .group_names
+            .len()
+            > 2,
+        "the script writes a cell naming group 2 in that list"
+    );
+
+    // The two students the placement row holds, and the one the added list
+    // excludes: the first three, in the students' own order.
+    let students: Vec<_> = params.students.student_map.keys().take(3).collect();
+
+    // The french labels the five operations carry, so that the script's undo
+    // assertions pin the operations' own names and not merely some strings.
+    // Only the variant is read, so the payloads below are the nearest ones to
+    // hand.
+    let label = |op: ColloscopeUpdateOp| op.get_desc().1;
+    let set_interrogation_label = label(ColloscopeUpdateOp::UpdateColloscopeInterrogation(
+        cell_slot,
+        cell_week,
+        BTreeSet::new(),
+    ));
+    let set_group_list_label = label(ColloscopeUpdateOp::UpdateColloscopeGroupList(
+        cell_list,
+        BTreeMap::new(),
+    ));
+    let erase_label = label(ColloscopeUpdateOp::EraseColloscope);
+    let erase_group_lists_label = label(ColloscopeUpdateOp::EraseGroupLists);
+    let add_group_list_label = GroupListsUpdateOp::AddNewGroupList(
+        params
+            .group_lists
+            .group_list_map
+            .get(&cell_list)
+            .expect("the list was just read off the table")
+            .clone(),
+    )
+    .get_desc()
+    .1;
+    // The one write rust makes itself, between the two stages: the second stage
+    // reads its label to say that the refusal it asserts cost no undo slot of
+    // its own.
+    let exclusion_label = SubjectsUpdateOp::UpdatePeriodStatus(cell_subject, cell_period, false)
+        .get_desc()
+        .1;
+
+    let globals = run_stages(
+        &[
+            include_str!("scripts/colloscope_write_before.py"),
+            include_str!("scripts/colloscope_write_after.py"),
+        ],
+        |globals| {
+            globals.set_item("source", &source)?;
+            globals.set_item("target", &target)?;
+            globals.set_item("set_interrogation_label", &set_interrogation_label)?;
+            globals.set_item("set_group_list_label", &set_group_list_label)?;
+            globals.set_item("erase_label", &erase_label)?;
+            globals.set_item("erase_group_lists_label", &erase_group_lists_label)?;
+            globals.set_item("add_group_list_label", &add_group_list_label)?;
+            globals.set_item("exclusion_label", &exclusion_label)?;
+            Ok(())
+        },
+        |py, globals| {
+            // The subjects are a later piece of the mirror, so the one thing
+            // the second stage cannot say for itself is said here.
+            let doc = document_of(globals);
+            doc.borrow_mut(py)
+                .update(
+                    py,
+                    UpdateOp::Subjects(SubjectsUpdateOp::UpdatePeriodStatus(
+                        cell_subject,
+                        cell_period,
+                        false,
+                    )),
+                )
+                .expect("a subject of the example can stop running on a period");
+        },
+    );
+
+    // The two sides really found the same coordinate: the script says which
+    // subject and which period it wrote on, in the collections' own order.
+    assert_eq!(
+        params
+            .subjects
+            .ordered_subject_list
+            .keys()
+            .nth(global::<usize>(&globals, "cell_subject_index")),
+        Some(cell_subject),
+    );
+    assert_eq!(
+        params
+            .periods
+            .period_ids()
+            .nth(global::<usize>(&globals, "cell_period_index")),
+        Some(cell_period),
+    );
+
+    // The document the script saved holds the two rows it had written by then,
+    // and nothing else: the example had no colloscope, so this is the whole of
+    // it.
+    let written = reload(&target);
+    let after = written.get_inner_data();
+
+    assert_eq!(
+        after
+            .colloscope
+            .iter()
+            .map(|(coord, groups)| (coord, groups.clone()))
+            .collect::<Vec<_>>(),
+        vec![((cell_slot, cell_week), BTreeSet::from([0, 2]))],
+    );
+
+    // The automatic list the script added — the example has none, and a
+    // prefilled list holds no placement row.
+    let added: Vec<_> = after
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .filter(|(id, _list)| !params.group_lists.group_list_map.contains(id))
+        .collect();
+    assert_eq!(added.len(), 1);
+    let (added_id, added_list) = added[0];
+    assert_eq!(added_list.params().name, "Colles automatiques");
+    assert_eq!(
+        added_list.filling(),
+        &GroupListFilling::Automatic {
+            excluded_students: BTreeSet::from([students[2]]),
+        }
+    );
+    assert_eq!(
+        after
+            .colloscope
+            .group_lists_iter()
+            .map(|(id, placements)| (id, placements.clone()))
+            .collect::<Vec<_>>(),
+        vec![(
+            added_id,
+            BTreeMap::from([(students[0], 0), (students[1], 2)])
+        )],
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The subjects are added, rewritten, moved and removed from python
+///
+/// The fourteenth family of the ops mirror, and the most referenced entity the
+/// document has: `doc.subjects` gains `add`, `update`, `remove`, `move_up`,
+/// `move_down` and `set_period_status`. Eight kinds of place name a subject, so
+/// the removal is the heaviest ordinary one there is — and the two other
+/// cascades, switching the interrogations off and taking the subject off a
+/// period, are what the family is really about.
+///
+/// It is the second family whose value is larger than what its ops carry: a
+/// `SubjectData` holds the excluded periods and no subject op does, so `add`
+/// refuses a value that excludes anything and `update` refuses one whose
+/// exclusions differ from the document's, both with the `ValueError` the script
+/// pins beside the model's own two refusals.
+///
+/// Everything the cascades need beyond what the example carries — an
+/// incompatibility on the subject, a pairing rule naming it, and one colle
+/// standing in one of its slots — the script writes for itself through the
+/// surface the earlier pieces published, and undoes again. So this needs no
+/// second stage.
+///
+/// What rust asserts on its own side is that the example really holds the shapes
+/// the script leans on: two subjects that run colles, the first of them holding
+/// every reference site the removal repairs — a teacher, slots, balancing
+/// options of its own, an enrolment row and a group-list association on each of
+/// the three periods — and a week of the first period one of its slots is really
+/// active on.
+///
+/// Rust reads back the file the script saved after its last accepted write of
+/// the first half: the two subjects the example did not have, field by field,
+/// last in the list and in the order the script added them.
+#[test]
+fn subjects_are_added_rewritten_moved_and_removed() {
+    use collomatique_ops::SubjectsUpdateOp;
+    use collomatique_state_colloscopes::subjects::Subject;
+    use collomatique_state_colloscopes::{
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+    };
+
+    let dir = workspace("subjects-write");
+    let source = example_copy(&dir, "source.collomatique");
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are stored,
+    // so the copy rust reads names the same entities the script is holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let order: Vec<_> = params.subjects.ordered_subject_list.keys().collect();
+    let with_colles: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(_id, subject)| subject.parameters.interrogation_parameters.is_some())
+        .map(|(id, _subject)| id)
+        .collect();
+    assert!(
+        with_colles.len() >= 2,
+        "the script names two subjects that run colles"
+    );
+
+    // The subject the three cascades are about. Every reference site the
+    // removal has to repair is asserted here, since a fixture that quietly lost
+    // one would make the script's warning list shorter and still green.
+    let rich = with_colles[0];
+    assert_eq!(
+        params
+            .teachers
+            .teacher_map
+            .values()
+            .filter(|teacher| teacher.subjects.contains(&rich))
+            .count(),
+        1,
+        "exactly one teacher holds that subject's colles",
+    );
+    assert!(
+        !params
+            .slots
+            .slots_for_subject(rich)
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .is_empty(),
+        "the script asserts the slots that go with the subject",
+    );
+    assert!(
+        params.balancing.subjects.contains(&rich),
+        "the script asserts the balancing override that goes with the subject",
+    );
+    for period in params.periods.period_ids() {
+        assert!(
+            params.assignments.students(period, rich).is_some(),
+            "the subject holds an enrolment row on every period",
+        );
+        assert!(
+            params
+                .group_lists
+                .subjects_associations
+                .get(&(period, rich))
+                .is_some(),
+            "the subject uses a group list on every period",
+        );
+    }
+
+    let first_period = params
+        .periods
+        .period_ids()
+        .next()
+        .expect("the example has periods");
+    assert!(
+        params
+            .slots
+            .slots_for_subject(rich)
+            .into_iter()
+            .flatten()
+            .any(|(slot_id, _slot)| params.week_ids().any(|week| {
+                params.weeks.week_position(week).map(|(p, _pos)| p) == Some(first_period)
+                    && params.is_interrogation_possible(*slot_id, week)
+            })),
+        "one of the subject's slots is really active on a week of the first period",
+    );
+
+    // The french labels this family's operations carry, so that the script's
+    // undo assertions pin the operations' own names and not merely some
+    // strings. Only the variant is read, so the payloads below are the nearest
+    // ones to hand — and `set_period_status` gets two, since the op names its
+    // own direction.
+    let label = |op: SubjectsUpdateOp| op.get_desc().1;
+    let blank = params
+        .subjects
+        .find_subject(rich)
+        .expect("the list names a live subject")
+        .parameters
+        .clone();
+    let add_label = label(SubjectsUpdateOp::AddNewSubject(blank.clone()));
+    let update_label = label(SubjectsUpdateOp::UpdateSubject(rich, blank));
+    let remove_label = label(SubjectsUpdateOp::DeleteSubject(rich));
+    let move_up_label = label(SubjectsUpdateOp::MoveSubjectUp(rich));
+    let move_down_label = label(SubjectsUpdateOp::MoveSubjectDown(rich));
+    let exclude_label = label(SubjectsUpdateOp::UpdatePeriodStatus(
+        rich,
+        first_period,
+        false,
+    ));
+    let include_label = label(SubjectsUpdateOp::UpdatePeriodStatus(
+        rich,
+        first_period,
+        true,
+    ));
+
+    run(include_str!("scripts/subjects_write.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("add_label", &add_label)?;
+        globals.set_item("update_label", &update_label)?;
+        globals.set_item("remove_label", &remove_label)?;
+        globals.set_item("move_up_label", &move_up_label)?;
+        globals.set_item("move_down_label", &move_down_label)?;
+        globals.set_item("exclude_label", &exclude_label)?;
+        globals.set_item("include_label", &include_label)?;
+        Ok(())
+    });
+
+    // What the script's two adds asked for, as they stood when it saved. The
+    // first was created bare, rewritten three times and taken off the first
+    // period; the second is the subject that never holds a colle.
+    let written_out = vec![
+        Subject {
+            parameters: SubjectParameters {
+                name: "Sortilèges".into(),
+                interrogation_parameters: Some(SubjectInterrogationParameters {
+                    students_per_group: nonzero_range((2, 3)),
+                    groups_per_interrogation: nonzero_range((1, 1)),
+                    duration: collomatique_time::NonZeroMinutes::new(60)
+                        .expect("an hour is a while"),
+                    take_duration_into_account: true,
+                    periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                        periodicity_in_weeks: NonZeroU32::new(2).expect("two is not zero"),
+                    },
+                }),
+            },
+            excluded_periods: BTreeSet::from([first_period]),
+        },
+        Subject {
+            parameters: SubjectParameters {
+                name: "Club de Bavboules".into(),
+                interrogation_parameters: None,
+            },
+            excluded_periods: BTreeSet::new(),
+        },
+    ];
+
+    // The document the script saved holds everything it opened with, in the
+    // order it opened with, plus the two subjects it added, last and in that
+    // order.
+    let written = reload(&target);
+    let after: Vec<_> = written
+        .get_inner_data()
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .map(|(id, subject)| (id, subject.clone()))
+        .collect();
+
+    assert_eq!(after.len(), order.len() + 2);
+    assert_eq!(
+        after
+            .iter()
+            .take(order.len())
+            .map(|(id, _subject)| *id)
+            .collect::<Vec<_>>(),
+        order,
+        "the two moves cancelled out, so the example's own subjects are where they were",
+    );
+    assert!(
+        after
+            .iter()
+            .skip(order.len())
+            .all(|(id, _subject)| !order.contains(id)),
+        "the two subjects at the end are the ones the script added",
+    );
+    assert_eq!(
+        after
+            .into_iter()
+            .skip(order.len())
+            .map(|(_id, subject)| subject)
+            .collect::<Vec<_>>(),
+        written_out,
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A document written here rather than copied, holding pairing rules
 ///
 /// The example has no subject pairing rules at all — its only pairings are the
@@ -8319,6 +11461,126 @@ fn the_colloscope_comes_back_detached() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// A colloscope lands whole, through `install`
+///
+/// The family's fifth op, and the door a solve's outcome comes back through:
+/// the script reads the colloscope out with `to_data()`, edits it the way
+/// something that produced one would — one cell rewritten, one dropped, one
+/// student moved — and puts it back with `install`.
+///
+/// Rust reads back the file the script saved: the document holds exactly the
+/// value's rows and no others, which is what a dropped row makes visible —
+/// nothing removed it, the value simply did not name it. What the script says
+/// for itself is the rest: the empty `warnings` of a family nothing points at,
+/// the single undo slot however much changed, the model's own refusal for a
+/// group number past the bound, and the argument convention catching a value
+/// that names a dead slot before the write ever runs.
+///
+/// The example was never resolved, so it has no colloscope to install a
+/// changed copy of: this needs [colloscope_document], the fixture with cells
+/// on several coordinates and one filled automatic list.
+#[test]
+fn a_colloscope_lands_whole_through_install() {
+    use collomatique_ops::{ColloscopeContents, ColloscopeUpdateOp};
+
+    let dir = workspace("colloscope-install");
+    let source = dir.join("colloscope.collomatique");
+    colloscope_document(&source);
+    let target = dir.join("written.collomatique");
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the same entities the script is
+    // holding.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+    let original = ColloscopeContents::from(&data.get_inner_data().colloscope);
+
+    assert!(
+        original.interrogations.len() >= 2,
+        "the script rewrites one cell and drops another"
+    );
+    assert_eq!(
+        original.group_lists.len(),
+        1,
+        "the script names the single placements row"
+    );
+
+    // The rows the edit is about, found by the rule the script uses: the
+    // value's key order is the model's, so the first and the last cell are
+    // the same two on both sides.
+    let cells: Vec<_> = original.interrogations.keys().copied().collect();
+    let first_cell = *cells.first().expect("the fixture has cells");
+    let dropped_cell = *cells.last().expect("the fixture has cells");
+    assert_ne!(first_cell, dropped_cell);
+
+    let (automatic, placed) = original
+        .group_lists
+        .iter()
+        .next()
+        .expect("the fixture fills one list");
+    let group_count = params
+        .group_lists
+        .group_list_map
+        .get(automatic)
+        .expect("a placements row names a live group list")
+        .params()
+        .group_names
+        .len();
+    assert!(
+        group_count >= 3,
+        "the script rewrites a cell naming group 1 and refuses one naming group {group_count}"
+    );
+
+    // The colloscope the script installs: the first cell becomes `{0, 1}`,
+    // the last one is gone, and the first placed student moves to the next
+    // group round the list.
+    let mut expected = original.clone();
+    expected
+        .interrogations
+        .insert(first_cell, BTreeSet::from([0, 1]));
+    expected.interrogations.remove(&dropped_cell);
+    let mut moved = placed.clone();
+    let (first_student, first_group) = moved
+        .iter()
+        .next()
+        .map(|(student, group)| (*student, *group))
+        .expect("the fixture places a student");
+    moved.insert(
+        first_student,
+        (first_group + 1) % u32::try_from(group_count).expect("a group list holds few groups"),
+    );
+    assert_ne!(&moved, placed, "the script really moves the student");
+    expected.group_lists.insert(*automatic, moved);
+
+    // The french label the operation carries, so that the script's undo
+    // assertion pins the operation's own name and not merely some string.
+    // Only the variant is read, so the payload is the nearest one to hand.
+    let install_label = ColloscopeUpdateOp::InstallColloscope(ColloscopeContents::default())
+        .get_desc()
+        .1;
+
+    run(include_str!("scripts/colloscope_install.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("install_label", &install_label)?;
+        Ok(())
+    });
+
+    // The document the script saved holds exactly the rows the value named:
+    // the rewritten cell, the untouched ones, the moved placement — and not
+    // the dropped cell, which no write removed.
+    let written = reload(&target);
+    let after = ColloscopeContents::from(&written.get_inner_data().colloscope);
+    assert_eq!(after, expected);
+    assert_eq!(
+        after.interrogations.len() + 1,
+        original.interrogations.len()
+    );
+    assert!(!after.interrogations.contains_key(&dropped_cell));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// A document written here rather than copied, holding a non-default export
 /// configuration
 ///
@@ -10378,6 +13640,858 @@ fn the_snapshot_holds_the_whole_document() {
     // method of this api already makes.
     let (kind, _message) = refused::<DocumentData>(&globals, "with_a_foreign_week");
     assert_eq!(kind, "StaleHandleError");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A whole tree goes back in, as one step
+///
+/// The coarse door of §8. The script's own assertions cover the shape of the
+/// call — the undo slot, the empty warnings, the refusals — and rust holds the
+/// two halves a script cannot see: that the document it saved really is the
+/// tree it handed over, field for field, and that a refused tree names *every*
+/// reference it left dangling rather than the first one it hit.
+#[test]
+fn a_whole_tree_goes_back_in_as_one_step() {
+    let dir = workspace("replace_all");
+    let source = example_copy(&dir, "source.collomatique");
+    let other_source = example_copy(&dir, "other.collomatique");
+    let target = dir.join("replaced.collomatique");
+
+    let before = reload(&source);
+    let before = before.get_inner_data();
+    let fold_label = "Import Pronote";
+
+    let globals = run(include_str!("scripts/replace_all.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("other_source", &other_source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("fold_label", fold_label)?;
+        Ok(())
+    });
+
+    // The document the script saved *is* the tree it handed to `replace_all`,
+    // read back through the same extraction the call itself used. Nothing is
+    // sampled here: a global update that dropped a section, reordered one or
+    // rewrote a field on the way through would fail this.
+    let written = reload(&target);
+    assert_eq!(
+        extracted::<DocumentData>(&globals, "tree"),
+        *written.get_inner_data()
+    );
+
+    // And the tree was not the document it started from, so the comparison
+    // above has something to say: one subject renamed, one incompatibility
+    // gone, everything else where it was.
+    let after = written.get_inner_data();
+    assert_ne!(*after, *before);
+    assert_eq!(
+        after.params.incompats.incompat_map.len(),
+        before.params.incompats.incompat_map.len() - 1,
+    );
+    let renamed = after
+        .params
+        .subjects
+        .ordered_subject_list
+        .values()
+        .next()
+        .expect("the example has subjects");
+    assert_eq!(
+        renamed.parameters.name.as_str(),
+        "Défense contre les forces du Mal"
+    );
+
+    // The refusal itemises the whole set. The tree dropped a teacher several
+    // slots still name, and the message carries one dangling reference for each
+    // of those slots — a message that stopped at the first would leave a script
+    // fixing its tree one round trip at a time.
+    let refusal = global::<String>(&globals, "refusal");
+    let orphan_count = global::<usize>(&globals, "orphan_count");
+    assert!(orphan_count >= 2);
+    assert_eq!(refusal.matches("dangling reference").count(), orphan_count);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The document goes out as a spreadsheet, the document's way or the caller's
+///
+/// The workbook itself is the xlsx crate's business and is tested there; what
+/// this says is that python reaches that writer, with the right data and the
+/// right configuration, and that a failure on the way arrives as an
+/// `ExportError` naming the file.
+#[test]
+fn a_document_exports_to_a_spreadsheet() {
+    let dir = workspace("export_xlsx");
+    let source = example_copy(&dir, "source.collomatique");
+    let own_target = dir.join("own.xlsx");
+    let full_target = dir.join("full.xlsx");
+    let bad_target = dir.join("refused.xlsx");
+
+    let globals = run(include_str!("scripts/export_xlsx.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("own_target", &own_target)?;
+        globals.set_item("full_target", &full_target)?;
+        globals.set_item("bad_target", &bad_target)?;
+        Ok(())
+    });
+
+    // An xlsx is a zip, so both files start with a local file header — they are
+    // workbooks and not some bytes that happen to be there.
+    for target in [&own_target, &full_target] {
+        let bytes = std::fs::read(target).expect("the script wrote this file");
+        assert_eq!(&bytes[..4], b"PK\x03\x04");
+    }
+
+    // The bare export used the document's own configuration, cut down to one
+    // sheet, and the second one used the caller's, which asks for the group
+    // sheets as well. An export that read the same configuration both times —
+    // the document's for both calls, or the default for both — would write two
+    // files of the same size.
+    let size = |target: &Path| {
+        std::fs::metadata(target)
+            .expect("the script wrote this file")
+            .len()
+    };
+    assert!(size(&own_target) < size(&full_target));
+
+    // The refusals: nothing was written where the configuration was not one,
+    // and the path that could not be written is what the message opens with.
+    assert!(!bad_target.exists());
+    let failure = global::<String>(&globals, "failure");
+    assert!(failure.contains("no-such-directory"));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The solve configuration crosses the boundary whole, and refuses what means
+/// nothing
+///
+/// The vocabulary of §10, extracted the way `build_colloscope_model` will
+/// extract it. The document is the two-filling fixture because both shapes are
+/// needed here: the automatic list is what a config speaks about, and naming
+/// the prefilled one is one of the three refusals this class makes.
+#[test]
+fn the_solve_config_crosses_the_boundary() {
+    use collomatique_constraints_colloscopes::{
+        GroupListRecompute, GroupListSolveData, PeriodSolveData, SolveConfig,
+    };
+    use collomatique_python::data::{ColloscopeSolveConfig, Value};
+    use collomatique_state_colloscopes::ids::Id as _;
+
+    let dir = workspace("solve-config");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let globals = run(include_str!("scripts/solve_config.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // Read from the file rather than from the running document: ids are
+    // stored, so the copy rust reads names the entities the script named.
+    let data = reload(&source);
+    let params = &data.get_inner_data().params;
+
+    let periods: Vec<_> = params.periods.period_ids().collect();
+    assert_eq!(periods.len(), 2);
+
+    let mut automatic = None;
+    let mut prefilled = None;
+    for (id, group_list) in params.group_lists.group_list_map.iter() {
+        if group_list.is_prefilled() {
+            prefilled = Some(id);
+        } else {
+            automatic = Some(id);
+        }
+    }
+    let automatic = automatic.expect("the fixture holds an automatic list");
+    let prefilled = prefilled.expect("the fixture holds a prefilled list");
+
+    // The default pin: `clm.ColloscopeSolveConfig()` is the model's own
+    // default, weights included — recompute everything, freely.
+    assert_eq!(
+        extracted::<ColloscopeSolveConfig>(&globals, "bare"),
+        SolveConfig::default()
+    );
+
+    // A config that says something about everything it can, out and back.
+    let spelled_out = SolveConfig {
+        periods: BTreeMap::from([
+            (
+                periods[0],
+                PeriodSolveData {
+                    recompute: false,
+                    use_current_values: true,
+                },
+            ),
+            (
+                periods[1],
+                PeriodSolveData {
+                    recompute: true,
+                    use_current_values: true,
+                },
+            ),
+        ]),
+        group_lists: BTreeMap::from([(
+            automatic,
+            GroupListSolveData {
+                recompute: Some(GroupListRecompute {
+                    previous_values_as_objective: true,
+                }),
+            },
+        )]),
+        objectify_cross_fixed_period: None,
+        l1_anchor_weight: 0.0,
+    };
+    assert_eq!(
+        extracted::<ColloscopeSolveConfig>(&globals, "spelled_out"),
+        spelled_out
+    );
+
+    // And the other direction, which nothing else exercises: the value the
+    // boundary writes is one it reads back unchanged, the flat two booleans of
+    // a group list included — the shape the model nests.
+    Python::attach(|py| {
+        let doc = document_of(globals.bind(py));
+        let value = ColloscopeSolveConfig::to_py(py, &spelled_out)
+            .expect("a config should convert to python");
+        assert_eq!(
+            ColloscopeSolveConfig::from_py(&doc, &value).expect("and back out again"),
+            spelled_out
+        );
+    });
+
+    // A key names an entity, so a handle and an id are the same key.
+    let pinned = SolveConfig {
+        periods: BTreeMap::from([(
+            periods[0],
+            PeriodSolveData {
+                recompute: false,
+                use_current_values: false,
+            },
+        )]),
+        group_lists: BTreeMap::from([(automatic, GroupListSolveData { recompute: None })]),
+        ..SolveConfig::default()
+    };
+    for name in ["by_handle", "by_id"] {
+        assert_eq!(extracted::<ColloscopeSolveConfig>(&globals, name), pinned);
+    }
+
+    // Zero is a weight: the term is written and prices nothing.
+    assert_eq!(
+        extracted::<ColloscopeSolveConfig>(&globals, "zero_weights"),
+        SolveConfig {
+            objectify_cross_fixed_period: Some(0.0),
+            l1_anchor_weight: 0.0,
+            ..SolveConfig::default()
+        }
+    );
+
+    // The refusals, each with the sentence it raises. The first is the double
+    // naming every mapping of entities refuses; the next two are this class's
+    // own.
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "named_twice"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "a ColloscopeSolveConfig's periods names <PeriodId {}> twice",
+                periods[0].inner()
+            ),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "prefilled_list"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "a ColloscopeSolveConfig's group_lists names <GroupListId {}>, and that group \
+                 list is prefilled: a solve computes the automatic ones",
+                prefilled.inner()
+            ),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "nothing_to_anchor"),
+        (
+            "ValueError".to_owned(),
+            format!(
+                "a ColloscopeSolveConfig's group_lists asks <GroupListId {}> for \
+                 previous_values_as_objective without recompute, and a group list that is not \
+                 recomputed keeps its groups",
+                automatic.inner()
+            ),
+        )
+    );
+
+    // The weights, both ways of not being one.
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "negative_weight"),
+        (
+            "ValueError".to_owned(),
+            "a ColloscopeSolveConfig's l1_anchor_weight is zero or more, and -1 is negative"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "infinite_weight"),
+        (
+            "ValueError".to_owned(),
+            "a ColloscopeSolveConfig's objectify_cross_fixed_period is a finite weight, and inf \
+             is not one"
+                .to_owned(),
+        )
+    );
+
+    // And the ordinary shapes of wrong: the flag is refused at the site of the
+    // class the script wrote it in, and the mapping at its own.
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "not_a_flag"),
+        (
+            "TypeError".to_owned(),
+            "a PeriodSolveConfig's recompute is True or False, and 3 is neither".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused::<ColloscopeSolveConfig>(&globals, "not_a_mapping"),
+        (
+            "TypeError".to_owned(),
+            "a ColloscopeSolveConfig's periods is a mapping of entities to values, and 3 is not \
+             one"
+            .to_owned(),
+        )
+    );
+
+    // A key that names nothing here is refused the way every entity reference
+    // is: a handle of another document, and a handle of something this one no
+    // longer holds.
+    for name in ["foreign_period", "dead_period"] {
+        let (kind, _message) = refused::<ColloscopeSolveConfig>(&globals, name);
+        assert_eq!(kind, "StaleHandleError");
+    }
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// One strategy a script built, extracted the way a solve will extract it
+///
+/// Not [extracted]: the strategy family is not a [collomatique_python::data::Value]
+/// — it names no entity, so it needs no document — and its door is an inherent
+/// method rather than a trait one.
+fn strategy(globals: &Py<PyDict>, name: &str) -> collomatique_strategies::ConductorStrategy {
+    Python::attach(|py| {
+        let value = globals
+            .bind(py)
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        collomatique_python::data::ConductorStrategy::from_py(&value).unwrap_or_else(|e| {
+            e.print(py);
+            panic!("`{name}` should extract")
+        })
+    })
+}
+
+/// How extracting one strategy the script built was refused
+///
+/// The mirror of [refused], for the same reason [strategy] is the mirror of
+/// [extracted]: the class name and the message both, since a test that only
+/// checked the class would not notice a message naming the wrong field.
+fn refused_strategy(globals: &Py<PyDict>, name: &str) -> (String, String) {
+    Python::attach(|py| {
+        let value = globals
+            .bind(py)
+            .get_item(name)
+            .expect("looking up a global should not fail")
+            .unwrap_or_else(|| panic!("the script sets `{name}`"));
+
+        let error = collomatique_python::data::ConductorStrategy::from_py(&value)
+            .expect_err("this strategy is one the boundary must refuse");
+
+        (
+            error
+                .get_type(py)
+                .name()
+                .expect("an exception class has a name")
+                .to_string(),
+            error.value(py).to_string(),
+        )
+    })
+}
+
+/// The conductor strategy crosses the boundary whole, and refuses what means
+/// nothing
+///
+/// The vocabulary of §13, extracted the way `model.solve` will extract it. No
+/// document is opened: a strategy says how a solve is run and names no entity,
+/// which is exactly why this family is the one that is not a `Value`.
+#[test]
+fn the_conductor_strategy_crosses_the_boundary() {
+    use collomatique_strategies::{
+        ConductorStrategy as RawConductorStrategy, DefaultConfig, FuzzyConfig, IncrementalConfig,
+        WarmStartConfig,
+    };
+    use collomatique_time::TimeLimit;
+
+    let globals = run(include_str!("scripts/strategy.py"), |_| Ok(()));
+
+    let count = |value: u32| NonZeroU32::new(value).expect("the test writes non-zero counts");
+    let seconds = |value: u32| TimeLimit::seconds(count(value));
+
+    // The default pin: `clm.ConductorStrategy()` is the application's own
+    // « Recherche simple » — one worker, warm-start only.
+    assert_eq!(strategy(&globals, "bare"), RawConductorStrategy::default());
+
+    // And each bare sub-config is its own model default, which is what pins
+    // the numbers written out in `data.py` — `epoch_incumbent_time_limit=60`
+    // and the rest of them.
+    assert_eq!(
+        strategy(&globals, "all_bare"),
+        RawConductorStrategy {
+            worker_count: count(1),
+            default_config: Some(DefaultConfig::default()),
+            warm_start_config: Some(WarmStartConfig::default()),
+            incremental_config: Some(IncrementalConfig::default()),
+            fuzzy_config: Some(FuzzyConfig::default()),
+        }
+    );
+
+    // The presets are the application's own structures, converted. `optimize`
+    // asks this machine how many cores it has — and so does the rust side of
+    // this comparison, in the same process, so the two agree by construction
+    // rather than by luck.
+    assert_eq!(
+        strategy(&globals, "search"),
+        RawConductorStrategy::default()
+    );
+    assert_eq!(
+        strategy(&globals, "optimize"),
+        RawConductorStrategy::with_parallelism_defaults()
+    );
+
+    // A strategy that says something about everything it can, out and back.
+    let spelled_out = RawConductorStrategy {
+        worker_count: count(3),
+        default_config: Some(DefaultConfig {
+            time_limit: seconds(600),
+            incumbent_time_limit: seconds(120),
+        }),
+        warm_start_config: Some(WarmStartConfig {
+            time_limit: seconds(30),
+        }),
+        incremental_config: Some(IncrementalConfig {
+            l1_weight: 0.0,
+            distance_tolerance: 0.0,
+            epoch_time_limit: seconds(45),
+            epoch_incumbent_time_limit: TimeLimit::none(),
+        }),
+        fuzzy_config: Some(FuzzyConfig {
+            fuzzy_sigma: 0.0,
+            find_closest_tolerance: 2.5,
+            time_limit: TimeLimit::none(),
+            incumbent_time_limit: seconds(7),
+        }),
+    };
+    assert_eq!(strategy(&globals, "spelled_out"), spelled_out);
+
+    // And the other direction, which the presets exercise only for what they
+    // happen to hold: the value the boundary writes is one it reads back
+    // unchanged, the limits written as whole seconds included.
+    Python::attach(|py| {
+        let value = collomatique_python::data::ConductorStrategy::to_py(py, &spelled_out)
+            .expect("a strategy should convert to python");
+        assert_eq!(
+            collomatique_python::data::ConductorStrategy::from_py(&value)
+                .expect("and back out again"),
+            spelled_out
+        );
+    });
+
+    // The refusals, each with the sentence it raises. A solve runs on at least
+    // one worker, and a worker count is a count.
+    assert_eq!(
+        refused_strategy(&globals, "no_worker"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's worker_count is at least 1, and 0 was given".to_owned(),
+        )
+    );
+    assert_eq!(
+        refused_strategy(&globals, "not_a_count"),
+        (
+            "TypeError".to_owned(),
+            "a ConductorStrategy's worker_count is a number of slots, and 'x' is not one"
+                .to_owned(),
+        )
+    );
+
+    // The time limits: zero is refused rather than read as no limit, and the
+    // sentence says where no limit is said instead. The path names the field
+    // the script wrote, not the sub-config's own class.
+    assert_eq!(
+        refused_strategy(&globals, "zero_limit"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's warm_start_config.time_limit is at least one second, and None \
+             is how no limit is said"
+                .to_owned(),
+        )
+    );
+    for name in ["negative_limit", "not_a_limit"] {
+        let (kind, message) = refused_strategy(&globals, name);
+        assert_eq!(kind, "TypeError");
+        assert!(
+            message.starts_with(
+                "a ConductorStrategy's warm_start_config.time_limit is a number of seconds or \
+                 None, and "
+            ),
+            "{message}"
+        );
+    }
+
+    // A price the solver pays cannot be negative, and a measurement cannot be
+    // infinite.
+    assert_eq!(
+        refused_strategy(&globals, "negative_weight"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's incremental_config.l1_weight is zero or more, and -1 is \
+             negative"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused_strategy(&globals, "infinite_sigma"),
+        (
+            "ValueError".to_owned(),
+            "a ConductorStrategy's fuzzy_config.fuzzy_sigma is a finite number, and inf is not one"
+                .to_owned(),
+        )
+    );
+
+    // And the ordinary shapes of wrong: a sub-config is read by its fields, so
+    // what is refused is an object without them — an object that is nothing of
+    // the sort, and one carrying half of them.
+    assert_eq!(
+        refused_strategy(&globals, "not_a_config"),
+        (
+            "TypeError".to_owned(),
+            "a ConductorStrategy is expected here, and 3 has no default_config.time_limit"
+                .to_owned(),
+        )
+    );
+    assert_eq!(
+        refused_strategy(&globals, "half_a_config"),
+        (
+            "TypeError".to_owned(),
+            "a ConductorStrategy is expected here, and a half-written config has no \
+             default_config.time_limit"
+                .to_owned(),
+        )
+    );
+}
+
+/// The conductor's preflight warnings, as a script reads them
+///
+/// The eight remarks of `ConductorStrategy.warnings()`: that they come out in
+/// the model's own order, that they compare and hash the way a script expects
+/// of a member, and that the sentence each one prints as is the very one the
+/// application's dialog shows — asserted against `ui-text`'s own function, so
+/// python cannot end up with a second set of words.
+#[test]
+fn the_conductor_warnings_are_preflight() {
+    use collomatique_strategies::{ConductorStrategy as RawConductorStrategy, ConductorWarning};
+
+    /// The eight warnings and the names python knows them by
+    ///
+    /// Written out rather than derived, since the point is to pin the two
+    /// halves of the conversion against each other: a match in `solve.rs`
+    /// would only agree with itself.
+    const NAMES: [(ConductorWarning, &str); 8] = [
+        (ConductorWarning::NoStrategyEnabled, "NO_STRATEGY_ENABLED"),
+        (ConductorWarning::NoOptimizing, "NO_OPTIMIZING"),
+        (ConductorWarning::NoSeed, "NO_SEED"),
+        (ConductorWarning::StarvedFuzzy, "STARVED_FUZZY"),
+        (ConductorWarning::WontFinish, "WONT_FINISH"),
+        (ConductorWarning::ColdFuzzy, "COLD_FUZZY"),
+        (ConductorWarning::RedundantWarmStart, "REDUNDANT_WARM_START"),
+        (ConductorWarning::OverwhelmedCpu, "OVERWHELMED_CPU"),
+    ];
+
+    let globals = run(include_str!("scripts/strategy_warnings.py"), |_| Ok(()));
+
+    // The script asserted the shapes it could decide for itself. What is left
+    // is what only this side knows: the words, and the preset whose warnings
+    // depend on the machine the test runs on.
+    assert_eq!(
+        global::<BTreeMap<String, String>>(&globals, "sentences"),
+        NAMES
+            .into_iter()
+            .map(|(warning, name)| (
+                name.to_owned(),
+                collomatique_ui_text::solver::conductor_warning_text(warning).to_owned(),
+            ))
+            .collect::<BTreeMap<_, _>>(),
+    );
+
+    // « Optimisation complète » says nothing about its shape, but on a machine
+    // with one or two cores its single slot is taken by the default worker and
+    // the fuzzers never get one. Which of the two it is, is the application's
+    // own answer, read here from the very structure the preset is built from.
+    let optimize = RawConductorStrategy::with_parallelism_defaults();
+    let named = |warning: ConductorWarning| {
+        NAMES
+            .into_iter()
+            .find_map(|(candidate, name)| (candidate == warning).then_some(name.to_owned()))
+            .expect("every warning has a python name")
+    };
+    assert_eq!(
+        global::<Vec<String>>(&globals, "optimize_names"),
+        optimize
+            .warnings()
+            .into_iter()
+            .map(named)
+            .collect::<Vec<_>>(),
+    );
+
+    // And a strategy that cannot be read at all is refused where it is read,
+    // with the sentence `solve` will refuse it with.
+    assert_eq!(
+        global::<String>(&globals, "malformed"),
+        "a ConductorStrategy's worker_count is at least 1, and 0 was given",
+    );
+}
+
+/// A document builds its ILP model, and hands back a token for it
+///
+/// The problem itself is `constraints-colloscopes`' business and is tested
+/// there; what this says is that python reaches that builder with the config
+/// the script wrote, that what comes back carries the counts of the model that
+/// was really built, that the build log arrives line by line, and that a
+/// callback which raises is heard without the build being torn in half.
+///
+/// The document is the two-filling fixture: its automatic group list is what
+/// gives the problem something to work out, so a student added to it is an
+/// edit the model cannot fail to notice — which is how the script says the
+/// model it holds is a snapshot and not a view.
+#[test]
+fn a_document_builds_its_colloscope_model() {
+    use collomatique_constraints_colloscopes::{
+        GroupListRecompute, GroupListSolveData, SolveConfig,
+    };
+
+    let dir = workspace("build-model");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let globals = run(include_str!("scripts/build_model.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // The same build, run here: the script's document was edited at the end and
+    // never saved, so the file on disk is still the one it opened.
+    let data = reload(&source);
+    let built = SolveConfig::default()
+        .build_model(data.get_inner_data(), &mut |_line| {})
+        .expect("the fixture's model builds");
+    let stats = built.stats();
+
+    let automatic = data
+        .get_inner_data()
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .find(|(_id, group_list)| !group_list.is_prefilled())
+        .map(|(id, _group_list)| id)
+        .expect("the fixture holds an automatic list");
+
+    // The repr's two numbers, each summed over the three kinds the modeler
+    // distinguishes.
+    let counts = |stats: &collomatique_constraints_colloscopes::ModelStats| {
+        (
+            stats.base_variable_count + stats.constraint_extra_count + stats.objective_extra_count,
+            stats.user_constraint_count
+                + stats.constraint_defining_constraint_count
+                + stats.objective_defining_constraint_count,
+        )
+    };
+
+    let (variables, constraints) = counts(&stats);
+
+    // A problem with nothing in it would make the comparisons above and below
+    // say nothing, so the fixture has to be worth building.
+    assert!(variables > 0);
+    assert!(constraints > 0);
+
+    assert_eq!(
+        global::<String>(&globals, "shown"),
+        format!("<ColloscopeModel: {variables} variables, {constraints} constraints>")
+    );
+
+    // The same, for the model the anchored config builds. The plain build has
+    // no objective at all, so it is this one that says the objective half of
+    // both counts is in the repr — and that the group-list half of the config
+    // reached the builder, since the anchor is what it asked for.
+    let anchored_config = SolveConfig {
+        group_lists: BTreeMap::from([(
+            automatic,
+            GroupListSolveData {
+                recompute: Some(GroupListRecompute {
+                    previous_values_as_objective: true,
+                }),
+            },
+        )]),
+        ..SolveConfig::default()
+    };
+    let anchored_stats = anchored_config
+        .build_model(data.get_inner_data(), &mut |_line| {})
+        .expect("the anchored model builds")
+        .stats();
+    assert!(anchored_stats.objective_extra_count > 0);
+    assert!(anchored_stats.objective_defining_constraint_count > 0);
+
+    let (anchored_variables, anchored_constraints) = counts(&anchored_stats);
+    assert_eq!(
+        global::<String>(&globals, "anchored_shown"),
+        format!(
+            "<ColloscopeModel: {anchored_variables} variables, \
+             {anchored_constraints} constraints>"
+        )
+    );
+
+    // The log the script collected is the builder's own, verbatim: the first
+    // line rust's own build emits is the first line python was handed.
+    let mut first = None;
+    let _ = SolveConfig::default().build_model(data.get_inner_data(), &mut |line| {
+        first.get_or_insert_with(|| line.to_owned());
+    });
+    let lines = global::<Vec<String>>(&globals, "lines");
+    assert_eq!(lines.first(), first.as_ref());
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A built problem goes out as an MPS file, the whole one or the checker one
+///
+/// The file format is the mps crate's business and is tested there; what this
+/// says is that python reaches that writer with the problem the config built,
+/// that `checker=True` picks the other of the two problems one build carries,
+/// and that a failure on the way arrives as an `ExportError` naming the file.
+///
+/// Each file is read back and asked how many rows it holds — an MPS file has
+/// one row for the objective and one per constraint — and the answer is
+/// compared with the problem rust builds here from the same document. A file
+/// written from the wrong problem, or from no config at all, would not match.
+#[test]
+fn a_model_exports_to_mps() {
+    use collomatique_constraints_colloscopes::{
+        GroupListRecompute, GroupListSolveData, SolveConfig,
+    };
+
+    let dir = workspace("export-mps");
+    let source = dir.join("filling.collomatique");
+    group_lists_document(&source);
+
+    let full_target = dir.join("problem.mps");
+    let again_target = dir.join("again.mps");
+    let anchored_target = dir.join("anchored.mps");
+    let checker_target = dir.join("checker.mps");
+    let pinned_target = dir.join("pinned.mps");
+    let bad_target = dir.join("refused.mps");
+
+    let globals = run(include_str!("scripts/export_mps.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("full_target", &full_target)?;
+        globals.set_item("again_target", &again_target)?;
+        globals.set_item("anchored_target", &anchored_target)?;
+        globals.set_item("checker_target", &checker_target)?;
+        globals.set_item("pinned_target", &pinned_target)?;
+        globals.set_item("bad_target", &bad_target)?;
+        Ok(())
+    });
+
+    // The `ROWS` section runs from its header to the next one, and every line
+    // in it is indented — so counting them is asking the file how many rows the
+    // problem it holds has.
+    let rows = |target: &Path| {
+        let text = std::fs::read_to_string(target).expect("the script wrote this file");
+        text.lines()
+            .skip_while(|line| *line != "ROWS")
+            .skip(1)
+            .take_while(|line| line.starts_with(' '))
+            .count()
+    };
+
+    // The script never saved, so the file on disk is still the one it opened.
+    let data = reload(&source);
+
+    let automatic = data
+        .get_inner_data()
+        .params
+        .group_lists
+        .group_list_map
+        .iter()
+        .find(|(_id, group_list)| !group_list.is_prefilled())
+        .map(|(id, _group_list)| id)
+        .expect("the fixture holds an automatic list");
+
+    let build = |config: SolveConfig| {
+        config
+            .build_model(data.get_inner_data(), &mut |_line| {})
+            .expect("the fixture's model builds")
+    };
+
+    let built = build(SolveConfig::default());
+    let full_rows = built.problem().get_constraints().len() + 1;
+    assert!(full_rows > 1);
+    assert_eq!(rows(&full_target), full_rows);
+
+    // The same model asked twice wrote the same file, which the script already
+    // checked; what rust adds is that the second spelling of the path — a
+    // `pathlib.Path` rather than a `str` — reached the same writer.
+    assert_eq!(rows(&again_target), full_rows);
+
+    // The anchored problem carries an objective, and its checker problem is the
+    // constraints without what only that objective needed. Two problems out of
+    // one build, and the flag chooses between them.
+    let anchored = build(SolveConfig {
+        group_lists: BTreeMap::from([(
+            automatic,
+            GroupListSolveData {
+                recompute: Some(GroupListRecompute {
+                    previous_values_as_objective: true,
+                }),
+            },
+        )]),
+        ..SolveConfig::default()
+    });
+    let checker_rows = anchored.checker_problem().get_constraints().len() + 1;
+    assert!(checker_rows < anchored.problem().get_constraints().len() + 1);
+    assert_eq!(
+        rows(&anchored_target),
+        anchored.problem().get_constraints().len() + 1
+    );
+    assert_eq!(rows(&checker_target), checker_rows);
+
+    // And the pinned config's problem, which is a third one again: the group
+    // list keeps the groups it has, so there is less to write down.
+    let pinned = build(SolveConfig {
+        group_lists: BTreeMap::from([(automatic, GroupListSolveData { recompute: None })]),
+        ..SolveConfig::default()
+    });
+    let pinned_rows = pinned.problem().get_constraints().len() + 1;
+    assert_ne!(pinned_rows, full_rows);
+    assert_eq!(rows(&pinned_target), pinned_rows);
+
+    // The refusals: nothing was written where the flag was handed over
+    // positionally, and the path that could not be written is what the message
+    // opens with.
+    assert!(!bad_target.exists());
+    let failure = global::<String>(&globals, "failure");
+    assert!(failure.contains("no-such-directory"));
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

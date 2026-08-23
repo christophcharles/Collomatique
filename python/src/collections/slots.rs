@@ -14,19 +14,52 @@
 //! alone: the subject must run colles, must not skip that week's period, and the
 //! week must be active under the slot's pattern. The [Document]'s own
 //! `is_interrogation_possible` puts the three together.
+//!
+//! Written through `add`, `update`, `remove`, `move_up` and `move_down`. The
+//! last two are the family's own pair: a slot has a position inside its
+//! subject, so it has a way of moving that no other family needs.
+//!
+//! This is the first family whose value is larger than what its ops carry
+//! (`docs/python/new_api_design.md` §2): a `SlotData` names its subject, and a
+//! slot cannot change subject — the model files it under that subject in the
+//! very list that gives it its position. So `add` *reads* the field, since
+//! `AddNewSlot` takes the subject beside the slot payload, and `update` refuses
+//! a value naming a different subject than the slot's own rather than dropping
+//! the field on the floor. A read-modify-write never meets that refusal:
+//! `to_data()` fills the field with the slot's own subject.
+//!
+//! Removing a slot takes what stood in it: the colloscope cells written on it,
+//! and the slot pairing rules that related it to another slot. Every one of
+//! those repairs comes back on the `OpResult`. The `update` cascades too, and in
+//! one way: putting the slot on a pattern that switches a week off clears the
+//! colles already written on that week, since the slot no longer runs there.
+//!
+//! The family keeps four refusals for the model, and each reaches a script as
+//! `SlotsError`: a subject that holds no interrogations has no colles for a slot
+//! to carry, a teacher must be declared in the subject they are given a slot in,
+//! a colle that would run past midnight is refused rather than spilling into the
+//! next day, and a slot at either end of its subject's list has nowhere left to
+//! move. What the model could otherwise object to is caught on this side, where
+//! the message can say which argument was wrong: a dead slot is the argument
+//! convention's business ([crate::handles::argument]), and a dead subject,
+//! teacher or week pattern is the value boundary's.
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyTuple};
 
-use collomatique_state_colloscopes::InnerData;
+use collomatique_ops::{SlotsUpdateOp, UpdateOp};
 use collomatique_state_colloscopes::SlotId as RawSlotId;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::subjects::Subject;
 use crate::collections::teachers::Teacher;
 use crate::collections::week_patterns::WeekPattern;
-use crate::handles::{Handle, handle_iterator, named, no_such};
-use crate::ids::{IdClass, SlotId};
+use crate::data::{SlotData, Value as _};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such};
+use crate::ids::{IdClass, SlotId, SubjectId};
+use crate::results::{AddResult, OpResult};
 use crate::values::Weekday;
 
 /// The slots of one document, in subject-then-position order
@@ -116,8 +149,152 @@ impl Slots {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a slot, and hands back the handle of the new one
+    ///
+    /// Takes a `SlotData` and answers an `AddResult`, whose `created` is the
+    /// `Slot` the document just minted. The subject comes off the value:
+    /// `AddNewSlot` takes it beside the slot payload, and the value is where a
+    /// script has already written it down. The new slot lands last among that
+    /// subject's slots, which is where the application puts one too.
+    ///
+    /// ```python
+    /// doc.slots.add(collomatique.SlotData(
+    ///     maths, snape, collomatique.Weekday.THURSDAY, datetime.time(14, 0)))
+    /// ```
+    ///
+    /// Three of the family's four model refusals are reachable here, and each
+    /// arrives as a `SlotsError`: a subject that runs no interrogations has no
+    /// colle for a slot to carry, a teacher must be declared in the subject
+    /// they are given a slot in, and a colle that would run past midnight is
+    /// refused rather than spilling into the next day. All three are statements
+    /// about the document rather than about the value, which is why
+    /// [crate::data::SlotData] leaves them to the write.
+    ///
+    /// A new slot holds no colle and is related to nothing, so there is nothing
+    /// for the cascade to repair: the answer's `warnings` is empty.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let slot = SlotData::from_py(&self.doc, data)?;
+
+        crate::results::created::<Slot>(
+            py,
+            &self.doc,
+            UpdateOp::Slots(SlotsUpdateOp::AddNewSlot(slot.subject_id, slot)),
+            |new_id| match new_id {
+                NewId::SlotId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a slot whole, its subject excepted
+    ///
+    /// The op carries the whole value, so this replaces every other field at
+    /// once: what the `SlotData` says is what the slot becomes, the teacher, the
+    /// day, the time, the room, the pattern and the cost together. The id stays,
+    /// the position stays, and so does every handle naming it.
+    ///
+    /// The subject is the one field the op cannot move, and the mirror says so
+    /// rather than discarding it: a value naming a different subject than the
+    /// slot's own is a `ValueError`. What a script means by that is a slot in
+    /// the other subject, which is an `add` and a `remove`. A read-modify-write
+    /// never meets the refusal, since `to_data()` fills the field with the
+    /// slot's own subject.
+    ///
+    /// Putting the slot on a pattern that switches a week off is a write like
+    /// any other, and the cascade repairs what it broke: the slot no longer runs
+    /// on that week, so the colles already written there go, and the warnings
+    /// say so.
+    ///
+    /// The slot is resolved before the value is read, so a call that is wrong
+    /// about both says which slot it could not find rather than what was wrong
+    /// with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<Slot>(&self.doc, key)?;
+
+        // Read here rather than after the value: the argument convention has
+        // just found the slot and nothing has called into python since, so the
+        // slot is still there. `from_py` below runs python code — a dataclass is
+        // a python object — and the document could be written to under it.
+        let subject_id = self
+            .with_data(py, |data| {
+                data.params.slots.find_slot(id).map(|slot| slot.subject_id)
+            })
+            .expect("the argument convention has just found this slot");
+
+        let slot = SlotData::from_py(&self.doc, data)?;
+        if slot.subject_id != subject_id {
+            return Err(PyValueError::new_err(format!(
+                "a slot cannot change subject: this one is {}'s, and that SlotData names {}. \
+                 Add a slot to the other subject and remove this one instead.",
+                SubjectId::text(subject_id),
+                SubjectId::text(slot.subject_id),
+            )));
+        }
+
+        self.write(py, UpdateOp::Slots(SlotsUpdateOp::UpdateSlot(id, slot)))
+    }
+
+    /// Removes a slot
+    ///
+    /// The slot goes and what stood in it goes with it: the colloscope cells
+    /// written on it, since there is no slot left to hold those colles, and the
+    /// slot pairing rules that related it to another slot, since a rule with one
+    /// end missing relates nothing. The `OpResult` carries every repair. Handles
+    /// naming the slot go stale, and so do the ones naming the rules that went.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Slot>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Slots(SlotsUpdateOp::DeleteSlot(id)))
+    }
+
+    /// Moves a slot one place up its subject's list
+    ///
+    /// The position is the one inside the subject — the only order the model
+    /// keeps for slots — so this swaps the slot with the one before it there,
+    /// and `doc.slots` walks the two in the new order afterwards. Nothing else
+    /// moves: a position is display order, and no colle, rule or reference reads
+    /// it.
+    ///
+    /// A slot already first has nowhere to go, and that is a `SlotsError` rather
+    /// than a call that quietly did nothing.
+    fn move_up(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Slot>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Slots(SlotsUpdateOp::MoveSlotUp(id)))
+    }
+
+    /// Moves a slot one place down its subject's list
+    ///
+    /// The twin of [Slots::move_up], and it refuses in the same way: a slot
+    /// already last has nowhere to go, and says so with a `SlotsError`.
+    fn move_down(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<Slot>(&self.doc, key)?;
+
+        self.write(py, UpdateOp::Slots(SlotsUpdateOp::MoveSlotDown(id)))
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.Slots count={}>", self.__len__(py))
+    }
+}
+
+impl Slots {
+    /// Writes through the document the view came from
+    ///
+    /// The four mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

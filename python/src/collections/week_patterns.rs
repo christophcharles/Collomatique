@@ -8,17 +8,42 @@
 //! Whether a week really carries interrogations is not a pattern's answer alone:
 //! the week has a flag of its own. The two are merged by the [Document]'s own
 //! `is_week_active`, which is where a script asks the question.
+//!
+//! Written through `add`, `update` and `remove`. Two things follow a pattern —
+//! a slot, to know which weeks it runs on, and an incompatibility, to know
+//! which weeks it applies on — and both hold it in a field whose empty value is
+//! a legal one meaning « toutes les semaines ». So removing a pattern does not
+//! take them with it: the cascade clears the reference, and the slot and the
+//! incompatibility survive, running every week from then on. Each of those
+//! repairs comes back on the `OpResult`, which is the only account a script
+//! gets of a slot that has just changed meaning.
+//!
+//! The `update` cascades the other way about. Excluding a week from a pattern
+//! makes interrogations impossible on that week for every slot following it, so
+//! the colles already written there contradict the new pattern and the cascade
+//! clears exactly those cells.
+//!
+//! The family keeps no refusal for the model. `WeekPatternsUpdateOp` can object
+//! to two things — a pattern id the document does not hold, and an excluded
+//! week that names nothing — and both are caught on this side, where the
+//! message can say which argument was wrong: a dead pattern is the argument
+//! convention's business ([crate::handles::argument]), and a dead week is the
+//! value boundary's ([crate::data::WeekPatternData]). So nothing here raises
+//! `WeekPatternsError`.
 
 use pyo3::prelude::*;
 use pyo3::types::{PyAny, PyFrozenSet, PyTuple};
 
-use collomatique_state_colloscopes::InnerData;
+use collomatique_ops::{UpdateOp, WeekPatternsUpdateOp};
 use collomatique_state_colloscopes::WeekPatternId as RawWeekPatternId;
+use collomatique_state_colloscopes::{InnerData, NewId};
 
 use crate::Document;
 use crate::collections::weeks::Week;
-use crate::handles::{Handle, handle_iterator, named, no_such, quoted};
+use crate::data::{Value as _, WeekPatternData};
+use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
 use crate::ids::{IdClass, WeekPatternId};
+use crate::results::{AddResult, OpResult};
 
 /// The week patterns of one document, in id order
 ///
@@ -89,8 +114,101 @@ impl WeekPatterns {
         self.resolve(py, key).is_some()
     }
 
+    /// Adds a week pattern, and hands back the handle of the new one
+    ///
+    /// Takes a `WeekPatternData` — the whole of what a pattern is, since the
+    /// entity and the op payload are the same type here — and answers an
+    /// `AddResult`, whose `created` is the `WeekPattern` the document just
+    /// minted.
+    ///
+    /// ```python
+    /// doc.week_patterns.add(collomatique.WeekPatternData(
+    ///     "Semaines paires", excluded_weeks={first_week}))
+    /// ```
+    ///
+    /// A new pattern is followed by nothing — a slot picks one up afterwards —
+    /// so there is nothing for the cascade to repair: the answer's `warnings`
+    /// is empty, whatever the pattern switches off.
+    fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
+        // Extracted before the mutable borrow, never inside it: a value naming
+        // an entity is resolved against this document, which borrows it to ask
+        // (`docs/python/new_api_design.md` §5).
+        let pattern = WeekPatternData::from_py(&self.doc, data)?;
+
+        crate::results::created::<WeekPattern>(
+            py,
+            &self.doc,
+            UpdateOp::WeekPatterns(WeekPatternsUpdateOp::AddNewWeekPattern(pattern)),
+            |new_id| match new_id {
+                NewId::WeekPatternId(id) => Some(id),
+                _ => None,
+            },
+        )
+    }
+
+    /// Rewrites a week pattern whole
+    ///
+    /// The op carries the whole value, so this replaces both fields at once:
+    /// what the `WeekPatternData` says is what the pattern becomes, the name and
+    /// the excluded weeks together. The id stays, and so does every handle
+    /// naming it — and so does every slot following it, which is the point of
+    /// rewriting rather than replacing.
+    ///
+    /// Excluding a week is a write like any other, and the cascade repairs what
+    /// it broke: a slot following the pattern holds no interrogation on a week
+    /// the pattern switches off, so the colles already written in those cells
+    /// go, and the warnings say so. Switching a week back on breaks nothing —
+    /// an empty cell is what a week that never ran looks like.
+    ///
+    /// The pattern is resolved before the value is read, so a call that is wrong
+    /// about both says which pattern it could not find rather than what was
+    /// wrong with a value meant for nothing.
+    fn update(
+        &self,
+        py: Python<'_>,
+        key: &Bound<'_, PyAny>,
+        data: &Bound<'_, PyAny>,
+    ) -> PyResult<OpResult> {
+        let id = argument::<WeekPattern>(&self.doc, key)?;
+        let pattern = WeekPatternData::from_py(&self.doc, data)?;
+
+        self.write(
+            py,
+            UpdateOp::WeekPatterns(WeekPatternsUpdateOp::UpdateWeekPattern(id, pattern)),
+        )
+    }
+
+    /// Removes a week pattern
+    ///
+    /// What followed the pattern lets go of it and stays: a slot that named it
+    /// now runs every week, and so does an incompatibility that named it, since
+    /// « pas de modèle » is a legal value for both. Nothing is removed but the
+    /// pattern itself, so no handle but the ones naming it goes stale — and the
+    /// `OpResult` carries one repair per site, which is where a script reads
+    /// what has just changed meaning.
+    fn remove(&self, py: Python<'_>, key: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let id = argument::<WeekPattern>(&self.doc, key)?;
+
+        self.write(
+            py,
+            UpdateOp::WeekPatterns(WeekPatternsUpdateOp::DeleteWeekPattern(id)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.WeekPatterns count={}>", self.__len__(py))
+    }
+}
+
+impl WeekPatterns {
+    /// Writes through the document the view came from
+    ///
+    /// The two mutators that create nothing end here. The creating one ends in
+    /// [crate::results::created], which takes the same borrow and keeps the id
+    /// the op issued as well.
+    fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let mut doc = self.doc.borrow_mut(py);
+        doc.update(py, op)
     }
 }
 

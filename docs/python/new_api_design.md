@@ -17,7 +17,7 @@ The requirements come from `docs/todos/todo_python_api.md`:
 ## 1. Architecture: a library first
 
 `collomatique` becomes a real importable Python module. The script API does not
-depend on a running GUI. There are two contexts, one API:
+depend on a running GUI. There are three contexts, one API:
 
 - **Standalone**: a plain Python interpreter imports the module.
 
@@ -55,15 +55,33 @@ depend on a running GUI. There are two contexts, one API:
 
   Getting the right document in both contexts is §9.1; writing it back is §9.2.
 
+- **From the command line**: the collomatique binary runs a script itself, with no
+  window and no GUI initialization at all.
+
+  ```
+  collomatique --python-file import.py
+  collomatique --python 'import collomatique as clm; print(clm.load("2026.collomatique"))'
+  ```
+
+  This is the standalone context, reached without packaging the wheel: nothing is
+  hosted, so `current_document()` is `None` and a script works on the files it names
+  itself. What it adds is that the interpreter is running *inside* a collomatique
+  binary, which is therefore an engine a solve can re-execute — the second rung of
+  §10.3. `--python-no-engine` withholds it, which is what lets a script, or a test,
+  reach the rungs below.
+
 The embedded interpreter stops being the API's foundation and becomes *a runner*.
 
-**Packaging.** The Rust crate builds both as an rlib (linked into the collomatique
-binary, module registered via `append_to_inittab` — the hosted path needs **no**
-packaging or nix changes) and as a cdylib for a wheel (maturin), which a Python
-environment must have on `sys.path` for standalone use. The nix wiring for the
-standalone environment (a `python3.withPackages` with the built module, available in
-the dev shell) is separate work, and only gates standalone use — the whole API can be
-implemented and used hosted-first.
+**Packaging.** Done. The Rust crate builds both as an rlib (linked into the
+collomatique binary, module registered via `append_to_inittab` — the hosted path
+needed **no** packaging or nix changes) and as a cdylib for a wheel, which maturin
+builds from `python/pyproject.toml` and which a Python environment must have on
+`sys.path` for standalone use. On the nix side `pkgs/nix/collomatique-python.nix` is
+the module as a member of an interpreter's package set, and `pkgs/nix/python-env.nix`
+an interpreter with it already in; the flake exposes both. The wheel is the `.so` and
+nothing beside it — the value dataclasses travel inside it (§12) — and it is built
+against a particular collomatique, which it remembers as the last engine rung of
+§10.3.
 
 **No UI framework.** The five RPC dialog primitives of the old API are not part of the
 new one: nothing in the API talks to the GUI over RPC to draw something. Scripts that
@@ -183,10 +201,12 @@ Consistency *of the public API* is the rule:
   not mechanical, and this list settles it),
   `ExportConfigData` (and its sub-configs), `ColloscopeData`, `DocumentData`.
 - Copy-out: `handle.to_data()` returns the matching `*Data`.
-- Collection methods: `add(data) -> handle`, `update(id_or_handle, data)`,
+- Collection methods: `add(data)`, `update(id_or_handle, data)`,
   `remove(id_or_handle)` for entities; `set_*` for cells, toggles and singleton
   configs (`set_period_status`, `set_interrogation`, `set_global_limits`);
-  `move_up`/`move_down` where user-visible order exists.
+  `move_up`/`move_down` where user-visible order exists. Every mutator answers
+  an `OpResult`; an `add` answers an `AddResult`, the subclass that also
+  carries the created handle on `.created` (§5).
 - Absent optional text is `None`, never `""`. The boundary rejects empty strings
   where the model requires non-empty (`tel`, `email`, week annotations, group
   names) instead of silently conflating them. A *boundary* rule, not a dataclass
@@ -298,7 +318,7 @@ colloscope, export config).
 | Incompatibilities (3) | `doc.incompats.add/update/remove` |
 | Pairings (3) | `doc.pairings.add/update/remove` |
 | SlotPairings (3) | `doc.slot_pairings.add/update/remove` |
-| GroupLists (6) | `doc.group_lists.add/update/remove`, `.set_association(p, subj, gl_or_None)`, `.duplicate_previous_period(p)`, `.add_generated(entries)` (solver landing) |
+| GroupLists (5) | `doc.group_lists.add/update/remove`, `.set_association(p, subj, gl_or_None)`, `.duplicate_previous_period(p)` |
 | Settings (3) | `doc.settings.set_global_limits(LimitsData)`, `.set_student_limits(student, LimitsData)`, `.remove_student_limits(student)` |
 | Balancing (3) | `doc.balancing.set_global(BalancingData)`, `.set_subject(subj, BalancingData)`, `.remove_subject(subj)` |
 | Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (`InstallColloscope`, §11.1) |
@@ -310,12 +330,19 @@ door (§8) already cover everything.
 
 ### Warnings
 
-Every mutator returns an `OpResult`:
+Every mutator returns an `OpResult`; an `add` returns an `AddResult`, the
+subclass that also carries the created entity's **handle**. Different answers
+are different types, structured the same: a write that creates nothing has no
+id field holding `None`, and `isinstance(r, OpResult)` holds for both, so code
+that only reads warnings treats them alike. A handle and not an id, for §4's
+own reason — it is strictly more useful, and the id is one attribute away.
 
 ```python
-r = doc.teachers.remove(tid)
-r.new_id        # for add-type ops, else None
+r = doc.teachers.remove(tid)     # OpResult
 r.warnings      # list[Warning] — the cascade repairs that were applied
+
+r = doc.students.add(d)          # AddResult
+r.created       # the new Student handle
 ```
 
 A `Warning` carries the structured `Fix` information and the rendered French text
@@ -386,6 +413,13 @@ worker-killing `panic!`s:
   carrying the structured error data. The mapping is generated structurally from
   the (serde-able) `UpdateError` type, not matched arm by arm — a new Rust error
   variant must become a new Python-visible case, never a panic.
+- `UpdateError` itself, unparameterized, for the coarse door: what
+  `replace_all` was refused over is the whole document and not one family's
+  business, so it raises the base class, carrying the model's own sentence —
+  which names every invariant the tree broke, not just the first (§8). Message
+  only, and deliberately: a structured payload like the families' can be added
+  if scripts turn out to want one, and an alpha scripting surface is a place to
+  find that out.
 - `StaleHandleError` for access through a dead handle, `ValueError`-family
   conversion errors for invalid value contents (empty strings, bad ranges, sealed
   constructor violations such as a pairing rule whose antecedent equals its
@@ -393,14 +427,20 @@ worker-killing `panic!`s:
 - Document-plumbing errors (§9): `NoDocument` (nothing to open), `Cancelled` (the
   user dismissed a dialog), `DialogUnavailable` (a dialog asked for on a machine that
   cannot show one, §9.3), `NotHosted` (a host-only call made standalone),
-  `NoOrigin` (`save()` with nowhere to write), `IdCeilingExceeded` (a save the file
-  format cannot represent), `CaveatedOverwrite` (a bare `save()` back over a file that
-  was loaded with caveats). Both of the last two carry an instruction rather than just
+  `NoOrigin` (`save()` with nowhere to write), `ExportError` (an export could not be
+  produced or written — a workbook that could not be built and a file that could not
+  be written arrive alike, since to a script they mean the same thing, §9.4),
+  `IdCeilingExceeded` (a save the file format cannot represent), `CaveatedOverwrite`
+  (a bare `save()` back over a file that was loaded with caveats). Both of the last two carry an instruction rather than just
   a diagnosis: `IdCeilingExceeded` names `compacted()` as the way out (§9.5), and
   `CaveatedOverwrite` lists what was lost and names `ignore_caveats=True` (§9.2). Both
   are `SaveError`s, so a script that only cares that the write failed catches one
   thing. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
   tracks how it was produced.
+- `ModelBuildError` for a colloscope model the constraint builder refuses to
+  build (`doc.build_colloscope_model`, §10.2), carrying the builder's own
+  sentence. It is a build failure and not an export failure, which is what lets
+  `model.export_mps` raise `ExportError` over the file alone.
 - `NothingToUndo` for `doc.undo()` or `doc.redo()` with nothing left in that
   direction (§5). One class for both, because it is one question — the history has
   another step that way, or it has not — and a script that wants to ask rather than
@@ -436,16 +476,31 @@ doc.replace_all(tree, "Rebuilt from scratch")   # one GlobalUpdate, one undo slo
 an invalid tree raises with the invariant diagnostics. `DocumentData` is built from
 the same `*Data` dataclasses, so the two interfaces share one vocabulary.
 
+The surface it landed with (`4c3ba5eb`): `label` is optional and defaults to
+« Mise à jour globale », the name the application's own global updates carry;
+the answer is an `OpResult` whose `warnings` is always empty, because a global
+update lands as given or is refused whole and so has nothing to repair; and,
+being an ordinary write, it folds into an open `doc.transaction(...)` like
+everything else. A refused tree changes nothing at all — the document is left
+bit-identical — and raises the base `UpdateError`, whose message itemizes
+*every* invariant the tree broke rather than stopping at the first, so a script
+fixing its tree does not do it one round trip at a time (§6).
+
 `snapshot()` is built — it landed with the values (§13.3), because it is a pure
 read and because it is what forces the values to be entity-complete (§2). The
 orders are carried by the containers themselves (dicts keep insertion order),
 and the sparse sections hold the stored rows only. What `replace_all` inherits
 is a question the snapshot never has to answer: a tree names its entities by id,
 and ids have no constructor (§2), so a script can rename, delete and rewire a
-snapshot, but cannot *add* an entity to one. Whether ids gain a document-scoped
-minting call, or a tree may key a new entry by something that means "give it a
-fresh id", or `replace_all` is simply the door for transformations that add
-nothing — step 4 decides; handing trees out forecloses none of the three.
+snapshot, but cannot *add* an entity to one. The three ways out were a
+document-scoped minting call on ids, a tree keying a new entry by something that
+means "give it a fresh id", and `replace_all` simply being the door for
+transformations that add nothing. The third is the one that landed: creating an
+entity is the incremental ops' business and stays theirs. Nothing enforces that
+on top of what is already there — every id in a tree is resolved against the
+receiving document by the argument convention (§5), and one that names nothing
+in it is refused like any other dead reference, which is exactly the rule. The
+other two remain addable later; choosing this forecloses neither.
 
 ## 9. Documents, dialogs and maintenance operations
 
@@ -506,11 +561,11 @@ cost is that a hosted script which edits and forgets the call does nothing — b
 failure is visible (the GUI says "Aucune modification effectuée"), whereas an implicit
 send fails by pushing something the author did not mean to push.
 
-The engine's automatic send is not removed for this: it stays until `python-old/` goes,
-and goes with it (§13, step 6). It fires on the old module's own shared `AppState`
-having been modified, which a script using this module never touches, so it cannot fire
-for a new-API script — §11 works this through. The two live side by side in the
-meantime, each serving its own module's scripts.
+The engine's automatic send went with `python-old/` (§13, step 6). It fired on the old
+module's own shared `AppState` having been modified, which a script using this module
+never touches, so it could never fire for a new-API script — §11 works this through —
+and the two lived side by side, each serving its own module's scripts, until the old
+crate left.
 
 Sending is a **module-level function taking any document**, because its subject is the
 host slot, not the document:
@@ -639,9 +694,17 @@ The downsides, stated plainly:
 - `doc.export_xlsx(path, config=None)` — `None` uses the document's export config.
   The `ExportConfig → xlsx::Config` conversion lives in the `xlsx` crate (§11.2);
   no shared crate is needed, since `xlsx` already depends on `state-colloscopes`.
-- `doc.export_mps(path, config)` — writes the built ILP problem for a given solve
-  config, the GUI's advanced-tools export. `config` is the `ColloscopeSolveConfig`
-  of §10, and the ILP model itself never becomes a Python object (§10).
+- MPS — the GUI's advanced-tools export, written through the model object of §10:
+  `model = doc.build_colloscope_model(config)`, then `model.export_mps(path)`.
+  It writes the full problem, objective included; `checker=True` writes the
+  constraints-only checker problem the same build already carries (§10.2). The
+  GUI writes the *base* model, with no config at all; the Python export writes
+  the configured one, so the file matches the problem a solve would actually
+  attack. Failures raise `ExportError`, as for xlsx — and only file failures
+  reach it, since a model that cannot be built already failed at
+  `build_colloscope_model` with `ModelBuildError` (§6). There is no
+  `doc.export_mps` sugar: an export needs a config, a config produces a model,
+  and one door is enough.
 
 ### 9.5 Compaction and the id ceiling
 
@@ -706,49 +769,230 @@ by the origin rule.
 
 ## 10. The solver
 
-Designed now, implemented as the last milestone. All configuration types are value
+Designed first, implemented last (§13.5). All configuration types are value
 dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
 
 - `ConductorStrategy` — sub-configs `DefaultConfig`, `WarmStartConfig`,
   `IncrementalConfig`, `FuzzyConfig`; classmethods `ConductorStrategy.search()`
   and `.optimize()` (the two GUI presets); `.warnings()` returns the preflight
-  `ConductorWarning`s.
-- Colloscope solve: `ColloscopeSolveConfig` (per-period recompute flags, per-group-
-  list recompute, anchor weights) mirroring `constraints_colloscopes::SolveConfig`.
-- Group-list generation: `GenerationRequest` (rebuild set, kept lists, canonical
-  range) and `ObjectiveWeights`.
+  `ConductorWarning`s as a tuple, in the model's own order — sorted by
+  declaration, which is the order the solve dialog lists them in. Their French
+  sentences are `collomatique_ui_text::solver::conductor_warning_text`, the same
+  function the solve dialog renders its list from, so `str(warning)` is what the
+  user would have read.
 
-**The ILP model is never a Python object.** No handle, no accessor, no introspection.
-The only thing that crosses is `doc.export_mps(path, config)` (§9.4), which writes a
-file. Exposing the problem would pin the internal variable and constraint naming of
+  Each `*_config` field both **enables and tunes** its substrategy: `None`
+  switches it off, an object switches it on. So `ConductorStrategy()` — warm
+  start alone, one worker — is the application's « Recherche simple », and the
+  two classmethods answer plain instances built on the Rust side, which is what
+  makes drift against the application's own presets impossible.
+
+  This is the one value family with no document behind it: a strategy names no
+  entity, so it is read through a marker struct with inherent methods rather than
+  through the `Value` trait of §2, whose `from_py` wants a document to resolve
+  against. Its boundary checks are its own two: a time limit is a whole number of
+  seconds and at least one, `None` being how "no limit" is said — zero is refused
+  rather than read as no limit — and a sigma or a tolerance must be finite and
+  not negative, zero allowed.
+- Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
+  `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
+
+**Group-list generation stays out of the API.** The feature itself is not settled
+yet, so there is no shape to mirror and the API does not invent one: no
+generation request, no objective weights, no `doc.generate_group_lists`, and no
+`group_lists.add_generated` landing door. Scripts get the colloscope solve, and
+nothing else of the solver. When the feature settles, its API is designed against
+whatever it has become by then.
+
+### 10.1 The colloscope solve config
+
+`ColloscopeSolveConfig` says which periods and which group lists a solve
+recomputes, and what a dropped constraint or a previous value is worth as an
+objective term. It mirrors `constraints_colloscopes::SolveConfig`, which is what
+the GUI's own solve dialog fills in.
+
+```python
+@dataclass
+class PeriodSolveConfig:
+    recompute: bool = True             # solve this period again
+    use_current_values: bool = False   # start from what the document holds
+
+@dataclass
+class GroupListSolveConfig:
+    recompute: bool = True
+    previous_values_as_objective: bool = False   # stay close to the current list
+
+@dataclass
+class ColloscopeSolveConfig:
+    periods: dict[Period | PeriodId, PeriodSolveConfig] = field(default_factory=dict)
+    group_lists: dict[GroupList | GroupListId, GroupListSolveConfig] = field(default_factory=dict)
+    objectify_cross_fixed_period: float | None = 1000.0
+    l1_anchor_weight: float = 1000.0
+```
+
+- **Names.** This family does not take the `*Data` suffix of §3. That suffix
+  means "the detached value of an entity", and these are call arguments. Rust's
+  internal `PeriodSolveData` / `GroupListSolveData` are not public-API precedent
+  either (§3).
+- **The group-list config is flat.** Rust nests it
+  (`Option<GroupListRecompute>`); Python gets the two booleans the GUI's own
+  dialog row holds. The one combination the nesting cannot express —
+  `recompute=False, previous_values_as_objective=True` — is refused at
+  extraction, naming the list: nothing is recomputed, so there is nothing for
+  the anchor to hold on to.
+- **A missing entry means the default.** A period or a group list absent from
+  the dicts is recomputed from scratch, so `ColloscopeSolveConfig()` is the
+  "recompute everything" config — what a script that does not care wants. The
+  dict keys are handles or ids like every other mapping argument (§2), with the
+  same refusal of dead, foreign and twice-named keys.
+- **A prefilled group list in `group_lists` is refused**, loudly, naming the
+  list: it has no solve to configure. Rust's `sanitize` drops such an entry
+  instead, but that runs before the GUI shows its dialog, to carry an earlier
+  choice forward sensibly. A Python config is written at the moment of the call,
+  so an entry like that is a mistake in the script and is said out loud.
+- **The weights are validated at the boundary**: non-finite or negative is
+  refused, zero is allowed. `objectify_cross_fixed_period=None` means the cross
+  constraints of a fixed period are dropped rather than paid for.
+- **The config is never stored on the document.** It is an argument, like the
+  GUI's dialog result, and every call takes its own.
+
+### 10.2 The model object
+
+The config is the common gate to both remaining doors — writing the problem out
+and solving it. Both take the same road: build the model once, then use it.
+
+```python
+model = doc.build_colloscope_model(config, on_log=...)   # config is required
+model.export_mps("problem.mps")                          # §9.4
+model.export_mps("checker.mps", checker=True)
+run = model.solve(strategy, on_progress=..., on_log=...)
+```
+
+- `config` is **required**. The GUI never solves without passing its dialog, and
+  a `None` here would read like `export_xlsx`'s `None`, which means something
+  else entirely (the document's own stored export config, §9.4). A script that
+  wants everything recomputed writes `ColloscopeSolveConfig()` and says so.
+- `ColloscopeModel` is **opaque**: no accessors, nothing to walk. Its `repr`
+  carries the two counts the GUI's advanced-tools panel shows
+  (`<ColloscopeModel: 12345 variables, 6789 constraints>`) and no names.
+- It is **detached**, like a value (§2): a snapshot taken at build time. Editing
+  the document afterwards neither changes it nor invalidates it — there is no
+  staleness question to ask. It is not a handle.
+- A model that cannot be built raises `ModelBuildError` (§6). That failure
+  belongs to the build, which leaves `export_mps` with nothing to fail over but
+  the file itself.
+- `on_log` is keyword-only, takes one `str` per line, and `None` discards: the
+  log the GUI's loading dialog shows while it builds. There is no `on_progress`
+  on a build — a build has lines, not a proportion; progress is the solver's
+  (below). A callback that raises does not tear the build in half: the build
+  runs to its end, the callback is not called again, and the exception
+  propagates once it returns, with no model produced.
+- **Checker or full is an export-time choice**, not a build-time one. One built
+  model already carries both problems: the real one, and the constraints-only
+  checker with a trivial objective (`ilp-modeler`'s `problem()` and
+  `checker_problem()`). There is no cheaper checker-only build to ask for, so
+  `checker=True` is a flag on the export rather than a second build or a
+  `model.checker()` object.
+
+**The ILP problem is never introspectable.** `ColloscopeModel` is a token for a
+built problem, not a view of one: no variables, no constraints, no accessors.
+Exposing the problem would pin the internal variable and constraint naming of
 `constraints-colloscopes` as public API, so every rename downstream would break
-scripts. The names inside the MPS file are already a de-facto contract through the
-GUI's own export, but that is a diagnostic file for a solver, not an API.
+scripts. The only thing that crosses is the file `export_mps` writes (§9.4). The
+names inside it are already a de-facto contract through the GUI's own export, but
+that is a diagnostic file for a solver, not an API.
+
+### 10.3 The run, its outcome, and the engine
 
 Execution is subprocess-based, reusing `StrategySubprocess::spawn` — the
 battle-tested path, with hard cancellation and no GIL contention. The API is a run
 handle:
 
 ```python
-run = doc.solve_colloscope(config, strategy,
-                           on_progress=..., on_log=...)   # non-blocking
+run = model.solve(strategy, engine=..., on_progress=..., on_log=...)   # non-blocking
 run.progress()          # last known progress (async by design — no waiting)
 run.stop()              # cooperative stop → run finishes with best-so-far
 run.kill()              # hard kill
-outcome = run.wait()    # SolveOutcome: status, objective, bound, result
+outcome = run.wait()    # SolveOutcome: status, objective, bound, colloscope
 colloscope = outcome.colloscope     # a ColloscopeData value, NOT yet applied
 doc.colloscope.install(colloscope)  # lands through ops, one undo slot
 ```
 
-Group lists analogously: `doc.generate_group_lists(request, weights, strategy, ...)`
-→ outcome → `doc.group_lists.add_generated(outcome.entries)`. Mid-solve incumbent
-accept (the GUI's "take best so far") is `run.stop()` + using the outcome.
+Mid-solve incumbent accept (the GUI's "take best so far") is `run.stop()` + using
+the outcome.
+
+- **The run owns the engine process.** Dropping the handle kills it, so a script
+  holds it for as long as the solve should live. Two solves on one model are fine
+  and independent — each starts its own engine.
+- **`wait()` answers once and keeps answering.** A second wait hands back the very
+  same `SolveOutcome` object: a finished run has one outcome, not two. A run that
+  was `kill()`ed has none at all and raises `SolveError`, and so does an engine that
+  exits without reporting one. An exception raised by `on_progress` or `on_log`
+  comes out of `wait()` in place of the outcome, every time it is asked — the rule
+  `build_colloscope_model` already follows for its own log. Both callbacks run on
+  another thread, and neither may call `wait()`.
+- **`stop()` and `kill()` are safe to call late.** Stopping a run that has already
+  finished does nothing, which is the honest answer since the two race by design;
+  killing one twice, or killing one that finished, is fine, so a `finally:` that
+  tidies up need not ask first. Stopping a *killed* run raises: there is no longer
+  an engine to ask.
+- **Nothing is written to the document**, so a solve takes no undo slot. What it
+  produces is a value, and `doc.colloscope.install(...)` is what lands it.
+- **`progress()` answers a `SolveProgress`**, or `None` before the run's first
+  report: the best incumbent's cost and the best proven bound, either of which may
+  be `None` on its own. It is the same pair `SolveOutcome` carries as `objective`
+  and `bound` once the run has finished.
+
+**One verdict, and the interface shows the same one.** `outcome.status` is a
+`SolveStatus` with exactly four values — `OPTIMAL`, `FEASIBLE`, `NO_SOLUTION`,
+`ERROR` — and it is deliberately *not* the status the solver reports about the
+problem it was handed. `collomatique_strategies::SolveStatus` calls a run optimal
+as soon as the conductor holds any incumbent, and never reports `Infeasible` or
+`Error` at all, so a script given the raw word would read a promise nobody made.
+
+The answer to « how did it go » is `collomatique_strategies::verdict`, which reads
+one finished outcome whole: an incumbent with a closed optimality gap is `Optimal`,
+an incumbent alone is `Feasible`, nothing in hand is `NoSolution` — whether the run
+was stopped before it found anything or the problem has no answer, which the
+conductor cannot tell apart either — and a run that broke down is `Error`.
+`NO_SOLUTION` therefore states the fact and not the cause. `ERROR` stays a status
+rather than an exception because such a run may still carry the best colloscope it
+had found by then, and raising would throw it away.
+
+That verdict lives in `strategies` rather than in either front end, and its four
+French sentences live in `collomatique_ui_text::solver::solve_verdict_text` beside
+the warnings'. The solve dialog and `str(outcome.status)` print the same sentence
+about the same run, which is the completeness requirement at the head of this
+document applied to what a user is *told* and not only to what they can do.
 
 **Engine location.** The subprocess mechanism re-executes a collomatique binary with
-`--rpc-engine`. Standalone, the interpreter is `python`, so the engine binary is
-located by: explicit `engine=` parameter > `COLLOMATIQUE_ENGINE` environment
-variable > error. Hosted, the host injects its own executable path; scripts never
-think about it.
+`--rpc-engine`, so a solve has to name one. Four rungs, tried in order, and nothing
+found is a loud `NoEngine` — a subclass of `SolveError` — rather than a guess:
+
+1. the call's own `engine=`, being the most local thing said about this solve;
+2. the engine the runner **injected**, being about this run rather than about the
+   machine;
+3. the `COLLOMATIQUE_ENGINE` environment variable, where an empty value counts as
+   unset;
+4. a default baked in at build time — `COLLOMATIQUE_DEFAULT_ENGINE`, read with
+   `option_env!` — being about the build, the least local thing there is. An empty
+   value counts as unset here too, and a build that named none leaves the rung
+   simply absent.
+
+The second rung is a parameter of `run_python_script`, decided by whoever starts the
+interpreter rather than by the module: a hosted script and a `--python-file` script
+both run inside a collomatique binary, which is therefore an engine, so both call
+sites pass `EngineExe::Current` — `rpc-engine`, which is what the GUI's script
+runner spawns, and the command-line branch of the gtk4 binary itself. A bare
+`python` importing the wheel injects nothing, so a standalone script falls through
+to what its environment or its build says. The last rung is what makes that
+painless where it can be: `pkgs/nix/collomatique-python.nix` sets
+`COLLOMATIQUE_DEFAULT_ENGINE` to the store path of the collomatique the wheel was
+built against, which ends up inside the compiled module — so nix keeps that binary
+alive, and a script run from `pkgs/nix/python-env.nix` solves without naming
+anything. A wheel built anywhere else simply has no fourth rung unless its builder
+sets the variable. `--python-no-engine` (§1) withholds the injection, which is how a
+script — and `gtk4/tests/e2e/` — reaches the rungs below it.
 
 ## 11. Rust-side prerequisites
 
@@ -817,8 +1061,8 @@ nothing here blocks the new crate any more.
    over RPC and `InitMsg` is unchanged. `Process::spawn_pty` also takes an `&OsStr`
    command now, which retired `WorkerSpawnError::NonUtf8ExePath` — a path coming from a
    user's environment is not the same thing as `current_exe()`, and refusing a
-   non-UTF-8 one buys nothing. The `Explicit` arm has no caller yet; the Python solver
-   is the last migration milestone (§13.5).
+   non-UTF-8 one buys nothing. The `Explicit` arm's caller is the module's own engine
+   resolution, which landed with the solver (§10.3, §13.5).
 
 **No hosted-handoff prerequisite.** An earlier draft listed a fifth item: make the
 `RunPythonScript` path of `rpc-engine` stop sending `SetData` at script exit, and have
@@ -826,22 +1070,32 @@ the runner expose the send to the module instead. It is not needed. That send is
 conditioned on the old module's shared `AppState` having been modified (`state.can_undo()`
 in `rpc-engine/src/lib.rs`), and that `Arc<Mutex<AppState>>` is `python-old`'s own
 structure, handed to `run_python_script` as its file state. The new crate has its own
-document and never touches it, so the automatic send cannot fire for a new-API script;
-it disappears with `python-old/` and the `RunPythonScript` glue that feeds it (§13.6).
-The explicit `send_to_host` / `doc.save()` of §9.2 therefore needs nothing removed
-first.
+document and never touches it, so the automatic send could not fire for a new-API
+script; it went with `python-old/`, together with the `AppState` the `RunPythonScript`
+glue built to feed it (§13.6). The explicit `send_to_host` / `doc.save()` of §9.2
+therefore needed nothing removed first.
 
 ## 12. Crate layout
 
-- `python-old/` — the current `python/` crate, renamed; Python module name
-  `collomatique_old`. Frozen, untouched otherwise.
+- `python-old/` — the old `python/` crate, renamed; Python module name
+  `collomatique_old`. Frozen for the transition, then **removed** once the three
+  contract scripts had been ported (§13, step 6).
 - `python/` — the new API crate, module name `collomatique`. Builds as rlib (for
-  embedding) and cdylib (for the wheel). Ships the value-dataclass `.py` source; in
-  embedded mode the runner materializes it (`PyModule::from_code`) so hosted
-  scripts need no filesystem package. Takes a new `rfd` dependency for §9.3.
-- `python-runner/` — the executor: interpreter lifecycle, inittab registration of
-  *both* modules during the transition, the document handoff to hosted scripts.
-  `rpc-engine` depends on this crate only.
+  embedding) and cdylib (for the wheel, whose maturin manifest is
+  `python/pyproject.toml`). Ships the value-dataclass `.py` source, baked in with
+  `include_str!` and materialized by the crate's own `data::register`
+  (`PyModule::from_code`) during module init — which is why neither a hosted script
+  nor a wheel needs a filesystem package. Takes a new `rfd` dependency for §9.3.
+  It is also the one crate that does not inherit the workspace version: maturin
+  reads its `[package] version` and wants PEP 440, which allows nothing numeric
+  after a prerelease and so refuses `0.1.0-alpha.1.99`. It therefore writes that
+  version out truncated, `0.1.0-alpha.1`, which means an alpha bump touches two
+  files — the pre-commit hook truncates the workspace version itself and refuses a
+  commit where the two disagree. Nothing user-facing is affected: `__version__` and
+  every document header still come from `collomatique_settings::current_version()`.
+- `python-runner/` — the executor: interpreter lifecycle, inittab registration (of
+  *both* modules during the transition, of `collomatique` alone since), the document
+  handoff to hosted scripts. `rpc-engine` depends on this crate only.
 
 ## 13. Migration
 
@@ -857,25 +1111,82 @@ first.
    `git show 04888a59:docs/python/handle_api.md`; the refinements it recorded
    over this document's §2 and §4 are folded in above.
 3. Write surface: ops mirror, `OpResult` warnings, transactions, undo. Value
-   dataclasses land here — **done except the ops mirror**: transactions and undo
-   came first (§5's stack), then the value dataclasses in eleven commits plus
-   two review follow-ups, the last being the double-naming refusal (`3ae29f8d`).
-   The design the values were built from, class by class, is in
+   dataclasses land here — **done**: transactions and undo came first (§5's
+   stack), then the value dataclasses in eleven commits plus two review
+   follow-ups, the last being the double-naming refusal (`3ae29f8d`). The design
+   the values were built from, class by class, is in
    `git show 3ae29f8d:docs/python/values.md`; the refinements it recorded over
    this document's §2, §3 and §5 are folded in above, and `doc.snapshot()` came
-   with it (§8). The ops mirror that remains is a mapping exercise with no
-   vocabulary left to invent.
+   with it (§8). The ops mirror followed in eighteen commits — the `OpResult`
+   true-up, the typed errors of §6, the structured warnings, then the fifteen
+   families leaves inward, the last being the period and week mutators
+   (`c8133fa9`). The split it was built from is
+   `git show c8133fa9:docs/python/ops_migration.md`; of the two solver landing
+   doors it gates out, `colloscope.install` lands with step 5 below and
+   `group_lists.add_generated` stays out of the API for as long as group-list
+   generation itself is unsettled (§10).
 4. Coarse door (`replace_all` — `snapshot` landed with the values, §8), then the
-   document plumbing of §9:
-   `default_document`, `save`/`send_to_host`, dialogs, export and maintenance (with
-   the Rust prerequisites of §11 as they are needed).
-5. Solver (last), including the engine-location mechanism.
-6. Migrate the three contract scripts to the new API (user-validated) — they gain an
-   explicit `doc.save()`. Retire `python-old/` and its registration, and with it the
-   engine's automatic send-back (§11).
+   document plumbing of §9 — **done**. The plumbing came
+   early rather than last: `load`/`save` with the caveat guard, the `Origin`
+   rule and `compacted()` landed right after the crate split
+   (`12f9d959`…`20e4a7ca`), the hosted handoff in `8fd457f8`, the dialogs in
+   `6bc64975` and `f5ddc152`, and `default_document` in `8138f50d`. The rest
+   waited for the ops mirror: `replace_all` landed with the §8 decision it was
+   holding open (`4c3ba5eb`), and `doc.export_xlsx` with the `ExportError` of §6
+   (`b9dcd6a7`). The MPS export came last of all, since it waited for the
+   `ColloscopeSolveConfig` of §10 rather than fronting it: the config value
+   itself (`a0330d84`, §10.1), then the build door
+   `doc.build_colloscope_model` with its opaque `ColloscopeModel` and
+   `ModelBuildError` (`c17507ed`, §10.2), and `model.export_mps` on top of the
+   two of them (§9.4). The build door is shared with step 5, which hangs
+   `model.solve` on the same object.
+5. Solver (last), including the engine-location mechanism — **done**, in eleven
+   commits, the last being the end-to-end tests (`8f3ff6f4`). The design it was
+   built from, door by door, is
+   `git show 5d19b15a:docs/python/solver.md`; the refinements it settled over
+   this document's §1 and §10 are folded in above.
 
-Standalone packaging (wheel + nix environment) can land any time after step 3; no
-step depends on it.
+   It added `model.solve` to the `ColloscopeModel` of step 4 — the config and the
+   build were already there — plus the run handle and the `SolveOutcome` of §10.3,
+   and with them the landing door the ops mirror had gated out,
+   `colloscope.install`, whose payload only exists once a solve has produced one.
+   Group-list generation stayed out, as §10 says.
+
+   The order was: the conductor warnings' French sentences into a new `ui-text`
+   crate, shared with the solve dialog (`d6d80d5c`); `colloscope.install`
+   (`b32621b8`); the strategy value family with its two presets (`38666fd8`) and
+   its preflight `warnings()` (`d880ae70`); the engine resolution with its
+   `SolveError`/`NoEngine` vocabulary (`717680df`); the parameters a built model
+   has to keep for a solution to be read back out of it (`8fd7b9d3`); then
+   `model.solve` itself, with the run handle and the outcome (`6ea8a6d5`).
+
+   Three things the plan had not foreseen. The gtk4 binary grew `--python`,
+   `--python-file` and `--python-no-engine` (`efb576ab`, §1): without them nothing
+   could run a new-API script outside the GUI, and the engine rungs could not be
+   told apart. The verdict a finished solve earns moved out of the two front ends
+   into `strategies`, and its sentences into `ui-text` (`1f4d9aae`, `a8678c4a`,
+   §10.3) — the solve dialog and the module had each been computing one, and the
+   module's was three states too wide. And the tests became a new end-to-end
+   target, `gtk4/tests/e2e.rs` (`8f3ff6f4`), which spawns the built binary once
+   per test: which engine a solve re-executes is a property of the *process* a
+   script runs in, and one interpreter cannot be in three of them at once.
+6. Migrate the three contract scripts to the new API (user-validated) — they gain an
+   explicit `doc.save()`. The three ports are **done**: the old-API versions moved
+   to `scripts/old_api/` (`e304580b`), and the new ones landed beside them in
+   `scripts/` — the Pronote web import (`aee006b1`), the custom xlsx export
+   (`0479324e`) and the full draft import (`321acd1c`). The user ran all three on
+   real documents: the web import and the full import write byte-identical files
+   on the old and the new API, and the xlsx export was checked visually. The
+   step is closed: `python-old/` and its registration are gone — the crate, its
+   workspace entry, its inittab line and the `file_state` argument of
+   `run_python_script` — and with them the old-API copies under `scripts/old_api/`
+   and the engine's automatic send-back (§11).
+
+Standalone packaging (wheel + nix environment) depended on no step and landed after
+this one: the baked engine rung (`a7a15da5`), the cdylib and the maturin manifest
+(`22b1f79f`), and the nix packaging (`1a0c4bc6`). The user built both nix entry
+points and imported the module out of the resulting interpreter; a solve through the
+baked rung has not been run.
 
 ## 14. Examples
 
@@ -895,12 +1206,12 @@ with doc.transaction("Import CSV"):
             duration=60,
             periodicity=clm.EveryNWeeks(2),
         ),
-    ))
+    )).created
     t = doc.teachers.add(clm.TeacherData("Emmy", "Noether",
-                                         subjects={maths.id}))
+                                         subjects={maths.id})).created
     for row in rows:
         s = doc.students.add(clm.StudentData(row.firstname, row.surname,
-                                             email=row.email or None))
+                                             email=row.email or None)).created
         doc.assignments.set(period, maths, s, True)
 
 doc.save()      # back to the origin: the host, or the file it came from

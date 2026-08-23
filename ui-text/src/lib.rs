@@ -6,7 +6,10 @@
 //! vocabulary — the entity renderers that moved out of `collomatique_ops`
 //! (whose warning texts are their first caller) and the load-caveat sentences
 //! of [`caveats::caveat_text`], which gtk4's caveat dialog and the python
-//! module both render.
+//! module both render. [`solver::conductor_warning_text`] and
+//! [`solver::solve_verdict_text`] do the same for the sentences the solve
+//! dialog writes about a strategy's configuration and about how a run ended.
 
 pub mod caveats;
 pub mod rendering;
+pub mod solver;

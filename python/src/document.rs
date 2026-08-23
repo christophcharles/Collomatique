@@ -9,7 +9,7 @@ use pyo3::types::PyFrozenSet;
 use collomatique_ops::{Desc, UpdateOp};
 use collomatique_state::SessionStack;
 use collomatique_state::traits::Manager;
-use collomatique_state_colloscopes::Data;
+use collomatique_state_colloscopes::{Data, NewId, Op};
 use collomatique_storage::Caveat;
 
 use crate::collections::{
@@ -19,9 +19,10 @@ use crate::collections::{
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
-    Cancelled, CaveatedOverwrite, Error, IdCeilingExceeded, LoadError, NoDocument, NoOrigin,
-    NothingToUndo, SaveError, UpdateError,
+    Cancelled, CaveatedOverwrite, Error, ExportError, IdCeilingExceeded, LoadError,
+    ModelBuildError, NoDocument, NoOrigin, NothingToUndo, SaveError, UpdateError,
 };
+use crate::model::ColloscopeModel;
 use crate::results::{OpResult, Warning};
 use crate::transaction::Transaction;
 
@@ -229,32 +230,42 @@ impl Document {
     /// that call it: the ops layer holds every write, but the python surface
     /// publishes them one family at a time. The tests use it directly, because
     /// staleness needs a removal the read surface cannot make yet.
+    ///
+    /// A refusal comes back as the exception class of the family that refused
+    /// — a `collomatique.GeneralPlanningError` and its fourteen siblings, all
+    /// under `collomatique.UpdateError` — carrying the op, the case and the
+    /// entities the model named ([crate::errors::refused]).
     pub fn update(&mut self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
+        let (warnings, _created) = self.write(py, op)?;
+
+        Ok(OpResult::new(warnings))
+    }
+
+    /// Applies one composite op, keeping both halves of what it answered
+    ///
+    /// The repairs the cascade made, and the id the op issued when it created
+    /// something. [Document::update] is the door for a mutator that creates
+    /// nothing, and it drops the second half; a creating one goes through
+    /// [crate::results::created], which turns it into the handle its
+    /// `AddResult` carries.
+    pub(crate) fn write(
+        &mut self,
+        py: Python<'_>,
+        op: UpdateOp,
+    ) -> PyResult<(Vec<Py<Warning>>, Option<NewId>)> {
         let result = op
             .dry_apply(&self.state)
-            .map_err(|e| UpdateError::new_err(e.to_string()))?;
+            .map_err(|e| crate::errors::refused(py, &e))?;
 
-        // Rendered here, while `self.state` is still the state the op was
-        // applied to: a warning names material this update may be about to
-        // remove, so the pre-state is the only one it can be read against
+        // Built here, while `self.state` is still the state the op was applied
+        // to: a warning names material this update may be about to remove, so
+        // the pre-state is the only one it can be read against
         // (`ops/src/cascade.rs`).
-        let warnings = result
-            .warnings
-            .iter()
-            .map(|warning| {
-                let text = warning.text(self.state.get_data()).map_err(|e| {
-                    Error::new_err(format!(
-                        "a repair named something the document does not hold ({e}); \
-                         this is a bug in collomatique, not something the script did"
-                    ))
-                })?;
-                Py::new(py, Warning::new(text))
-            })
-            .collect::<PyResult<Vec<_>>>()?;
+        let warnings = crate::results::from_cascade(py, &result.warnings, self.state.get_data())?;
 
         self.state = result.new_state;
 
-        Ok(OpResult::new(warnings))
+        Ok((warnings, result.new_id))
     }
 
     /// Opens a transaction on the document
@@ -647,8 +658,8 @@ impl Document {
     /// tables as dicts and lists whose order is the document's own user order,
     /// the colloscope and the export configuration as values of their own.
     /// The ids in it are the document's, so the tree is a read-modify-write
-    /// starting point — rename, delete, rewire — and step 4's `replace_all`
-    /// will take it back. This milestone only hands trees out.
+    /// starting point — rename, delete, rewire — and `replace_all` takes it
+    /// back.
     ///
     /// A pure read: it borrows the document, walks its data and builds the
     /// tree, so it cannot fail on a document that exists. A script that wants
@@ -662,6 +673,67 @@ impl Document {
         let inner = self.state.get_data().get_inner_data().clone();
 
         crate::data::DocumentData::to_py(py, &inner)
+    }
+
+    /// Puts a whole tree back, as one step
+    ///
+    /// ```python
+    /// tree = doc.snapshot()
+    /// ...                                  # arbitrary transformation
+    /// doc.replace_all(tree, "Rebuilt from scratch")
+    /// ```
+    ///
+    /// The coarse door of `docs/python/new_api_design.md` §8, and the way back
+    /// in for what `snapshot()` hands out: one `GlobalUpdate`, one undo slot,
+    /// whatever the tree changed. `label` names that slot and defaults to
+    /// « Mise à jour globale », the name the application's own global updates
+    /// carry.
+    ///
+    /// A tree can rename, delete and rewire, and it cannot **add**: it names
+    /// its entities by id, every id in it has to be one this document holds —
+    /// an id it does not raises `StaleHandleError`, as everywhere else — and
+    /// ids have no constructor. Creating something is the incremental ops'
+    /// business, and it stays theirs (§8).
+    ///
+    /// A refused tree changes nothing at all: the document is left exactly as
+    /// it was, and the `UpdateError` names every invariant the tree broke, not
+    /// just the first. The realistic case is a reference left dangling — a
+    /// tree that drops a subject but keeps its slots lists every one of those
+    /// slots.
+    ///
+    /// The answer is an `OpResult` whose `warnings` is always empty: unlike an
+    /// incremental op, a global update has nothing to repair. It lands as
+    /// given or it is refused whole.
+    #[pyo3(signature = (tree, label=None))]
+    fn replace_all(
+        slf: Py<Self>,
+        py: Python<'_>,
+        tree: &Bound<'_, PyAny>,
+        label: Option<String>,
+    ) -> PyResult<OpResult> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it: resolving the
+        // ids a tree names borrows the document to ask, and doing that under a
+        // `borrow_mut` is how a nested borrow becomes a `PanicException`
+        // (`docs/python/new_api_design.md` §5).
+        let inner = crate::data::DocumentData::from_py(&slf, tree)?;
+
+        let desc = (
+            collomatique_ops::OpCategory::None,
+            label.unwrap_or_else(|| String::from("Mise à jour globale")),
+        );
+
+        // `apply` and not the `write` funnel: `GlobalUpdate` is not an
+        // `UpdateOp` — it goes in below the ops layer, at the model's own
+        // trust boundary, which is where a whole tree is checked. So there is
+        // no cascade to hand back, and no repairs either.
+        let mut doc = slf.borrow_mut(py);
+        doc.state
+            .apply(Op::GlobalUpdate(inner), desc)
+            .map_err(|e| UpdateError::new_err(e.to_string()))?;
+
+        Ok(OpResult::new(Vec::new()))
     }
 
     /// Groups every write in a block into one undo slot
@@ -923,5 +995,162 @@ impl Document {
 
         std::fs::write(&target, content)
             .map_err(|e| SaveError::new_err(format!("{}: {e}", target.display())))
+    }
+
+    /// Writes the colloscope out as a spreadsheet
+    ///
+    /// ```python
+    /// doc.export_xlsx("colloscope.xlsx")
+    ///
+    /// config = doc.export_config.to_data()
+    /// config.per_group_list_enabled = False
+    /// doc.export_xlsx("colles.xlsx", config)
+    /// ```
+    ///
+    /// The same workbook the application's own export produces, built by the
+    /// same writer: which sheets it holds, how they are coloured and how they
+    /// are laid out on the page all come from an export configuration. With no
+    /// `config`, the document's own is used — the one `doc.export_config`
+    /// reads and its mutators write. With one, that one is used *for this call
+    /// only*: nothing is stored, and the document is not written to at all, so
+    /// an export takes no undo slot.
+    ///
+    /// `config` is an `ExportConfigData`, the tree `doc.export_config.to_data()`
+    /// hands out, so the usual way to build one is to take that tree and change
+    /// what should differ.
+    ///
+    /// This is not `save()`: it writes a spreadsheet for people to read, and
+    /// nothing reads one back. A document is saved with `save()`.
+    ///
+    /// A path that cannot be written, and a workbook that cannot be built,
+    /// both raise `ExportError`.
+    #[pyo3(signature = (path, config=None))]
+    fn export_xlsx(
+        slf: Py<Self>,
+        py: Python<'_>,
+        path: PathBuf,
+        config: Option<&Bound<'_, PyAny>>,
+    ) -> PyResult<()> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it: reading a
+        // python object calls back into python, and doing that under the
+        // document's borrow is how a nested borrow becomes a `PanicException`
+        // (`docs/python/new_api_design.md` §5).
+        let given = match config {
+            Some(config) => Some(crate::data::ExportConfigData::from_py(&slf, config)?),
+            None => None,
+        };
+
+        // Copied out of the borrow, both of them: the write below runs with the
+        // GIL released, and it must not hold the document while another thread
+        // could be handed it.
+        let (inner, raw_config) = {
+            let doc = slf.borrow(py);
+            let inner = doc.data().get_inner_data();
+            let raw_config = given.unwrap_or_else(|| inner.export_config.clone());
+            (inner.clone(), raw_config)
+        };
+
+        let xlsx_config = collomatique_xlsx::Config::from(&raw_config);
+
+        // Released for the duration: building a workbook out of a whole
+        // colloscope and writing it is long enough to be worth not blocking
+        // the interpreter over (`host.rs`, `dialogs.rs`).
+        py.detach(|| collomatique_xlsx::write_xlsx(&inner, &path, &xlsx_config))
+            .map_err(|e| ExportError::new_err(format!("{}: {e}", path.display())))
+    }
+
+    /// Builds the ILP problem a solve would attack
+    ///
+    /// ```python
+    /// config = collomatique.ColloscopeSolveConfig()
+    /// model = doc.build_colloscope_model(config)
+    ///
+    /// model = doc.build_colloscope_model(config, on_log=print)
+    /// ```
+    ///
+    /// `config` says which periods and which group lists are recomputed, and
+    /// what a dropped constraint or a previous value is worth as an objective
+    /// term — a `ColloscopeSolveConfig`, the same vocabulary the application's
+    /// own solve dialog fills in. It is required: the application never solves
+    /// without passing that dialog, and a script that wants everything
+    /// recomputed writes `ColloscopeSolveConfig()` and says so.
+    ///
+    /// What comes back is a `ColloscopeModel` — a token for a built problem,
+    /// not a view of one. It is detached, like a value: a snapshot of the
+    /// document as it stands now, which later edits neither change nor
+    /// invalidate. `model.export_mps(path)` writes it out for a solver to read.
+    ///
+    /// `on_log` is called with one line of the build log at a time, the log the
+    /// application shows while it builds; `None` discards it. There is no
+    /// progress here — a build has lines, not a proportion. A callback that
+    /// raises does not tear the build in half: the build runs to its end, the
+    /// callback is not called again, and the exception comes out of this call
+    /// with no model built.
+    ///
+    /// Nothing is written to the document, so a build takes no undo slot. A
+    /// problem the builder refuses to assemble raises `ModelBuildError`.
+    #[pyo3(signature = (config, *, on_log=None))]
+    fn build_colloscope_model(
+        slf: Py<Self>,
+        py: Python<'_>,
+        config: &Bound<'_, PyAny>,
+        on_log: Option<Py<PyAny>>,
+    ) -> PyResult<ColloscopeModel> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it, like
+        // `export_xlsx`'s configuration and for the same reason (§5).
+        let config = crate::data::ColloscopeSolveConfig::from_py(&slf, config)?;
+
+        // Copied out of the borrow: the build below runs with the GIL
+        // released, and it must not hold the document while another thread
+        // could be handed it.
+        let inner = {
+            let doc = slf.borrow(py);
+            doc.data().get_inner_data().clone()
+        };
+
+        // What the log callback raised, if it raised. The builder takes an
+        // infallible `FnMut`, so a raising callback cannot stop the build
+        // half-way through — the first exception is kept here, the callback is
+        // not called again, and the build is left to finish (§10.2).
+        let mut failure: Option<PyErr> = None;
+        let mut log = |line: &str| {
+            let Some(callback) = on_log.as_ref() else {
+                return;
+            };
+            if failure.is_some() {
+                return;
+            }
+
+            // The GIL is released for the whole build, so each line takes it
+            // back for the length of one call and gives it up again.
+            Python::attach(|py| {
+                if let Err(error) = callback.call1(py, (line,)) {
+                    failure = Some(error);
+                }
+            });
+        };
+
+        // Released for the duration: building the model of a whole colloscope
+        // is the longest thing this module does, and a script that watches it
+        // through `on_log` is watching a build that is really running.
+        let built = py.detach(|| config.build_model(&inner, &mut log));
+
+        // The callback's exception wins over whatever the build made of it:
+        // the script asked for the lines and one of them was refused, so no
+        // model is handed back.
+        if let Some(failure) = failure {
+            return Err(failure);
+        }
+
+        // The parameters go with the model: they are the half of this snapshot
+        // a solution is read against, and `inner` is this call's own copy — the
+        // borrow that made it ended long ago, so moving them out is free.
+        built
+            .map(|model| ColloscopeModel::new(model, inner.params))
+            .map_err(ModelBuildError::new_err)
     }
 }

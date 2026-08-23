@@ -1,4 +1,7 @@
 mod strategies;
+mod verdict;
+
+pub use verdict::{SolveVerdict, verdict};
 
 pub use strategies::conductor::{
     ConductorPayload, ConductorPayloadData, ConductorProgress, ConductorProgressData,

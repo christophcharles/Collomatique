@@ -20,6 +20,9 @@ use pyo3::prelude::*;
 use pyo3::pyclass::boolean_struct::True;
 use pyo3::types::{PyDict, PyFrozenSet, PyList, PySet, PyTuple};
 
+use collomatique_constraints_colloscopes::{
+    GroupListRecompute, GroupListSolveData, PeriodSolveData, SolveConfig,
+};
 use collomatique_ops::ColloscopeContents;
 use collomatique_state::{OrderedTable, Table};
 use collomatique_state_colloscopes::export_config::{
@@ -32,6 +35,11 @@ use collomatique_state_colloscopes::{
     SubjectPeriodicity, assignments, balancing, colloscope_params, colloscopes, group_lists,
     incompats, pairings, periods, settings, slot_pairings, slots, students, subjects, teachers,
     week_patterns, weeks,
+};
+use collomatique_strategies::{
+    ConductorStrategy as RawConductorStrategy, DefaultConfig as RawDefaultConfig,
+    FuzzyConfig as RawFuzzyConfig, IncrementalConfig as RawIncrementalConfig,
+    WarmStartConfig as RawWarmStartConfig,
 };
 use collomatique_time::WeekStart;
 
@@ -365,6 +373,134 @@ fn cost(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<i32> {
             shown(&value, "that value"),
         ))
     })
+}
+
+/// A field the solver prices an objective term with
+///
+/// A real number, zero included: a weight of zero writes the term and prices
+/// it at nothing, which is a thing a script may well mean. What is refused is
+/// a negative weight — it would pay the solver to break exactly what the term
+/// is there to price — and a non-finite one, which is no weight an objective
+/// can carry.
+fn weight(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<f64> {
+    let value = field(site, name, obj)?;
+    let number: f64 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a weight, and {} is not a number",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    checked_weight(site, name, number)
+}
+
+/// The same, for a weight that may name none
+///
+/// `None` is a value here rather than an absence: it says the term is not
+/// written at all, which is a different request from writing it and pricing
+/// it at zero.
+fn optional_weight(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<Option<f64>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    let number: f64 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a weight or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    checked_weight(site, name, number).map(Some)
+}
+
+/// What both weight helpers refuse, in one place so they refuse it alike
+fn checked_weight(site: Site<'_>, name: &str, number: f64) -> PyResult<f64> {
+    if !number.is_finite() {
+        return Err(PyValueError::new_err(format!(
+            "{} is a finite weight, and {number} is not one",
+            site.field(name),
+        )));
+    }
+    if number < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "{} is zero or more, and {number} is negative",
+            site.field(name),
+        )));
+    }
+
+    Ok(number)
+}
+
+/// A field the solver counts in whole seconds, or `None` for no limit
+///
+/// Zero is refused rather than read as "no limit". `None` is how no limit is
+/// said here, and the model's own `TimeLimit` has no room for a zero on
+/// purpose: a raw `Option<u32>` would let `Some(0)` mean "stop immediately" in
+/// one reading and "run forever" in the other, and python must not resurrect
+/// that.
+fn time_limit(
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<collomatique_time::TimeLimit> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(collomatique_time::TimeLimit::none());
+    }
+
+    let seconds: u32 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a number of seconds or None, and {} is neither",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    NonZeroU32::new(seconds)
+        .map(collomatique_time::TimeLimit::seconds)
+        .ok_or_else(|| {
+            PyValueError::new_err(format!(
+                "{} is at least one second, and None is how no limit is said",
+                site.field(name),
+            ))
+        })
+}
+
+/// A field that measures without a sign — a sigma, a tolerance
+///
+/// Zero is a value here: a tolerance of zero asks for the exact optimum, and a
+/// sigma of zero perturbs nothing. What is refused is a negative number, which
+/// no distance is, and a non-finite one, which no solver knob can carry.
+/// [checked_weight]'s shape, in the words a measurement wants rather than the
+/// ones a price does.
+fn nonnegative_number(site: Site<'_>, name: &str, obj: &Bound<'_, PyAny>) -> PyResult<f64> {
+    let value = field(site, name, obj)?;
+    let number: f64 = value.extract().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a number, and {} is not one",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    if !number.is_finite() {
+        return Err(PyValueError::new_err(format!(
+            "{} is a finite number, and {number} is not one",
+            site.field(name),
+        )));
+    }
+    if number < 0.0 {
+        return Err(PyValueError::new_err(format!(
+            "{} is zero or more, and {number} is negative",
+            site.field(name),
+        )));
+    }
+
+    Ok(number)
 }
 
 /// A field the model stores as "at least one"
@@ -1918,12 +2054,12 @@ impl Value for ExportGroupListConfigData {
 
 /// The whole export configuration
 ///
-/// The tree `doc.export_config.to_data()` assembles, and the value §8's
-/// `DocumentData` will hold one of. No op takes it: the eleven export
-/// mutators each patch one field of the document's own configuration, so
-/// nothing in this milestone consumes one — its extraction has no caller
-/// until the coarse door lands, which is what the dataclass's docstring says
-/// rather than hiding.
+/// The tree `doc.export_config.to_data()` assembles, and the one §8's
+/// `DocumentData` holds. No op takes it: the eleven export mutators each patch
+/// one field of the document's own configuration, so the coarse door is what
+/// consumes a whole one: it rides into `replace_all` inside [DocumentData].
+/// `doc.export_xlsx` takes one too, and stores nothing — there it says how to
+/// write one workbook, for that call only.
 pub struct ExportConfigData;
 
 impl Value for ExportConfigData {
@@ -2284,11 +2420,10 @@ type SlotRows = Vec<(RawId<Subject>, Vec<(RawId<Slot>, slots::Slot)>)>;
 ///
 /// The tree `doc.snapshot()` assembles (`new_api_design.md` §8):
 /// every section of `InnerData` as a field, with the user orders carried by
-/// the python containers themselves. No op takes one and nothing reads one
-/// back in this milestone — `replace_all`, the coarse door's other half, is
-/// step 4's, and it will take this same tree through `Data::from_inner_data` —
-/// but the value is full two-direction like every other, and the round-trip
-/// test drives the inbound half through the same public door.
+/// the python containers themselves. No op takes one: the coarse door's other
+/// half, `doc.replace_all`, takes this same tree through
+/// `Data::from_inner_data` instead, which is where a whole document is
+/// checked.
 pub struct DocumentData;
 
 impl Value for DocumentData {
@@ -2720,6 +2855,404 @@ impl Value for DocumentData {
         kwargs.set_item(
             "export_config",
             ExportConfigData::to_py(py, &inner.export_config)?,
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// What one period is to a solve
+pub struct PeriodSolveConfig;
+
+impl Value for PeriodSolveConfig {
+    type Model = PeriodSolveData;
+
+    const CLASS: &'static str = "PeriodSolveConfig";
+
+    /// The document is not consulted: a period says nothing about itself here
+    /// beyond the two booleans, and the period it *is* is the key of the
+    /// mapping this value sits in, resolved there.
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<PeriodSolveData> {
+        let site = Site::whole(Self::CLASS);
+
+        Ok(PeriodSolveData {
+            recompute: flag(site, "recompute", obj)?,
+            use_current_values: flag(site, "use_current_values", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, data: &PeriodSolveData) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("recompute", data.recompute)?;
+        kwargs.set_item("use_current_values", data.use_current_values)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// The two booleans one `GroupListSolveConfig` carries
+///
+/// Not the model's own [GroupListSolveData], which nests the second inside the
+/// first (`Option<GroupListRecompute>`) and therefore cannot hold
+/// `recompute=False, previous_values_as_objective=True` at all. That pair is
+/// refused, and the refusal names the group list it was written for — which
+/// this value does not know and [ColloscopeSolveConfig], holding the mapping,
+/// does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct GroupListFlags {
+    pub recompute: bool,
+    pub previous_values_as_objective: bool,
+}
+
+/// What one automatic group list is to a solve
+pub struct GroupListSolveConfig;
+
+impl Value for GroupListSolveConfig {
+    type Model = GroupListFlags;
+
+    const CLASS: &'static str = "GroupListSolveConfig";
+
+    fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<GroupListFlags> {
+        let site = Site::whole(Self::CLASS);
+
+        Ok(GroupListFlags {
+            recompute: flag(site, "recompute", obj)?,
+            previous_values_as_objective: flag(site, "previous_values_as_objective", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, flags: &GroupListFlags) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("recompute", flags.recompute)?;
+        kwargs.set_item(
+            "previous_values_as_objective",
+            flags.previous_values_as_objective,
+        )?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// What a solve recomputes, and what it must leave alone
+pub struct ColloscopeSolveConfig;
+
+impl Value for ColloscopeSolveConfig {
+    type Model = SolveConfig;
+
+    const CLASS: &'static str = "ColloscopeSolveConfig";
+
+    fn from_py(doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<SolveConfig> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        let periods = entity_dict::<Period, PeriodSolveConfig>(doc, site, "periods", obj)?
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
+
+        let entries =
+            entity_dict::<GroupList, GroupListSolveConfig>(doc, site, "group_lists", obj)?;
+
+        // A prefilled list is refused before anything else is said about its
+        // entry: somebody wrote those groups, so there is no solve to
+        // configure. The model's own `sanitize` drops such an entry instead,
+        // but that runs before the application shows its dialog, to carry an
+        // earlier answer forward sensibly; a script writes its config at the
+        // moment it calls, so an entry like this is a mistake, and a mistake
+        // is said out loud.
+        let prefilled = {
+            let document = doc.borrow(obj.py());
+            let group_lists = &document.data().get_inner_data().params.group_lists;
+            entries.iter().map(|(id, _flags)| *id).find(|id| {
+                group_lists
+                    .group_list_map
+                    .get(id)
+                    .is_some_and(|group_list| group_list.is_prefilled())
+            })
+        };
+        if let Some(id) = prefilled {
+            return Err(PyValueError::new_err(format!(
+                "{} names {}, and that group list is prefilled: a solve computes the automatic \
+                 ones",
+                site.field("group_lists"),
+                GroupListId::text(id),
+            )));
+        }
+
+        let mut group_lists = BTreeMap::new();
+        for (id, flags) in entries {
+            let recompute = match (flags.recompute, flags.previous_values_as_objective) {
+                (true, previous_values_as_objective) => Some(GroupListRecompute {
+                    previous_values_as_objective,
+                }),
+                (false, false) => None,
+                // The combination the model has no room for, and the one thing
+                // a script can write here that means nothing: a list that is
+                // not recomputed keeps its groups, so there is no recomputed
+                // value left for the anchor to hold on to.
+                (false, true) => {
+                    return Err(PyValueError::new_err(format!(
+                        "{} asks {} for previous_values_as_objective without recompute, and a \
+                         group list that is not recomputed keeps its groups",
+                        site.field("group_lists"),
+                        GroupListId::text(id),
+                    )));
+                }
+            };
+            group_lists.insert(id, GroupListSolveData { recompute });
+        }
+
+        Ok(SolveConfig {
+            periods,
+            group_lists,
+            objectify_cross_fixed_period: optional_weight(
+                site,
+                "objectify_cross_fixed_period",
+                obj,
+            )?,
+            l1_anchor_weight: weight(site, "l1_anchor_weight", obj)?,
+        })
+    }
+
+    fn to_py<'py>(py: Python<'py>, config: &SolveConfig) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+
+        let periods = PyDict::new(py);
+        for (id, data) in &config.periods {
+            periods.set_item(PeriodId::wrap(*id), PeriodSolveConfig::to_py(py, data)?)?;
+        }
+        kwargs.set_item("periods", periods)?;
+
+        let group_lists = PyDict::new(py);
+        for (id, data) in &config.group_lists {
+            let flags = GroupListFlags {
+                recompute: data.recompute.is_some(),
+                previous_values_as_objective: data
+                    .recompute
+                    .as_ref()
+                    .is_some_and(|recompute| recompute.previous_values_as_objective),
+            };
+            group_lists.set_item(
+                GroupListId::wrap(*id),
+                GroupListSolveConfig::to_py(py, &flags)?,
+            )?;
+        }
+        kwargs.set_item("group_lists", group_lists)?;
+
+        kwargs.set_item(
+            "objectify_cross_fixed_period",
+            config.objectify_cross_fixed_period,
+        )?;
+        kwargs.set_item("l1_anchor_weight", config.l1_anchor_weight)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// One optional sub-config: `None` disables the substrategy, an object tunes it
+///
+/// The `Option` is the switch, so there is nothing to say about the absence
+/// itself. What is there is read at a site *inside* this field, so a refusal
+/// names the path a script wrote down — « a ConductorStrategy's
+/// incremental_config.epoch_time_limit » — rather than a class it never named.
+fn sub_config<T>(
+    site: Site<'_>,
+    name: &'static str,
+    obj: &Bound<'_, PyAny>,
+    read: impl Fn(Site<'_>, &Bound<'_, PyAny>) -> PyResult<T>,
+) -> PyResult<Option<T>> {
+    let value = field(site, name, obj)?;
+    if value.is_none() {
+        return Ok(None);
+    }
+
+    read(site.inside(name), &value).map(Some)
+}
+
+/// The complete solve's knobs, read at the site the script wrote them
+fn default_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawDefaultConfig> {
+    Ok(RawDefaultConfig {
+        time_limit: time_limit(site, "time_limit", obj)?,
+        incumbent_time_limit: time_limit(site, "incumbent_time_limit", obj)?,
+    })
+}
+
+/// The warm start's one knob, read at the site the script wrote it
+fn warm_start_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawWarmStartConfig> {
+    Ok(RawWarmStartConfig {
+        time_limit: time_limit(site, "time_limit", obj)?,
+    })
+}
+
+/// The incremental solve's knobs, read at the site the script wrote them
+fn incremental_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawIncrementalConfig> {
+    Ok(RawIncrementalConfig {
+        // A price the solver pays per step away from the epoch before, so the
+        // weight helper's rules are exactly this field's.
+        l1_weight: weight(site, "l1_weight", obj)?,
+        distance_tolerance: nonnegative_number(site, "distance_tolerance", obj)?,
+        epoch_time_limit: time_limit(site, "epoch_time_limit", obj)?,
+        epoch_incumbent_time_limit: time_limit(site, "epoch_incumbent_time_limit", obj)?,
+    })
+}
+
+/// The fuzzy exploration's knobs, read at the site the script wrote them
+///
+/// `fuzzy_sigma` refuses a negative number here rather than deeper in: it
+/// becomes the standard deviation of a normal distribution inside the engine,
+/// which errors on a negative one, and this is the last place the field can
+/// still be named.
+fn fuzzy_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawFuzzyConfig> {
+    Ok(RawFuzzyConfig {
+        fuzzy_sigma: nonnegative_number(site, "fuzzy_sigma", obj)?,
+        find_closest_tolerance: nonnegative_number(site, "find_closest_tolerance", obj)?,
+        time_limit: time_limit(site, "time_limit", obj)?,
+        incumbent_time_limit: time_limit(site, "incumbent_time_limit", obj)?,
+    })
+}
+
+/// A time limit as python writes one: whole seconds, or `None` for no limit
+fn written_seconds(limit: collomatique_time::TimeLimit) -> Option<u32> {
+    limit.get_seconds().map(NonZeroU32::get)
+}
+
+/// The python value for one `DefaultConfig`
+fn default_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawDefaultConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("time_limit", written_seconds(config.time_limit))?;
+    kwargs.set_item(
+        "incumbent_time_limit",
+        written_seconds(config.incumbent_time_limit),
+    )?;
+
+    class(py, "DefaultConfig")?.call((), Some(&kwargs))
+}
+
+/// The python value for one `WarmStartConfig`
+fn warm_start_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawWarmStartConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("time_limit", written_seconds(config.time_limit))?;
+
+    class(py, "WarmStartConfig")?.call((), Some(&kwargs))
+}
+
+/// The python value for one `IncrementalConfig`
+fn incremental_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawIncrementalConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("l1_weight", config.l1_weight)?;
+    kwargs.set_item("distance_tolerance", config.distance_tolerance)?;
+    kwargs.set_item("epoch_time_limit", written_seconds(config.epoch_time_limit))?;
+    kwargs.set_item(
+        "epoch_incumbent_time_limit",
+        written_seconds(config.epoch_incumbent_time_limit),
+    )?;
+
+    class(py, "IncrementalConfig")?.call((), Some(&kwargs))
+}
+
+/// The python value for one `FuzzyConfig`
+fn fuzzy_config_to_py<'py>(
+    py: Python<'py>,
+    config: &RawFuzzyConfig,
+) -> PyResult<Bound<'py, PyAny>> {
+    let kwargs = PyDict::new(py);
+    kwargs.set_item("fuzzy_sigma", config.fuzzy_sigma)?;
+    kwargs.set_item("find_closest_tolerance", config.find_closest_tolerance)?;
+    kwargs.set_item("time_limit", written_seconds(config.time_limit))?;
+    kwargs.set_item(
+        "incumbent_time_limit",
+        written_seconds(config.incumbent_time_limit),
+    )?;
+
+    class(py, "FuzzyConfig")?.call((), Some(&kwargs))
+}
+
+/// How a solve is run — the one value family with no document behind it
+///
+/// Not a [Value], and it cannot be one: that trait's `from_py` takes the
+/// document a field naming an entity is resolved against, and a strategy names
+/// none. Its callers hold no document either — a strategy is handed to a
+/// model, which was built from one long before. So the reading shape stays,
+/// marker struct and all, and only the argument goes.
+///
+/// The four sub-configs have no marker struct of their own. They are read and
+/// written by the free functions above, because a script never hands one over
+/// on its own: it hands over the strategy that holds it, which is the class a
+/// refusal has to name.
+pub struct ConductorStrategy;
+
+impl ConductorStrategy {
+    /// The python class name — the same role [Value::CLASS] plays
+    pub const CLASS: &'static str = "ConductorStrategy";
+
+    /// The strategy one python value names
+    pub fn from_py(obj: &Bound<'_, PyAny>) -> PyResult<RawConductorStrategy> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names.
+        Ok(RawConductorStrategy {
+            // `non_zero_count`'s sentence — « is a number of slots » — is
+            // exactly what a worker count is, so the helper is reused whole.
+            worker_count: non_zero_count(site, "worker_count", obj)?,
+            default_config: sub_config(site, "default_config", obj, default_config)?,
+            warm_start_config: sub_config(site, "warm_start_config", obj, warm_start_config)?,
+            incremental_config: sub_config(site, "incremental_config", obj, incremental_config)?,
+            fuzzy_config: sub_config(site, "fuzzy_config", obj, fuzzy_config)?,
+        })
+    }
+
+    /// The python value for one strategy
+    ///
+    /// A fresh object every call, and a plain one: this is what the two
+    /// presets of `solve.rs` hand back, so what a classmethod answers is an
+    /// ordinary value a script may then edit.
+    pub fn to_py<'py>(
+        py: Python<'py>,
+        strategy: &RawConductorStrategy,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        kwargs.set_item("worker_count", strategy.worker_count.get())?;
+        kwargs.set_item(
+            "default_config",
+            strategy
+                .default_config
+                .as_ref()
+                .map(|config| default_config_to_py(py, config))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "warm_start_config",
+            strategy
+                .warm_start_config
+                .as_ref()
+                .map(|config| warm_start_config_to_py(py, config))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "incremental_config",
+            strategy
+                .incremental_config
+                .as_ref()
+                .map(|config| incremental_config_to_py(py, config))
+                .transpose()?,
+        )?;
+        kwargs.set_item(
+            "fuzzy_config",
+            strategy
+                .fuzzy_config
+                .as_ref()
+                .map(|config| fuzzy_config_to_py(py, config))
+                .transpose()?,
         )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))

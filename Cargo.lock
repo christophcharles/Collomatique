@@ -476,34 +476,25 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python"
-version = "0.1.0-alpha.1.99"
+version = "0.1.0-alpha.1"
 dependencies = [
  "chrono",
+ "collomatique-constraints-colloscopes",
+ "collomatique-mps",
  "collomatique-ops",
  "collomatique-settings",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-strategies",
+ "collomatique-subprocesses",
  "collomatique-time",
  "collomatique-ui-text",
+ "collomatique-xlsx",
  "pyo3",
  "rfd",
+ "serde",
  "tokio",
-]
-
-[[package]]
-name = "collomatique-python-old"
-version = "0.1.0-alpha.1.99"
-dependencies = [
- "anyhow",
- "chrono",
- "collomatique-ops",
- "collomatique-rpc",
- "collomatique-state",
- "collomatique-state-colloscopes",
- "collomatique-time",
- "non-empty-string",
- "pyo3",
 ]
 
 [[package]]
@@ -512,7 +503,6 @@ version = "0.1.0-alpha.1.99"
 dependencies = [
  "anyhow",
  "collomatique-python",
- "collomatique-python-old",
  "pyo3",
 ]
 
@@ -568,7 +558,6 @@ dependencies = [
  "collomatique-ilp-modeler",
  "collomatique-python-runner",
  "collomatique-rpc",
- "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",
@@ -704,6 +693,7 @@ dependencies = [
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-strategies",
  "collomatique-time",
  "thiserror 1.0.69",
 ]

@@ -103,6 +103,8 @@ mod innocent_tests;
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use serde::Serialize;
+
 use collomatique_state::{FixOp, Fixable};
 
 use crate::Data;
@@ -154,7 +156,13 @@ use crate::week_patterns::WeekPattern;
 /// Structurally deletive: creation is unrepresentable here. That is the
 /// vocabulary half of the cascade's termination argument — no variant can name
 /// a fresh id, because no variant can name a creation at all.
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// The `Serialize` impl is for *describing* a repair to a consumer that cannot
+/// match on it — the python module walks it structurally, so a variant added
+/// here reaches a script with no change on that side. It is not a transport:
+/// there is no `Deserialize` and no round trip, and nothing in this crate reads
+/// a [Fix] back.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub enum Fix {
     /// The week goes with the period it belongs to.
     DeleteWeek { week: WeekId },
