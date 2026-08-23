@@ -5,12 +5,13 @@
 //! `<exe> --rpc-engine`. So a script that solves has to say *which* binary,
 //! and `docs/python/new_api_design.md` §10 is where the answer comes from.
 //!
-//! Three rungs, in order: what the call was given, what the runner injected,
-//! what the environment names. Nothing found is a loud [NoEngine] rather than
-//! a guess — the running executable is only an engine when whoever started the
-//! interpreter says it is, and a bare `python` is not one.
+//! Four rungs, in order: what the call was given, what the runner injected,
+//! what the environment names, what the build baked in. Nothing found is a
+//! loud [NoEngine] rather than a guess — the running executable is only an
+//! engine when whoever started the interpreter says it is, and a bare `python`
+//! is not one.
 //!
-//! The middle rung mirrors [crate::host]: a static the runner fills on both
+//! The second rung mirrors [crate::host]: a static the runner fills on both
 //! sides of a script, so this crate never has to know who is running it.
 
 use std::path::PathBuf;
@@ -34,6 +35,15 @@ mod tests;
 /// The engine the current run was handed, if it was handed one
 static ENGINE: Mutex<Option<EngineExe>> = Mutex::new(None);
 
+/// The engine the build baked in, if the build named one
+///
+/// `COLLOMATIQUE_DEFAULT_ENGINE` at *compile* time, which is what a standalone
+/// python library has instead of a runner: the nix wheel derivation sets it to
+/// the store path of the collomatique it was built against, so an installed
+/// module solves without anyone naming a binary. Unset — the embedded build,
+/// and any plain `cargo build` — leaves the rung simply absent.
+const BAKED: Option<&str> = option_env!("COLLOMATIQUE_DEFAULT_ENGINE");
+
 /// Installs, or clears, the engine for the coming run
 ///
 /// The runner calls this on both sides of a script, like [crate::set_host],
@@ -52,8 +62,17 @@ pub fn set_engine(engine: Option<EngineExe>) {
 /// `explicit` is the `engine=` of the call being served. It wins, because it
 /// is the most local thing said about this particular solve; the injected
 /// engine wins over the environment for the same reason, being about this run
-/// rather than about the machine.
+/// rather than about the machine. The baked default is last, being about the
+/// build — the least local thing there is.
 pub(crate) fn resolve(explicit: Option<PathBuf>) -> PyResult<EngineExe> {
+    resolve_with(explicit, BAKED)
+}
+
+/// [resolve], with the baked rung passed in rather than compiled in
+///
+/// The split is for the tests: a compile-time constant is not something a unit
+/// test can vary, so the one thing that reads it is [resolve] itself.
+fn resolve_with(explicit: Option<PathBuf>, baked: Option<&str>) -> PyResult<EngineExe> {
     if let Some(path) = explicit {
         return Ok(EngineExe::Explicit(path));
     }
@@ -68,6 +87,14 @@ pub(crate) fn resolve(explicit: Option<PathBuf>) -> PyResult<EngineExe> {
         return Ok(EngineExe::Explicit(PathBuf::from(path)));
     }
 
+    // Same rule as the variable above, for the same reason: a build that set
+    // the name to nothing named nothing.
+    if let Some(path) = baked.filter(|p| !p.is_empty()) {
+        return Ok(EngineExe::Explicit(PathBuf::from(path)));
+    }
+
+    // The message says nothing of the baked rung: when this fires, the build
+    // did not name an engine either, so there is nothing there to point at.
     Err(NoEngine::new_err(
         "no engine to run the solve: pass engine= with the path of a collomatique \
          executable, set the COLLOMATIQUE_ENGINE environment variable, or run the \
