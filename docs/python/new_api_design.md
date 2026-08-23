@@ -5,7 +5,8 @@ This document is the design of the replacement Python API, worked out in discuss
 hack job built for testing purposes. The old API remains untouched during the
 transition (see §13) and is retired at the end.
 
-The requirements come from `docs/todos/todo_python_api.md`:
+The requirements come from `docs/todos/todo_python_api.md`, since retired now that
+they are met and pinned at `git show 5a0a3c10:docs/todos/todo_python_api.md`:
 
 - **Mirror the database-like structure** of the data.
 - **Clear, predictable value vs. reference behaviour.**

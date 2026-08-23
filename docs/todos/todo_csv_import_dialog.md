@@ -15,5 +15,5 @@ This needs careful design. The model we have in mind so far:
 What is *not* clear yet is how the model should work so that a saved script
 stays reusable on a different file. To be thought about.
 
-It relies on [the Python API revamp](todo_python_api.md), since the generated
-scripts are only as good as the API they drive.
+The generated scripts are only as good as the API they drive, so this rests on
+the Python API — `docs/python/new_api_design.md`.
