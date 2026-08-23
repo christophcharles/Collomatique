@@ -53,9 +53,6 @@ pub fn set_engine(engine: Option<EngineExe>) {
 /// is the most local thing said about this particular solve; the injected
 /// engine wins over the environment for the same reason, being about this run
 /// rather than about the machine.
-// Called by `solve`, which lands with the door itself; until then this is the
-// rung table with nothing yet asking it a question.
-#[allow(dead_code)]
 pub(crate) fn resolve(explicit: Option<PathBuf>) -> PyResult<EngineExe> {
     if let Some(path) = explicit {
         return Ok(EngineExe::Explicit(path));

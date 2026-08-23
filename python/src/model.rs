@@ -78,9 +78,6 @@ impl ColloscopeModel {
     /// Crate-private for the same reason as [ColloscopeModel::inner]: the
     /// parameters are the document's own structures, and publishing them would
     /// publish a second way of reading a document alongside the collections.
-    // Read by `solve`, which turns a solution into a colloscope; the model
-    // starts keeping them one commit before the door that asks for them.
-    #[allow(dead_code)]
     pub(crate) fn params(&self) -> &Parameters {
         &self.params
     }
@@ -154,6 +151,68 @@ impl ColloscopeModel {
             std::fs::write(&path, contents)
         })
         .map_err(|e| ExportError::new_err(format!("{}: {e}", path.display())))
+    }
+
+    /// Launches the solver on this model
+    ///
+    /// ```python
+    /// run = model.solve(collomatique.ConductorStrategy.optimize(), on_log=print)
+    /// outcome = run.wait()
+    /// if outcome.colloscope is not None:
+    ///     doc.colloscope.install(outcome.colloscope)
+    /// ```
+    ///
+    /// This does not block: the engine runs in its own process, and what comes
+    /// back is a `SolveRun` — the handle that answers `progress()`, `stop()`,
+    /// `kill()` and `wait()`. Dropping the run kills the engine, so a script
+    /// holds it for as long as the solve should live.
+    ///
+    /// `strategy` is a `ConductorStrategy` — how hard to look, with how many
+    /// workers, for how long. `ConductorStrategy.search()` and
+    /// `.optimize()` are the application's own two presets.
+    ///
+    /// `engine=` names the collomatique executable the workers re-execute.
+    /// Without it, the module uses the application it is running inside, then
+    /// the `COLLOMATIQUE_ENGINE` environment variable, and raises `NoEngine`
+    /// when neither says anything — a bare python interpreter is not an engine,
+    /// and guessing one would spawn the wrong program.
+    ///
+    /// `on_log` is called with one line of the engine's log at a time,
+    /// `on_progress` with a `SolveProgress` each time the engine improves on
+    /// itself. Both run on another thread, and neither may call `wait()`. A
+    /// callback that raises is not called again, and its exception comes out of
+    /// `wait()` with no outcome — the rule `build_colloscope_model` follows for
+    /// its own log.
+    ///
+    /// Nothing is written to the document, so a solve takes no undo slot: what
+    /// it produces is a value, and `doc.colloscope.install(...)` is what lands
+    /// it. Two solves on one model are fine and independent — each starts its
+    /// own engine.
+    ///
+    /// An engine that cannot be started raises `SolveError`.
+    #[pyo3(signature = (strategy, *, engine=None, on_progress=None, on_log=None))]
+    fn solve(
+        &self,
+        py: Python<'_>,
+        strategy: &Bound<'_, PyAny>,
+        engine: Option<PathBuf>,
+        on_progress: Option<Py<PyAny>>,
+        on_log: Option<Py<PyAny>>,
+    ) -> PyResult<crate::solve::SolveRun> {
+        // The refusal order a script can reason about: what it wrote down
+        // first, then what the machine was asked for, and only then the spawn.
+        let strategy = crate::data::ConductorStrategy::from_py(strategy)?;
+        let engine = crate::engine::resolve(engine)?;
+
+        crate::solve::SolveRun::start(
+            py,
+            self.inner(),
+            self.params(),
+            &strategy,
+            &engine,
+            on_progress,
+            on_log,
+        )
     }
 }
 
