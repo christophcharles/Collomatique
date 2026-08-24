@@ -1,4 +1,3 @@
-use collomatique_rpc::gui_answer::{OpenFileDialogAnswer, SaveFileDialogAnswer};
 use collomatique_rpc::{CmdMsg, ResultMsg};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
@@ -14,11 +13,8 @@ use crate::widgets::debug_view::{DebugView, DebugViewInput};
 use collomatique_subprocesses::{EngineExe, SendError, Worker, WorkerEvent};
 use std::path::PathBuf;
 
-mod confirm_dialog;
 mod error_dialog;
 mod error_display;
-mod input_dialog;
-mod ok_dialog;
 mod warning_running;
 
 pub struct Dialog {
@@ -31,9 +27,6 @@ pub struct Dialog {
     worker: Option<Worker>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
-    ok_dialog: Controller<ok_dialog::Dialog>,
-    confirm_dialog: Controller<confirm_dialog::Dialog>,
-    input_dialog: Controller<input_dialog::Dialog>,
     errors: FactoryVecDeque<error_display::Entry>,
     adjust_scrolling: bool,
     app_session: Option<AppSession<AppState<Data, Desc>, Desc>>,
@@ -58,10 +51,6 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogCmdOutput {
     AdjustScrolling,
-    DelayedRpcAnswer(ResultMsg),
-    /// One of the dialogs that answer over the command sender just closed: this
-    /// window has to come back to the front.
-    Present,
 }
 
 #[derive(Debug)]
@@ -226,42 +215,6 @@ impl Component for Dialog {
                 warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
-        let ok_dialog = ok_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.command_sender(), |msg| match msg {
-                ok_dialog::DialogOutput::Ok => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::OkDialogClosed),
-                ),
-                ok_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
-            });
-
-        let confirm_dialog = confirm_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.command_sender(), |msg| match msg {
-                confirm_dialog::DialogOutput::Confirmed => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(true)),
-                ),
-                confirm_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::ConfirmDialog(false)),
-                ),
-                confirm_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
-            });
-
-        let input_dialog = input_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.command_sender(), |msg| match msg {
-                input_dialog::DialogOutput::Accepted(text) => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(Some(text))),
-                ),
-                input_dialog::DialogOutput::Cancelled => DialogCmdOutput::DelayedRpcAnswer(
-                    ResultMsg::AckGui(collomatique_rpc::GuiAnswer::InputDialog(None)),
-                ),
-                input_dialog::DialogOutput::PresentParent => DialogCmdOutput::Present,
-            });
-
         let debug_view = DebugView::builder().launch(()).detach();
 
         let errors = FactoryVecDeque::builder()
@@ -278,9 +231,6 @@ impl Component for Dialog {
             worker: None,
             error_dialog,
             warning_running,
-            ok_dialog,
-            confirm_dialog,
-            input_dialog,
             errors,
             adjust_scrolling: false,
             app_session: None,
@@ -293,7 +243,7 @@ impl Component for Dialog {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.adjust_scrolling = false;
         self.move_front = false;
         match msg {
@@ -370,9 +320,6 @@ impl Component for Dialog {
                             .expect("there should be some current state to accept")
                             .get_data();
                         self.send_response(ResultMsg::generate_data_msg(data));
-                    }
-                    CmdMsg::GuiRequest(gui_cmd) => {
-                        self.handle_gui_request(sender, root, gui_cmd);
                     }
                     CmdMsg::SetData(data_stream) => {
                         let app_session = self
@@ -462,12 +409,6 @@ impl Component for Dialog {
             DialogCmdOutput::AdjustScrolling => {
                 self.adjust_scrolling = true;
             }
-            DialogCmdOutput::DelayedRpcAnswer(result_msg) => {
-                self.send_response(result_msg);
-            }
-            DialogCmdOutput::Present => {
-                self.move_front = true;
-            }
         }
     }
 }
@@ -496,85 +437,5 @@ impl Dialog {
             tokio::time::sleep(std::time::Duration::from_millis(10)).await;
             DialogCmdOutput::AdjustScrolling
         });
-    }
-
-    fn handle_gui_request(
-        &mut self,
-        sender: ComponentSender<Self>,
-        root: &<Self as Component>::Root,
-        gui_cmd: collomatique_rpc::cmd_msg::GuiMsg,
-    ) {
-        match gui_cmd {
-            collomatique_rpc::cmd_msg::GuiMsg::OpenFileDialog(params) => {
-                let path = self.path.clone();
-                // These dialogs belong to this window: the script asks for them
-                // over RPC, but they are shown by the GUI process, on top of the
-                // script runner's own window.
-                let parent = crate::tools::open_save::ParentWindowHandle::from_widget(root);
-                sender.oneshot_command(async move {
-                    let ext_vec: Vec<_> = params
-                        .list
-                        .iter()
-                        .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
-                        .collect();
-
-                    let file_name = crate::tools::open_save::generic_open_dialog(
-                        parent,
-                        &params.title,
-                        &ext_vec[..],
-                        Some(path.as_path()),
-                    )
-                    .await;
-
-                    DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
-                        collomatique_rpc::GuiAnswer::OpenFileDialog(OpenFileDialogAnswer {
-                            file_path: file_name,
-                        }),
-                    ))
-                });
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::SaveFileDialog(params) => {
-                let parent = crate::tools::open_save::ParentWindowHandle::from_widget(root);
-                sender.oneshot_command(async move {
-                    let ext_vec: Vec<_> = params
-                        .list
-                        .iter()
-                        .map(|ext| (ext.desc.as_str(), ext.extension.as_str()))
-                        .collect();
-
-                    let file_name = crate::tools::open_save::generic_save_dialog(
-                        parent,
-                        &params.title,
-                        &ext_vec[..],
-                        params.suggested_name.as_deref(),
-                    )
-                    .await;
-
-                    DialogCmdOutput::DelayedRpcAnswer(ResultMsg::AckGui(
-                        collomatique_rpc::GuiAnswer::SaveFileDialog(SaveFileDialogAnswer {
-                            file_path: file_name,
-                        }),
-                    ))
-                });
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::OkDialog(text) => {
-                self.ok_dialog
-                    .sender()
-                    .send(ok_dialog::DialogInput::Show(text))
-                    .unwrap();
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::ConfirmDialog(text) => {
-                self.confirm_dialog
-                    .sender()
-                    .send(confirm_dialog::DialogInput::Show(text))
-                    .unwrap();
-            }
-            collomatique_rpc::cmd_msg::GuiMsg::InputDialog(info_text, placeholder_text) => {
-                self.input_dialog
-                    .sender()
-                    .send(input_dialog::DialogInput::Show(info_text, placeholder_text))
-                    .unwrap();
-            }
-        }
     }
 }

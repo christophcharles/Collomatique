@@ -12,9 +12,6 @@ pub mod channel;
 pub mod cmd_msg;
 pub use cmd_msg::CmdMsg;
 
-pub mod gui_answer;
-pub use gui_answer::GuiAnswer;
-
 pub mod solver_msg;
 pub use solver_msg::{
     IlpSolveRequest, SerializedIlpProblem, SolverIncumbentInfo, SolverMsg, SolverProgressData,
@@ -102,7 +99,6 @@ impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
 pub enum ResultMsg {
     InvalidMsg,
     Ack(Option<collomatique_state_colloscopes::NewId>),
-    AckGui(GuiAnswer),
     Data(InternalDataStream),
     GlobalError(String),
     SolverControl(bool),

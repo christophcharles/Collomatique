@@ -21,7 +21,8 @@ pub struct Dialog {
     /// What the entry holds.
     ///
     /// Kept in the model because a `SimpleComponent`'s `update` cannot reach
-    /// its widgets; same arrangement as `run_python_script/input_dialog.rs`.
+    /// its widgets; same arrangement as
+    /// `general_planning/annotation_dialog.rs`.
     package: String,
     /// Where the install speaks, the same widget the script runner uses for a
     /// subprocess's output.
