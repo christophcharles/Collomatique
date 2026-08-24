@@ -1,0 +1,11 @@
+[package]
+name = "collomatique-rpc-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+collomatique-rpc = { path = "../../generic/rpc" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-storage = { path = "../../colloscopes/storage" }

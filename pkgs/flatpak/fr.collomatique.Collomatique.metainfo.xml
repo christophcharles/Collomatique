@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>fr.collomatique.Collomatique</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>AGPL-3.0-or-later</project_license>
+  <name>Collomatique</name>
+  <summary>Colloscope planning for French CPGE classes</summary>
+  <summary xml:lang="fr">Création de colloscopes pour les classes de CPGE</summary>
+  <description>
+    <p>
+      Collomatique builds colloscopes: the schedules of oral examinations of a
+      French CPGE class. You describe the class — its subjects, its time slots,
+      its student groups, and the rules the schedule has to follow — and
+      Collomatique computes a colloscope that respects them. A colloscope can
+      also be edited by hand at any point.
+    </p>
+    <p xml:lang="fr">
+      Collomatique construit des colloscopes : les emplois du temps des
+      interrogations orales d'une classe de CPGE. Vous décrivez la classe —
+      ses matières, ses créneaux, ses groupes d'élèves et les règles que le
+      colloscope doit respecter — et Collomatique en calcule un qui les
+      respecte. Un colloscope peut aussi être modifié à la main à tout moment.
+    </p>
+    <p>
+      The schedule is computed by an exact integer programming solver, so a
+      rule that can be stated is a rule that is honored: periodicity of each
+      subject, incompatible time slots, group sizes, students left out of a
+      group. Students can be imported from a Pronote CSV export, colloscopes
+      exported to xlsx as a full table or as one sheet per group, and
+      repetitive work automated with Python scripts.
+    </p>
+    <p xml:lang="fr">
+      Le calcul repose sur un solveur exact de programmation linéaire en
+      nombres entiers : une règle que l'on sait énoncer est une règle qui est
+      tenue — périodicité de chaque matière, créneaux incompatibles, tailles
+      des groupes, élèves hors groupe. Les élèves peuvent être importés depuis
+      un export CSV de Pronote, les colloscopes exportés en xlsx sous forme de
+      tableau complet ou d'une feuille par groupe, et les tâches répétitives
+      automatisées par des scripts Python.
+    </p>
+  </description>
+  <developer id="fr.collomatique">
+    <name>Christoph Charles</name>
+  </developer>
+  <launchable type="desktop-id">fr.collomatique.Collomatique.desktop</launchable>
+  <provides>
+    <mediatype>application/x-collomatique</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <url type="homepage">https://github.com/christophcharles/Collomatique</url>
+</component>

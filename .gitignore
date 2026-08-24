@@ -14,5 +14,10 @@
 # ---> Nix
 /result
 
+# Written by `nix build`, and deliberately not committed: the flake is not how
+# this repository is normally built -- default.nix is -- so a lock file in here
+# would be stale nearly all of the time, and a stale pin is worse than none.
+/flake.lock
+
 # ---> Vscode
 /.vscode

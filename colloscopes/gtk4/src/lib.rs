@@ -1,0 +1,755 @@
+use adw::prelude::AdwDialogExt;
+// `WidgetExtManual` is the one carrying `add_tick_callback`.
+use gtk::prelude::{ApplicationExt, GtkWindowExt, WidgetExt, WidgetExtManual};
+use relm4::actions::{AccelsPlus, RelmAction, RelmActionGroup};
+use relm4::prelude::ComponentController;
+use relm4::{Component, ComponentParts, ComponentSender, Controller};
+use relm4::{adw, gtk};
+use std::collections::BTreeSet;
+use std::path::PathBuf;
+
+#[allow(dead_code)]
+mod dialogs;
+#[allow(dead_code)]
+mod tools;
+mod widgets;
+
+mod editor;
+pub mod icon;
+mod loading;
+mod welcome;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AppInit {
+    pub new: bool,
+    pub file_name: Option<PathBuf>,
+}
+
+struct AppControllers {
+    welcome: Controller<welcome::WelcomePanel>,
+    loading: Controller<loading::LoadingPanel>,
+    editor: Controller<editor::EditorPanel>,
+
+    file_error: Controller<dialogs::file_error::Dialog>,
+    file_caveats: Controller<dialogs::file_caveats::Dialog>,
+    warn_dirty: Controller<dialogs::warning_changed::Dialog>,
+    development_warning: Controller<dialogs::development_warning::Dialog>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum GlobalState {
+    WelcomeScreen,
+    LoadingScreen,
+    EditorScreen,
+}
+
+impl GlobalState {
+    fn get_screen_name(&self) -> &'static str {
+        match self {
+            GlobalState::WelcomeScreen => "welcome",
+            GlobalState::LoadingScreen => "loading",
+            GlobalState::EditorScreen => "editor",
+        }
+    }
+}
+
+pub struct AppActions {
+    save_action: RelmAction<SaveAction>,
+    undo_action: RelmAction<UndoAction>,
+    redo_action: RelmAction<RedoAction>,
+}
+pub struct AppModel {
+    controllers: AppControllers,
+    actions: AppActions,
+    state: GlobalState,
+    next_warn_msg: Option<AppInput>,
+    update_about: Option<()>,
+    present_window: Option<()>,
+    /// The development warning to show once the main window is mapped, if one
+    /// is due. Taken on the first `MainWindowMapped`, so a later re-map does
+    /// not re-open it.
+    development_warning_due: Option<collomatique_settings::Version>,
+    main_window_sensitive: bool,
+}
+
+impl AppModel {
+    fn send_but_check_dirty(&mut self, sender: ComponentSender<Self>, msg: AppInput) {
+        if self.controllers.editor.model().is_dirty() {
+            self.next_warn_msg = Some(msg);
+            sender.input(AppInput::WarnDirty);
+        } else {
+            sender.input(msg);
+        }
+    }
+
+    /// Has the welcome screen read its recent files again
+    ///
+    /// Sent whenever that screen comes back into view. The list it was built
+    /// with is by then out of date twice over: this run has opened or saved
+    /// something since, and so may another instance of Collomatique running
+    /// beside it. Files that have moved away meanwhile are re-checked at the
+    /// same time.
+    fn refresh_recent_files(&self) {
+        self.controllers
+            .welcome
+            .sender()
+            .send(welcome::WelcomeInput::Refresh)
+            .unwrap();
+    }
+}
+
+#[derive(Debug)]
+pub enum AppInput {
+    Ignore,
+    /// Bring the main window to the front. Sent at startup, because merely
+    /// showing a window does not make Windows give it the foreground.
+    Present,
+    /// The main window has drawn a full frame. This is when the development
+    /// warning can open: Windows centers a transient window on its parent when
+    /// the window is shown, using the position GDK has recorded for the parent
+    /// -- and GDK records it while drawing, so before the first frame there is
+    /// nothing to center on.
+    MainWindowDrawn,
+    AcknowledgeDevelopmentVersion(collomatique_settings::Version),
+    WarnDirty,
+    OkDirty,
+    RequestNewColloscope,
+    NewColloscope(Option<PathBuf>),
+    LoadColloscope(PathBuf),
+    ColloscopeLoaded(
+        PathBuf,
+        collomatique_state_colloscopes::Data,
+        BTreeSet<collomatique_storage::Caveat>,
+    ),
+    ColloscopeLoadingFailed(PathBuf, String),
+    ColloscopeSavingFailed(PathBuf, String),
+    PythonLoadingFailed(PathBuf, String),
+    RequestOpenExistingColloscopeWithDialog,
+    OpenExistingColloscopeWithDialog,
+    RequestQuit,
+    Quit,
+    RequestCloseFile,
+    CloseFile,
+    RequestSave,
+    RequestSaveAs,
+    RequestUndo,
+    RequestRedo,
+    RequestAbout,
+    UpdateActions,
+    StartOpenSaveDialog,
+    EndOpenSaveDialog,
+}
+
+#[derive(Debug)]
+pub enum AppCommandOutput {
+    OpenFileNotSelected,
+    OpenFileSelected(PathBuf),
+}
+
+relm4::new_action_group!(AppActionGroup, "app");
+
+relm4::new_stateless_action!(NewAction, AppActionGroup, "new");
+relm4::new_stateless_action!(OpenAction, AppActionGroup, "open");
+relm4::new_stateless_action!(SaveAction, AppActionGroup, "save");
+relm4::new_stateless_action!(SaveAsAction, AppActionGroup, "save_as");
+relm4::new_stateless_action!(UndoAction, AppActionGroup, "undo");
+relm4::new_stateless_action!(RedoAction, AppActionGroup, "redo");
+relm4::new_stateless_action!(CloseAction, AppActionGroup, "close");
+relm4::new_stateless_action!(AboutAction, AppActionGroup, "about");
+
+#[relm4::component(pub)]
+impl Component for AppModel {
+    type Input = AppInput;
+    type Output = ();
+    type Init = AppInit;
+    type CommandOutput = AppCommandOutput;
+
+    view! {
+        #[root]
+        root_window = adw::ApplicationWindow {
+            set_default_width: 1280,
+            set_default_height: 720,
+            set_title: Some("Collomatique"),
+            add_css_class: if in_dev_shown() { "devel" } else { "" },
+            gtk::Stack {
+                set_hexpand: true,
+                set_vexpand: true,
+                add_named: (model.controllers.welcome.widget(), Some("welcome")),
+                add_named: (model.controllers.loading.widget(), Some("loading")),
+                add_named: (model.controllers.editor.widget(), Some("editor")),
+                #[watch]
+                set_visible_child_name: model.state.get_screen_name(),
+                set_transition_type: gtk::StackTransitionType::Crossfade,
+            },
+
+            #[watch]
+            set_sensitive: model.main_window_sensitive,
+
+            connect_close_request[sender] => move |_| {
+                sender.input(AppInput::RequestQuit);
+                gtk::glib::Propagation::Stop
+            }
+        },
+        about_dialog = adw::AboutDialog {
+            set_application_name: "Collomatique",
+            set_developer_name: &env!("CARGO_PKG_AUTHORS").replace(":", "\n"),
+            set_version: env!("CARGO_PKG_VERSION"),
+            set_website: "https://github.com/christophcharles/Collomatique",
+            set_license_type: gtk::License::Agpl30,
+            set_application_icon: icon::ICON_NAME,
+        }
+    }
+
+    fn init(
+        params: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        // The icon must be registered before any widget asks the icon theme
+        // for it (the about dialog does when it is presented).
+        icon::register().expect("failed to register the application icon");
+
+        let editor = editor::EditorPanel::builder().launch(()).forward(
+            sender.input_sender(),
+            |msg| match msg {
+                editor::EditorOutput::UpdateActions => AppInput::UpdateActions,
+                editor::EditorOutput::SaveError(path, error) => {
+                    AppInput::ColloscopeSavingFailed(path, error)
+                }
+                editor::EditorOutput::PythonLoadingError(path, error) => {
+                    AppInput::PythonLoadingFailed(path, error)
+                }
+                editor::EditorOutput::ExportError(path, error) => {
+                    AppInput::ColloscopeSavingFailed(path, error)
+                }
+                editor::EditorOutput::StartOpenSaveDialog => AppInput::StartOpenSaveDialog,
+                editor::EditorOutput::EndOpenSaveDialog => AppInput::EndOpenSaveDialog,
+                editor::EditorOutput::PresentParent => AppInput::Present,
+            },
+        );
+
+        let loading =
+            loading::LoadingPanel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    loading::LoadingOutput::Loaded(path, data, caveats) => {
+                        AppInput::ColloscopeLoaded(path, data, caveats)
+                    }
+                    loading::LoadingOutput::Failed(path, error) => {
+                        AppInput::ColloscopeLoadingFailed(path, error)
+                    }
+                });
+
+        let welcome =
+            welcome::WelcomePanel::builder()
+                .launch(())
+                .forward(sender.input_sender(), |msg| match msg {
+                    welcome::WelcomeMessage::OpenNewColloscope => AppInput::NewColloscope(None),
+                    welcome::WelcomeMessage::OpenExistingColloscope => {
+                        AppInput::OpenExistingColloscopeWithDialog
+                    }
+                    // No dirty check: the welcome screen is shown precisely
+                    // when there is no document open, which is why its other
+                    // two buttons do without one too. A recent file that no
+                    // longer opens takes the ordinary error dialog, and stays
+                    // in the list.
+                    welcome::WelcomeMessage::OpenRecentColloscope(path) => {
+                        AppInput::LoadColloscope(path)
+                    }
+                });
+
+        let file_error = dialogs::file_error::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::file_error::DialogOutput::PresentParent => AppInput::Present,
+            });
+
+        let file_caveats = dialogs::file_caveats::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::file_caveats::DialogOutput::PresentParent => AppInput::Present,
+            });
+
+        let warn_dirty = dialogs::warning_changed::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::warning_changed::DialogOutput::Accept => AppInput::OkDirty,
+                dialogs::warning_changed::DialogOutput::PresentParent => AppInput::Present,
+            });
+
+        let development_warning = dialogs::development_warning::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                dialogs::development_warning::DialogOutput::Quit => AppInput::Quit,
+                dialogs::development_warning::DialogOutput::Acknowledged(None) => AppInput::Ignore,
+                dialogs::development_warning::DialogOutput::Acknowledged(Some(version)) => {
+                    AppInput::AcknowledgeDevelopmentVersion(version)
+                }
+                dialogs::development_warning::DialogOutput::PresentParent => AppInput::Present,
+            });
+
+        let controllers = AppControllers {
+            welcome,
+            loading,
+            editor,
+            file_error,
+            file_caveats,
+            warn_dirty,
+            development_warning,
+        };
+
+        // A prerelease version warns about itself at startup, and stops doing so
+        // on its own the day the version becomes a plain release. Whether the
+        // warning is due is not a question for the GTK layer: collomatique-settings
+        // answers it, so another frontend would get the same answer.
+        //
+        // The dialog is not opened from here. Windows centers a transient
+        // window on its parent when the window is shown, and it centers on the
+        // position GDK has recorded for the parent. GDK writes that position
+        // while drawing a frame and nowhere else, so before the main window has
+        // drawn, the recorded position is zero and the dialog lands in the
+        // corner of the screen. Waiting for "map" was not enough either:
+        // mapping happens before any frame.
+        //
+        // So the version waits in the model, and a drawn frame opens the
+        // dialog. The second tick rather than the first: a tick callback runs
+        // in the frame clock's update phase, which is before the layout phase
+        // that writes the position, so one whole frame has to go by. Returning
+        // Break then removes the callback -- it costs two frames, not one per
+        // frame forever.
+        let version = collomatique_settings::current_version();
+        let development_warning_due =
+            collomatique_settings::development_warning::is_due(&version).then_some(version);
+        {
+            let sender = sender.clone();
+            root.connect_map(move |window| {
+                let sender = sender.clone();
+                let first_tick = std::cell::Cell::new(true);
+                let _ = window.add_tick_callback(move |_, _| {
+                    if first_tick.replace(false) {
+                        return gtk::glib::ControlFlow::Continue;
+                    }
+                    sender.input(AppInput::MainWindowDrawn);
+                    gtk::glib::ControlFlow::Break
+                });
+            });
+        }
+
+        let state = GlobalState::WelcomeScreen;
+
+        let app = relm4::main_application();
+        app.set_accelerators_for_action::<NewAction>(&["<primary>N"]);
+        app.set_accelerators_for_action::<OpenAction>(&["<primary>O"]);
+        app.set_accelerators_for_action::<SaveAction>(&["<primary>S"]);
+        app.set_accelerators_for_action::<UndoAction>(&["<primary>Z"]);
+        app.set_accelerators_for_action::<RedoAction>(&["<shift><primary>Z"]);
+        app.set_accelerators_for_action::<CloseAction>(&["<primary>W"]);
+
+        let new_action: RelmAction<NewAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestNewColloscope);
+            })
+        };
+        let open_action: RelmAction<OpenAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestOpenExistingColloscopeWithDialog);
+            })
+        };
+        let save_action: RelmAction<SaveAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestSave);
+            })
+        };
+        let save_as_action: RelmAction<SaveAsAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestSaveAs);
+            })
+        };
+        let undo_action: RelmAction<UndoAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestUndo);
+            })
+        };
+        let redo_action: RelmAction<RedoAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestRedo);
+            })
+        };
+        let close_action: RelmAction<CloseAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestCloseFile);
+            })
+        };
+        let about_action: RelmAction<AboutAction> = {
+            let sender = sender.clone();
+            RelmAction::new_stateless(move |_| {
+                sender.input(AppInput::RequestAbout);
+            })
+        };
+
+        let mut group = RelmActionGroup::<AppActionGroup>::new();
+        group.add_action(new_action);
+        group.add_action(open_action);
+        group.add_action(save_action.clone());
+        group.add_action(save_as_action);
+        group.add_action(undo_action.clone());
+        group.add_action(redo_action.clone());
+        group.add_action(close_action);
+        group.add_action(about_action);
+        group.register_for_main_application();
+
+        save_action.set_enabled(false);
+        undo_action.set_enabled(false);
+        redo_action.set_enabled(false);
+
+        let actions = AppActions {
+            save_action,
+            undo_action,
+            redo_action,
+        };
+
+        let model = AppModel {
+            controllers,
+            state,
+            next_warn_msg: None,
+            actions,
+            update_about: None,
+            present_window: None,
+            development_warning_due,
+            main_window_sensitive: true,
+        };
+        let widgets = view_output!();
+
+        sender.input(AppInput::Present);
+        sender.input(if params.new {
+            AppInput::NewColloscope(params.file_name.clone())
+        } else {
+            match &params.file_name {
+                Some(file_name) => AppInput::LoadColloscope(file_name.clone()),
+                None => AppInput::Ignore,
+            }
+        });
+
+        ComponentParts { model, widgets }
+    }
+
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, root: &Self::Root) {
+        match message {
+            AppInput::Ignore => {
+                // This message exists only to be ignored (as its name suggests)
+            }
+            AppInput::Present => {
+                self.present_window = Some(());
+            }
+            AppInput::MainWindowDrawn => {
+                if let Some(version) = self.development_warning_due.take() {
+                    self.controllers
+                        .development_warning
+                        .sender()
+                        .send(dialogs::development_warning::DialogInput::Show(version))
+                        .unwrap();
+                }
+            }
+            AppInput::AcknowledgeDevelopmentVersion(version) => {
+                collomatique_settings::development_warning::acknowledge(&version);
+            }
+            AppInput::RequestNewColloscope => {
+                self.send_but_check_dirty(sender, AppInput::NewColloscope(None));
+            }
+            AppInput::NewColloscope(path) => {
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::StopLoading)
+                    .unwrap();
+                self.state = GlobalState::EditorScreen;
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile {
+                        file_name: match path {
+                            Some(p) => editor::FileName::OkFile(p),
+                            None => editor::FileName::NewFile,
+                        },
+                        data: collomatique_state_colloscopes::Data::new(),
+                    })
+                    .unwrap();
+            }
+            AppInput::LoadColloscope(path) => {
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::StopLoading)
+                    .unwrap();
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile {
+                        file_name: editor::FileName::NewFile,
+                        data: collomatique_state_colloscopes::Data::new(),
+                    })
+                    .unwrap();
+                self.state = GlobalState::LoadingScreen;
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::Load(path))
+                    .unwrap();
+            }
+            AppInput::RequestOpenExistingColloscopeWithDialog => {
+                self.send_but_check_dirty(sender, AppInput::OpenExistingColloscopeWithDialog);
+            }
+            AppInput::OpenExistingColloscopeWithDialog => {
+                sender.input(AppInput::StartOpenSaveDialog);
+                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
+                sender.oneshot_command(async move {
+                    match tools::open_save::open_dialog(parent).await {
+                        Some(path) => AppCommandOutput::OpenFileSelected(path),
+                        None => AppCommandOutput::OpenFileNotSelected,
+                    }
+                });
+            }
+            AppInput::ColloscopeLoaded(path, data, caveats) => {
+                if self.state != GlobalState::LoadingScreen {
+                    return;
+                }
+                // Every way of opening a file arrives here -- the welcome
+                // screen, the menu, the command line, a double-click in the
+                // file manager -- so this one line is the whole "opened"
+                // half of the recent files list. A file that failed to load
+                // is deliberately not recorded, and one recorded earlier that
+                // fails to load now is deliberately not forgotten.
+                collomatique_settings::recent_files::record(&path);
+                self.state = GlobalState::EditorScreen;
+                // A file loaded with caveats is suspect: keep its path but mark
+                // it so "Enregistrer" won't overwrite it silently.
+                let file_name = if caveats.is_empty() {
+                    editor::FileName::OkFile(path.clone())
+                } else {
+                    editor::FileName::CaveatFile(path.clone())
+                };
+                if !caveats.is_empty() {
+                    self.controllers
+                        .file_caveats
+                        .sender()
+                        .send(dialogs::file_caveats::DialogInput::Show(
+                            path.clone(),
+                            caveats,
+                        ))
+                        .unwrap();
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile { file_name, data })
+                    .unwrap();
+            }
+            AppInput::ColloscopeLoadingFailed(path, error) => {
+                self.controllers
+                    .file_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Open,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
+                self.state = GlobalState::WelcomeScreen;
+                self.refresh_recent_files();
+            }
+            AppInput::ColloscopeSavingFailed(path, error) => {
+                self.controllers
+                    .file_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Save,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
+            }
+            AppInput::PythonLoadingFailed(path, error) => {
+                self.controllers
+                    .file_error
+                    .sender()
+                    .send(dialogs::file_error::DialogInput::Show(
+                        dialogs::file_error::Type::Open,
+                        path,
+                        error,
+                    ))
+                    .unwrap();
+            }
+            AppInput::WarnDirty => {
+                self.controllers
+                    .warn_dirty
+                    .sender()
+                    .send(dialogs::warning_changed::DialogInput::Show)
+                    .unwrap();
+            }
+            AppInput::OkDirty => {
+                let msg_opt = self.next_warn_msg.take();
+                if let Some(msg) = msg_opt {
+                    sender.input(msg)
+                }
+            }
+            AppInput::RequestQuit => {
+                self.send_but_check_dirty(sender, AppInput::Quit);
+            }
+            AppInput::Quit => {
+                relm4::main_application().quit();
+            }
+            AppInput::RequestCloseFile => {
+                if self.state == GlobalState::WelcomeScreen {
+                    return;
+                }
+                self.send_but_check_dirty(sender, AppInput::CloseFile);
+            }
+            AppInput::CloseFile => {
+                self.state = GlobalState::WelcomeScreen;
+                self.refresh_recent_files();
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::NewFile {
+                        file_name: editor::FileName::NewFile,
+                        data: collomatique_state_colloscopes::Data::new(),
+                    })
+                    .unwrap();
+                self.controllers
+                    .loading
+                    .sender()
+                    .send(loading::LoadingInput::StopLoading)
+                    .unwrap();
+            }
+            AppInput::RequestSave => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::SaveClicked)
+                    .unwrap();
+            }
+            AppInput::RequestSaveAs => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::SaveAsClicked)
+                    .unwrap();
+            }
+            AppInput::RequestUndo => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::UndoClicked)
+                    .unwrap();
+            }
+            AppInput::RequestRedo => {
+                if self.state != GlobalState::EditorScreen {
+                    return;
+                }
+                self.controllers
+                    .editor
+                    .sender()
+                    .send(editor::EditorInput::RedoClicked)
+                    .unwrap();
+            }
+            AppInput::RequestAbout => {
+                self.update_about = Some(());
+            }
+            AppInput::UpdateActions => {
+                self.actions
+                    .save_action
+                    .set_enabled(self.controllers.editor.model().can_save());
+                self.actions
+                    .undo_action
+                    .set_enabled(self.controllers.editor.model().can_undo());
+                self.actions
+                    .redo_action
+                    .set_enabled(self.controllers.editor.model().can_redo());
+            }
+            AppInput::StartOpenSaveDialog => {
+                self.main_window_sensitive = false;
+            }
+            AppInput::EndOpenSaveDialog => {
+                self.main_window_sensitive = true;
+            }
+        }
+    }
+
+    fn update_with_view(
+        &mut self,
+        widgets: &mut Self::Widgets,
+        message: Self::Input,
+        sender: ComponentSender<Self>,
+        root: &Self::Root,
+    ) {
+        self.update(message, sender.clone(), root);
+        self.update_about_dialog(widgets);
+        self.update_present_window(widgets);
+        self.update_view(widgets, sender);
+    }
+
+    fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            AppCommandOutput::OpenFileNotSelected => {
+                sender.input(AppInput::EndOpenSaveDialog);
+            }
+            AppCommandOutput::OpenFileSelected(path) => {
+                sender.input(AppInput::EndOpenSaveDialog);
+                sender.input(AppInput::LoadColloscope(path));
+            }
+        }
+    }
+}
+
+impl AppModel {
+    fn update_about_dialog(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if self.update_about.take().is_some() {
+            widgets.about_dialog.present(Some(&widgets.root_window));
+        }
+    }
+
+    fn update_present_window(&mut self, widgets: &mut <Self as Component>::Widgets) {
+        if self.present_window.take().is_some() {
+            widgets.root_window.present();
+        }
+    }
+}
+
+fn in_dev_tooltip() -> String {
+    let version = collomatique_settings::current_version();
+    if collomatique_settings::development_warning::is_development(&version) {
+        format!("Version de développement {}", version)
+    } else {
+        format!("Version stable {}", version)
+    }
+}
+
+fn in_dev_shown() -> bool {
+    let version = collomatique_settings::current_version();
+    collomatique_settings::development_warning::is_development(&version)
+}

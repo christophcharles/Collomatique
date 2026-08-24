@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-collomatique">
+    <comment>Collomatique colloscope</comment>
+    <comment xml:lang="fr">Colloscope Collomatique</comment>
+    <!-- Without this, a file manager looks for an icon named after the type
+         itself, "application-x-collomatique", finds none, and draws a blank
+         page. There is no artwork of our own for a colloscope file yet, so
+         point it at the application icon, which flatpak does export. -->
+    <icon name="fr.collomatique.Collomatique"/>
+    <!-- A colloscope file is JSON: a header naming the file type and the
+         version that wrote it, then the entries. Saying so lets anything that
+         handles JSON still recognise one. -->
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.collomatique"/>
+  </mime-type>
+</mime-info>

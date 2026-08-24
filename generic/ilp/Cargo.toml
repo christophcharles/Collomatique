@@ -1,0 +1,25 @@
+[package]
+name = "collomatique-ilp"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-time = { path = "../../generic/time" }
+ordered-float.workspace = true
+thiserror.workspace = true
+serde = { workspace = true, features = ["derive"], optional = true }
+serde_json = { workspace = true, optional = true }
+ndarray = { version = "0.15.6" }
+sprs = "0.11"
+coin_cbc = { version = "0.1.8", optional = true }
+gag = { version = "1.0.0", optional = true }
+collo-cbc = { path = "../../generic/collo-cbc", optional = true }
+good_lp = { version = "1.13.0", features = ["lp-solvers"], optional = true }
+
+[features]
+default = ["collo_cbc"]
+coin_cbc = ["dep:coin_cbc","dep:gag"]
+collo_cbc = ["dep:collo-cbc"]
+good_lp = ["dep:good_lp"]
+serde = ["dep:serde", "dep:serde_json", "ordered-float/serde"]

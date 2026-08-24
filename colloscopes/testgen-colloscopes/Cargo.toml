@@ -1,0 +1,17 @@
+[package]
+name = "collomatique-testgen-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state = { path = "../../generic/state" }
+# Intentional dev-dep cycle: state-colloscopes depends on this crate as a
+# dev-dependency for its property tests. Cargo allows cycles through
+# dev-dependencies for path deps; it only blocks publishing, which we don't do.
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-time = { path = "../../generic/time" }
+chrono = { workspace = true }
+non-empty-string = { workspace = true, features = ["serde"] }
+rand = "0.9"
+rand_chacha = "0.9"

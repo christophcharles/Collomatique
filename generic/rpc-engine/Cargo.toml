@@ -1,0 +1,18 @@
+[package]
+name = "collomatique-rpc-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-rpc = { path = "../../generic/rpc" }
+collomatique-ilp = { path = "../../generic/ilp", features = ["serde", "collo_cbc"] }
+collomatique-ilp-modeler = { path = "../../generic/ilp-modeler", features = ["serde"] }
+collomatique-strategies = { path = "../../generic/strategies" }
+collomatique-subprocesses = { path = "../../generic/subprocesses" }
+ordered-float.workspace = true
+anyhow.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

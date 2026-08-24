@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "collo-cbc"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "cc",
  "pkg-config",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-constraints-colloscopes"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
@@ -354,7 +354,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-constraints-groups"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
@@ -367,7 +367,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-constraints-rooms"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
@@ -378,7 +378,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-gtk4"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -389,8 +389,10 @@ dependencies = [
  "collomatique-ilp-modeler",
  "collomatique-mps",
  "collomatique-ops",
+ "collomatique-python-runner",
  "collomatique-rpc",
- "collomatique-rpc-engine",
+ "collomatique-rpc-colloscopes",
+ "collomatique-rpc-engine-colloscopes",
  "collomatique-settings",
  "collomatique-state",
  "collomatique-state-colloscopes",
@@ -400,20 +402,22 @@ dependencies = [
  "collomatique-time",
  "collomatique-ui-text",
  "collomatique-xlsx",
+ "gdk4-win32",
+ "glib-build-tools",
  "gtk4",
  "libadwaita",
- "libc",
  "non-empty-string",
- "portable-pty",
+ "raw-window-handle",
  "relm4",
  "rfd",
- "rustix",
  "tokio",
+ "windows-sys 0.59.0",
+ "winresource",
 ]
 
 [[package]]
 name = "collomatique-ilp"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "coin_cbc",
  "collo-cbc",
@@ -430,7 +434,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ilp-modeler"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler-derive",
@@ -441,7 +445,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ilp-modeler-derive"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -450,14 +454,14 @@ dependencies = [
 
 [[package]]
 name = "collomatique-mps"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-ilp",
 ]
 
 [[package]]
 name = "collomatique-ops"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-state",
@@ -473,49 +477,39 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
+ "collomatique-constraints-colloscopes",
+ "collomatique-mps",
  "collomatique-ops",
  "collomatique-settings",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-strategies",
+ "collomatique-subprocesses",
  "collomatique-time",
  "collomatique-ui-text",
+ "collomatique-xlsx",
  "pyo3",
  "rfd",
+ "serde",
  "tokio",
 ]
 
 [[package]]
-name = "collomatique-python-old"
-version = "0.1.0-alpha.1"
-dependencies = [
- "anyhow",
- "chrono",
- "collomatique-ops",
- "collomatique-rpc",
- "collomatique-state",
- "collomatique-state-colloscopes",
- "collomatique-time",
- "non-empty-string",
- "pyo3",
-]
-
-[[package]]
 name = "collomatique-python-runner"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",
  "collomatique-python",
- "collomatique-python-old",
  "pyo3",
 ]
 
 [[package]]
 name = "collomatique-rooms"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -533,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rooms-model"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-time",
  "non-empty-string",
@@ -541,13 +535,11 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rpc"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
- "anyhow",
  "collomatique-ilp",
- "collomatique-state-colloscopes",
- "collomatique-storage",
  "collomatique-time",
+ "interprocess",
  "ordered-float",
  "serde",
  "serde_json",
@@ -555,37 +547,57 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-rpc-colloscopes"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "collomatique-rpc",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "serde",
+]
+
+[[package]]
 name = "collomatique-rpc-engine"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "anyhow",
- "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-python-runner",
  "collomatique-rpc",
- "collomatique-state",
- "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",
- "collomatique-time",
  "libc",
  "ordered-float",
  "tokio",
 ]
 
 [[package]]
+name = "collomatique-rpc-engine-colloscopes"
+version = "0.1.0-alpha.2"
+dependencies = [
+ "anyhow",
+ "collomatique-python-runner",
+ "collomatique-rpc",
+ "collomatique-rpc-colloscopes",
+ "collomatique-rpc-engine",
+ "collomatique-state-colloscopes",
+]
+
+[[package]]
 name = "collomatique-settings"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "directories",
+ "fs4",
  "semver",
+ "serde",
  "serde_json",
+ "xattr",
 ]
 
 [[package]]
 name = "collomatique-state"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "collomatique-state-derive",
  "thiserror 1.0.69",
@@ -593,7 +605,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-state-colloscopes"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-state",
@@ -606,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-state-derive"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -615,7 +627,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-storage"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-settings",
@@ -633,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-strategies"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "collomatique-ilp",
@@ -650,7 +662,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-subprocesses"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "async-trait",
  "collomatique-ilp",
@@ -668,7 +680,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-testgen-colloscopes"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-state",
@@ -681,7 +693,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-time"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "serde",
@@ -691,19 +703,20 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ui-text"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
+ "collomatique-strategies",
  "collomatique-time",
  "thiserror 1.0.69",
 ]
 
 [[package]]
 name = "collomatique-xlsx"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-state-colloscopes",
@@ -894,6 +907,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "doctest-file"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c2db04e74f0a9a93103b50e90b96024c9b2bdca8bce6a632ec71b88736d3d359"
+
+[[package]]
 name = "downcast-rs"
 version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1050,6 +1069,16 @@ name = "fragile"
 version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "28dd6caf6059519a65843af8fe2a3ae298b14b80179855aeb4adc2c1934ee619"
+
+[[package]]
+name = "fs4"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8640e34b88f7652208ce9e88b1a37a2ae95227d84abec377ccd3c5cfeb141ed4"
+dependencies = [
+ "rustix",
+ "windows-sys 0.59.0",
+]
 
 [[package]]
 name = "futures"
@@ -1221,6 +1250,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdk4-win32"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e54beb3e19bff7ccc05153e043bf0eea9cf76c07a3387fb0151bfa0fbfce9df0"
+dependencies = [
+ "gdk4",
+ "gdk4-win32-sys",
+ "gio",
+ "glib",
+ "libc",
+]
+
+[[package]]
+name = "gdk4-win32-sys"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d554341f26b2f6191aaf2ecb4d0089f3696a40cadb2dba75dad03e48a6dc0eb9"
+dependencies = [
+ "gdk4-sys",
+ "glib-sys",
+ "libc",
+ "system-deps",
+]
+
+[[package]]
 name = "getrandom"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1294,6 +1348,15 @@ dependencies = [
  "libc",
  "memchr",
  "smallvec",
+]
+
+[[package]]
+name = "glib-build-tools"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7029c2651d9b5d5a3eea93ec8a1995665c6d3a69ce9bf6042ad9064d134736d8"
+dependencies = [
+ "gio",
 ]
 
 [[package]]
@@ -1630,6 +1693,19 @@ dependencies = [
  "hashbrown 0.16.1",
  "serde",
  "serde_core",
+]
+
+[[package]]
+name = "interprocess"
+version = "2.4.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "798de1433ba514cc6c04c4144c2469af81396e4906195218737c776d47769572"
+dependencies = [
+ "doctest-file",
+ "libc",
+ "recvmsg",
+ "widestring",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -2315,6 +2391,12 @@ dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
 ]
+
+[[package]]
+name = "recvmsg"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d3edd4d5d42c92f0a659926464d4cce56b562761267ecf0f469d85b7de384175"
 
 [[package]]
 name = "redox_users"
@@ -3065,6 +3147,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c2856837ef78f57382f06b2b8563a2f512f7185d732608fd9176cb3b8edf0e"
 
 [[package]]
+name = "version_check"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+
+[[package]]
 name = "wasi"
 version = "0.11.1+wasi-snapshot-preview1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3207,6 +3295,12 @@ dependencies = [
  "js-sys",
  "wasm-bindgen",
 ]
+
+[[package]]
+name = "widestring"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471"
 
 [[package]]
 name = "winapi"
@@ -3464,6 +3558,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "winresource"
+version = "0.1.30"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e287ced0f21cd11f4035fe946fd3af145f068d1acb708afd248100f89ec7432d"
+dependencies = [
+ "toml",
+ "version_check",
+]
+
+[[package]]
 name = "wit-bindgen"
 version = "0.51.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3474,6 +3578,16 @@ name = "writeable"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9edde0db4769d2dc68579893f2306b26c6ecfbe0ef499b013d731b7b9247e0b9"
+
+[[package]]
+name = "xattr"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32e45ad4206f6d2479085147f02bc2ef834ac85886624a23575ae137c8aa8156"
+dependencies = [
+ "libc",
+ "rustix",
+]
 
 [[package]]
 name = "yoke"

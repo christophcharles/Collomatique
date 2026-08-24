@@ -1,0 +1,12 @@
+[package]
+name = "collomatique-constraints-rooms"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-ilp = { path = "../../generic/ilp" }
+collomatique-ilp-modeler = { path = "../../generic/ilp-modeler" }
+collomatique-rooms-model = { path = "../../rooms/rooms-model" }
+collomatique-time = { path = "../../generic/time" }
+non-empty-string = { workspace = true }

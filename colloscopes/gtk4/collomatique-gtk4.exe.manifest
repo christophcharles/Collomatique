@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<!--
+  The Windows application manifest, compiled into the executable by build.rs.
+
+  It exists for one reason: to declare the process DPI-unaware, so that Windows
+  scales the finished window itself.
+
+  GTK's Win32 backend has no fractional scaling (GNOME/gtk#1036). Widget
+  scaling is an integer, so at Windows' 150% setting GTK builds the whole
+  layout at 100%, while the font DPI is a separate number that does follow the
+  system and lands at 144. Text at 1.5 inside a layout at 1.0 is what makes the
+  window come out cramped, with buttons too small for their own labels.
+
+  Declared unaware, GTK is told 96 dpi and lays everything out at 100%, and
+  Windows stretches the result to the display's setting. Exact at 200%, where
+  the stretch is a whole number, and slightly soft at 150%. Proportionate at
+  both, which it is not today.
+
+  This has to be a manifest rather than a call at startup. Awareness is fixed
+  before any of our code runs and cannot be changed afterwards, which is what
+  lets it win over the SetProcessDpiAwarenessContext that GTK makes for itself:
+  that call fails with ERROR_ACCESS_DENIED, and GTK reads back what was set
+  instead of insisting.
+
+  The two elements say the same thing to two generations of Windows. Windows 10
+  1607 and later read dpiAwareness and ignore dpiAware; anything older reads
+  dpiAware. Both spellings also mean "and the process may not change its mind
+  later". The plain absence of these elements is unaware too, but a changeable
+  one, which would leave GTK's call to succeed.
+
+  Nothing else is declared here on purpose. UTF-8 as the process code page,
+  long path support and a supported-OS list are all real manifest settings with
+  real effects, and none of them has anything to do with scaling.
+
+  Beware of one thing when editing: an XML comment may not contain two dashes
+  in a row, which is the dash this project writes everywhere else. A manifest
+  that does not parse is not ignored, it is fatal. Windows refuses to start the
+  process at all, with "the side-by-side configuration is incorrect" and no
+  clue as to which file it means.
+-->
+
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0"
+          xmlns:asmv3="urn:schemas-microsoft-com:asm.v3">
+
+  <!-- Required, and nothing binds to it: the version a user is shown comes
+       from the version resource build.rs writes beside this file, not from
+       here. Left at 1.0.0.0 so releases do not have to touch it. -->
+  <assemblyIdentity type="win32"
+                    name="ChristophCharles.Collomatique.Gtk4"
+                    version="1.0.0.0"/>
+
+  <!-- The ordinary answer: run as whoever started it, never ask for
+       administrator rights. Only the installer ever needs those. -->
+  <trustInfo xmlns="urn:schemas-microsoft-com:asm.v2">
+    <security>
+      <requestedPrivileges xmlns="urn:schemas-microsoft-com:asm.v3">
+        <requestedExecutionLevel level="asInvoker" uiAccess="false" />
+      </requestedPrivileges>
+    </security>
+  </trustInfo>
+
+  <asmv3:application>
+    <asmv3:windowsSettings>
+      <dpiAware
+        xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">false</dpiAware>
+      <dpiAwareness
+        xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">unaware</dpiAwareness>
+    </asmv3:windowsSettings>
+  </asmv3:application>
+
+</assembly>
