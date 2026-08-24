@@ -1,0 +1,16 @@
+[package]
+name = "collomatique-state-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state = { path = "../../generic/state" }
+collomatique-time = { path = "../../generic/time" }
+thiserror.workspace = true
+non-empty-string = { workspace = true, features = ["serde"] }
+chrono = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+collomatique-testgen-colloscopes = { path = "../../colloscopes/testgen-colloscopes" }

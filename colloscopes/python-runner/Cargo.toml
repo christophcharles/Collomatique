@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-python-runner"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-python = { path = "../../colloscopes/python" }
+pyo3.workspace = true
+anyhow.workspace = true

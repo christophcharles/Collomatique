@@ -1,6 +1,22 @@
 [workspace]
 resolver = "2"
-members = [ "gtk4", "state", "state-derive", "ilp", "ilp-modeler", "ilp-modeler-derive", "time" , "storage", "state-colloscopes" , "testgen-colloscopes" , "python", "python-runner", "ops", "rpc", "rpc-engine", "constraints-colloscopes", "constraints-groups", "xlsx", "mps", "collo-cbc", "subprocesses", "rooms", "rooms-model", "constraints-rooms", "strategies", "settings", "ui-text"]
+# Three groups: `generic/` is machinery written to be reusable across problems,
+# `colloscopes/` is the application, `rooms/` is the unfinished side project.
+members = [
+    "generic/collo-cbc", "generic/ilp", "generic/ilp-modeler",
+    "generic/ilp-modeler-derive", "generic/mps", "generic/state",
+    "generic/state-derive", "generic/strategies", "generic/time",
+
+    "colloscopes/constraints-colloscopes", "colloscopes/constraints-groups",
+    "colloscopes/gtk4", "colloscopes/ops", "colloscopes/python",
+    "colloscopes/python-runner", "colloscopes/rpc", "colloscopes/rpc-engine",
+    "colloscopes/settings", "colloscopes/state-colloscopes",
+    "colloscopes/storage", "colloscopes/subprocesses",
+    "colloscopes/testgen-colloscopes", "colloscopes/ui-text",
+    "colloscopes/xlsx",
+
+    "rooms/rooms", "rooms/rooms-model", "rooms/constraints-rooms",
+]
 
 [workspace.package]
 version = "0.1.0-alpha.1.99"

@@ -1,0 +1,22 @@
+[package]
+name = "collomatique-rpc-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-rpc = { path = "../../colloscopes/rpc" }
+collomatique-python-runner = { path = "../../colloscopes/python-runner" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
+collomatique-ilp = { path = "../../generic/ilp", features = ["serde", "collo_cbc"] }
+collomatique-ilp-modeler = { path = "../../generic/ilp-modeler", features = ["serde"] }
+collomatique-strategies = { path = "../../generic/strategies" }
+collomatique-subprocesses = { path = "../../colloscopes/subprocesses" }
+collomatique-time = { path = "../../generic/time" }
+ordered-float.workspace = true
+anyhow.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

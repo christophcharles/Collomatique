@@ -14,7 +14,7 @@ set(VCPKG_BUILD_TYPE release)
 
 # The COIN-OR libraries and the linear algebra they sit on are built static.
 #
-# collo-cbc/cpp/collo_cbc.cpp declares
+# generic/collo-cbc/cpp/collo_cbc.cpp declares
 #
 #     extern CglPreProcess* cbcPreProcessPointer;
 #

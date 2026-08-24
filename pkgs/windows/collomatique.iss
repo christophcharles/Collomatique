@@ -109,7 +109,7 @@ DisableProgramGroupPage=yes
 
 ; The only two places the icon has to be named. Everywhere else it is inherited:
 ; the Start-menu shortcut and the file association both point at the executable,
-; and the executable carries the same icon compiled in by gtk4/build.rs.
+; and the executable carries the same icon compiled in by colloscopes/gtk4/build.rs.
 ;
 ;   SetupIconFile         -- setup.exe itself, before anything is installed, so
 ;                            it is the one place that cannot read it off the
@@ -176,7 +176,7 @@ Root: HKA; Subkey: "Software\Classes\{#ProgId}"; \
     Flags: uninsdeletekey
 
 ; ",0" is the first icon resource in the executable, which is the one and only
-; one gtk4/build.rs puts there. Files get the application's icon because there is
+; one colloscopes/gtk4/build.rs puts there. Files get the application's icon because there is
 ; no separate document artwork -- the same choice the flatpak makes in its
 ; mime.xml.
 Root: HKA; Subkey: "Software\Classes\{#ProgId}\DefaultIcon"; \

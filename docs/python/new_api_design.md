@@ -1,7 +1,8 @@
 # New Python API — design
 
 This document is the design of the replacement Python API, worked out in discussion
-(August 2026). It supersedes the direction of the current `python/` crate, which was a
+(August 2026). It supersedes the direction of the current `colloscopes/python/` crate
+(previously `python/`), which was a
 hack job built for testing purposes. The old API remains untouched during the
 transition (see §13) and is retired at the end.
 
@@ -76,7 +77,7 @@ The embedded interpreter stops being the API's foundation and becomes *a runner*
 **Packaging.** Done. The Rust crate builds both as an rlib (linked into the
 collomatique binary, module registered via `append_to_inittab` — the hosted path
 needed **no** packaging or nix changes) and as a cdylib for a wheel, which maturin
-builds from `python/pyproject.toml` and which a Python environment must have on
+builds from `colloscopes/python/pyproject.toml` and which a Python environment must have on
 `sys.path` for standalone use. On the nix side `pkgs/nix/collomatique-python.nix` is
 the module as a member of an interpreter's package set, and `pkgs/nix/python-env.nix`
 an interpreter with it already in; the flake exposes both. The wheel is the `.so` and
@@ -301,7 +302,7 @@ Conventions:
 
 ## 5. The write surface
 
-The write API is the `ops/` layer, grouped by collection — the collection object
+The write API is the `colloscopes/ops/` layer (previously `ops/`), grouped by collection — the collection object
 *is* the module grouping. One method call = one `UpdateOp` = one undo slot. This is
 the completeness guarantee: the mapping below covers all 68 composite ops, including
 the five families the old API never bound (pairings, slot pairings, balancing,
@@ -359,7 +360,7 @@ with doc.transaction("Import Pronote"):
                            # exception → everything rolled back
 ```
 
-Backed by a stack of `AppSession`s in `state/` (`SessionStack`), so blocks really
+Backed by a stack of `AppSession`s in `generic/state/` (previously `state/`) (`SessionStack`), so blocks really
 nest: an inner block that rolls back takes only its own writes, and an outer block
 that catches the exception keeps everything it did before. Writes, `undo()` and
 `redo()` land in the innermost open block, and committing it folds it into the one
@@ -554,7 +555,7 @@ None` check, and forgetting it gives an obscure `AttributeError` twenty lines la
 ### 9.2 Writing a document out
 
 **The hosted document is not sent back automatically.** Today's engine does that (one
-`SetData` at script exit, when the state was modified — `rpc-engine/src/lib.rs`), but
+`SetData` at script exit, when the state was modified — `colloscopes/rpc-engine/src/lib.rs`, previously `rpc-engine/src/lib.rs`), but
 only because the old API gives the script no way to say it. Once there is a call,
 automatic becomes harmful: a script that raises halfway pushes its half-finished
 state, and a script that sends deliberately gets a second, unwanted send at exit. The
@@ -651,7 +652,7 @@ clm.dialogs.save_file(...)
 clm.dialogs.pick_folder(...)
 ```
 
-This is a **design change and a new dependency for the `python/` crate** — `rfd` is
+This is a **design change and a new dependency for the `colloscopes/python/` crate** — `rfd` is
 today a `gtk4` dependency only. It is recorded here as a decision, not smuggled in.
 Being already in the lockfile buys only a vetted version and an unsurprised nix side.
 
@@ -732,14 +733,14 @@ those warnings and a script has nothing.
 
 **Compaction cannot travel to the host.** It would have to arrive as an
 `Op::GlobalUpdate`, whose annotate arm only pushes the id issuer *forward*
-(`IdIssuer::skip_to_id`, `state-colloscopes/src/ops.rs`). It must: an undone
+(`IdIssuer::skip_to_id`, `colloscopes/state-colloscopes/src/ops.rs`, previously `state-colloscopes/src/ops.rs`). It must: an undone
 `GlobalUpdate` restores the old, bigger ids, so the issuer has to stay above
 everything the redo stack still holds. The host would end up with dense ids in its
 current data, an issuer still at its old high-water mark — the next entity added gets
 a big id again — and a history that brings the big ids back on Ctrl-Z. For exactly
 this reason the GUI does not compact through an op at all: it replaces the whole
 `AppState` and destroys the history (`EditorInput::CompactIds` in
-`gtk4/src/editor.rs`).
+`colloscopes/gtk4/src/editor.rs`, previously `gtk4/src/editor.rs`).
 
 The API settles this with the origin rule, not with a special case:
 
@@ -993,14 +994,14 @@ built against, which ends up inside the compiled module — so nix keeps that bi
 alive, and a script run from `pkgs/nix/python-env.nix` solves without naming
 anything. A wheel built anywhere else simply has no fourth rung unless its builder
 sets the variable. `--python-no-engine` (§1) withholds the injection, which is how a
-script — and `gtk4/tests/e2e/` — reaches the rungs below it.
+script — and `colloscopes/gtk4/tests/e2e/` — reaches the rungs below it.
 
 ## 11. Rust-side prerequisites
 
-Work outside the `python/` crate that this design requires. All four have landed;
+Work outside the `colloscopes/python/` crate that this design requires. All four have landed;
 nothing here blocks the new crate any more.
 
-1. **Whole-colloscope install op** — done: the op in `ops/` (5ee7ec05), the GUI
+1. **Whole-colloscope install op** — done: the op in `colloscopes/ops/` (5ee7ec05), the GUI
    adopting it (dfe62270). `ColloscopeUpdateOp::InstallColloscope` writes a whole
    colloscope through the cascade: afterwards the document holds the payload's rows
    and no others. It is the solver's landing door and the scripting API's
@@ -1027,7 +1028,8 @@ nothing here blocks the new crate any more.
    result brings the colloscope panel forward.
 
 2. **`to_xlsx_config` in the `xlsx` crate** — done (273f3e28). It moved out of
-   `gtk4/src/editor/export.rs` into `xlsx/src/config_conversion.rs` as `From` impls;
+   `colloscopes/gtk4/src/editor/export.rs` into `colloscopes/xlsx/src/config_conversion.rs`
+   (previously `xlsx/…`) as `From` impls;
    `gtk4`'s `export.rs` keeps only `export_to_xlsx` and its anyhow wrapper. No new
    dependency was needed: `xlsx` already depends on `state-colloscopes`, since
    `write_xlsx` takes an `&InnerData`. The two config types stay separate on purpose:
@@ -1037,7 +1039,7 @@ nothing here blocks the new crate any more.
    read a disabled value by accident.
 
 3. **Crate split** (§12) — done (c1a4ce18), with the rename following (fd343b5e).
-   `python-runner/` took `initialize()` and `run_python_script()` unchanged, `python/`
+   `colloscopes/python-runner/` (previously `python-runner/`) took `initialize()` and `run_python_script()` unchanged, `colloscopes/python/`
    kept `glue` and nothing else, and `rpc-engine` now depends on the runner only — it
    never used anything else from the python crate.
 
@@ -1045,7 +1047,7 @@ nothing here blocks the new crate any more.
    `glue::current_session()` reads it and the library cannot depend on the runner; the
    library gained a public setter and the runner drives it around a script run. pyo3
    moved to the workspace dependencies so the two crates cannot drift onto versions
-   that would only disagree at link time. Then `python/` became `python-old/` (crate
+   that would only disagree at link time. Then `colloscopes/python/` became `python-old/` (crate
    `collomatique-python-old`, module `collomatique_old`), freeing the name for the new
    crate; the three contract scripts import it under an alias, so their bodies keep
    calling `collomatique.X` unchanged.
@@ -1069,7 +1071,7 @@ nothing here blocks the new crate any more.
 `RunPythonScript` path of `rpc-engine` stop sending `SetData` at script exit, and have
 the runner expose the send to the module instead. It is not needed. That send is
 conditioned on the old module's shared `AppState` having been modified (`state.can_undo()`
-in `rpc-engine/src/lib.rs`), and that `Arc<Mutex<AppState>>` is `python-old`'s own
+in `colloscopes/rpc-engine/src/lib.rs`), and that `Arc<Mutex<AppState>>` is `python-old`'s own
 structure, handed to `run_python_script` as its file state. The new crate has its own
 document and never touches it, so the automatic send could not fire for a new-API
 script; it went with `python-old/`, together with the `AppState` the `RunPythonScript`
@@ -1078,12 +1080,12 @@ therefore needed nothing removed first.
 
 ## 12. Crate layout
 
-- `python-old/` — the old `python/` crate, renamed; Python module name
+- `python-old/` — the old `colloscopes/python/` crate, renamed; Python module name
   `collomatique_old`. Frozen for the transition, then **removed** once the three
   contract scripts had been ported (§13, step 6).
-- `python/` — the new API crate, module name `collomatique`. Builds as rlib (for
+- `colloscopes/python/` — the new API crate, module name `collomatique`. Builds as rlib (for
   embedding) and cdylib (for the wheel, whose maturin manifest is
-  `python/pyproject.toml`). Ships the value-dataclass `.py` source, baked in with
+  `colloscopes/python/pyproject.toml`). Ships the value-dataclass `.py` source, baked in with
   `include_str!` and materialized by the crate's own `data::register`
   (`PyModule::from_code`) during module init — which is why neither a hosted script
   nor a wheel needs a filesystem package. Takes a new `rfd` dependency for §9.3.
@@ -1094,14 +1096,14 @@ therefore needed nothing removed first.
   files — the pre-commit hook truncates the workspace version itself and refuses a
   commit where the two disagree. Nothing user-facing is affected: `__version__` and
   every document header still come from `collomatique_settings::current_version()`.
-- `python-runner/` — the executor: interpreter lifecycle, inittab registration (of
+- `colloscopes/python-runner/` — the executor: interpreter lifecycle, inittab registration (of
   *both* modules during the transition, of `collomatique` alone since), the document
   handoff to hosted scripts. `rpc-engine` depends on this crate only.
 
 ## 13. Migration
 
-1. Crate split and rename: `python/` → `python-old/` (`collomatique_old`), new
-   empty `python/`, `python-runner/`. The three contract scripts
+1. Crate split and rename: `colloscopes/python/` → `python-old/` (`collomatique_old`), new
+   empty `colloscopes/python/`, `colloscopes/python-runner/`. The three contract scripts
    (`extra-scripts/import.py`, `scripts/import_pronote_web_2026_05_06.py`,
    `scripts/examples/custom_export_xlsx.py`) get their one-line import change in
    the same change; the user runs them as the acceptance test (the §7 contract of
@@ -1168,7 +1170,7 @@ therefore needed nothing removed first.
    into `strategies`, and its sentences into `ui-text` (`1f4d9aae`, `a8678c4a`,
    §10.3) — the solve dialog and the module had each been computing one, and the
    module's was three states too wide. And the tests became a new end-to-end
-   target, `gtk4/tests/e2e.rs` (`8f3ff6f4`), which spawns the built binary once
+   target, `colloscopes/gtk4/tests/e2e.rs` (`8f3ff6f4`), which spawns the built binary once
    per test: which engine a solve re-executes is a property of the *process* a
    script runs in, and one interpreter cannot be in three of them at once.
 6. Migrate the three contract scripts to the new API (user-validated) — they gain an

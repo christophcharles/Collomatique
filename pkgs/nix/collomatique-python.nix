@@ -3,7 +3,7 @@
 # A member rather than a flag on `collomatique.nix`, because that is what
 # `python3.withPackages` composes with -- see `python-env.nix` next door, and
 # the `collomatique-python` output of the flake. It is built from
-# `python/pyproject.toml`, so what comes out here is the same wheel a plain
+# `colloscopes/python/pyproject.toml`, so what comes out here is the same wheel a plain
 # `maturin build` produces.
 {
     lib,
@@ -20,9 +20,9 @@ buildPythonPackage {
     # rather than taken from the application derivation: what buildPythonPackage
     # wants is the version of the wheel, which it checks against the metadata
     # maturin produced. That is the python crate's truncated version, the only
-    # one of the two that PEP 440 accepts -- see python/Cargo.toml.
+    # one of the two that PEP 440 accepts -- see colloscopes/python/Cargo.toml.
     version = (builtins.fromTOML
-        (builtins.readFile ../../python/Cargo.toml)).package.version;
+        (builtins.readFile ../../colloscopes/python/Cargo.toml)).package.version;
     # The vendor derivation, on the other hand, really is the same one: it is
     # built from Cargo.lock alone, and both builds are of that same workspace.
     # So there is one cargoHash in the tree and nothing here to drift.
@@ -44,7 +44,7 @@ buildPythonPackage {
     };
 
     # Where the maturin manifest is.
-    buildAndTestSubdir = "python";
+    buildAndTestSubdir = "colloscopes/python";
 
     nativeBuildInputs = [
         rustPlatform.cargoSetupHook
@@ -63,7 +63,7 @@ buildPythonPackage {
         wayland
     ];
 
-    # The last rung of `python/src/engine.rs`, baked in at compile time: a
+    # The last rung of `colloscopes/python/src/engine.rs`, baked in at compile time: a
     # solve run from this module re-executes exactly the collomatique it was
     # built against, with nobody having to name a binary. The store path ends
     # up inside the compiled module, so it is a real dependency and stays.

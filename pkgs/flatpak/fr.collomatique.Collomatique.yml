@@ -71,7 +71,7 @@ modules:
   # then Cbc. Versions and configure flags mirror nixpkgs, which is what
   # Collomatique is built against outside the flatpak; `-C` is autoconf's
   # --config-cache. Each module installs a pkg-config file into
-  # /app/lib/pkgconfig, and that is the whole interface: collo-cbc/build.rs
+  # /app/lib/pkgconfig, and that is the whole interface: generic/collo-cbc/build.rs
   # probes for `cbc` and needs nothing else.
   - name: coinutils
     buildsystem: autotools

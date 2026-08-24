@@ -1,6 +1,6 @@
 # TODO: A greedy algorithm for group-list generation
 
-Group-list generation is an ILP today: `constraints-groups/` builds one
+Group-list generation is an ILP today: `colloscopes/constraints-groups/` builds one
 assignment matrix per list, with a stability objective and staggered
 incremental epochs, and the GUI drives it through the ordinary solver dialog.
 
@@ -9,7 +9,7 @@ We should **try writing a greedy algorithm** for it instead.
 There is already a precedent inside the crate. The template grouping — the
 partition of the whole student body the objective asks each list to resemble —
 used to be solved and is now computed by a greedy clustering on an affinity
-graph (`constraints-groups/src/ghost.rs`, which explains why it moved). The
+graph (`colloscopes/constraints-groups/src/ghost.rs`, which explains why it moved). The
 lists themselves are the remaining half.
 
 The old ILP design, for reference, is the retired roadmap:

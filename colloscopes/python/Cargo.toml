@@ -1,0 +1,71 @@
+[package]
+name = "collomatique-python"
+# The one crate that does not inherit the workspace version, and it cannot.
+# maturin reads this line to build the wheel's metadata and wants PEP 440,
+# which allows nothing numeric after a prerelease -- so the workspace's
+# `0.1.0-alpha.1.99` is refused outright. Writing the dev counter the way PEP
+# 440 would take it, `post99`, breaks the other side: semver compares an
+# identifier with letters in it lexically, so `post100` would sort before
+# `post99`.
+#
+# So the wheel gets the workspace version with the dev counter cut off. What
+# is lost is only wheel identity: two dev builds make wheels of the same name,
+# which nix does not care about (its store paths are not keyed on this) and
+# which pip answers to with --force-reinstall. Nothing here is what the
+# program reports or what documents record -- `__version__` and the header
+# both come from `collomatique_settings::current_version()`, which is the
+# workspace version, exact. The pre-commit hook derives this string from
+# Cargo.toml and refuses a commit where the two disagree.
+version = "0.1.0-alpha.1"
+edition.workspace = true
+authors.workspace = true
+
+# Both shapes of the same module. `rlib` is the embedded one — `python-runner`
+# links this crate and hands the interpreter its `#[pymodule]` through
+# `append_to_inittab`. `cdylib` is the standalone one: the extension module a
+# plain interpreter dlopens, built into a wheel by `pyproject.toml` next door.
+[lib]
+crate-type = [ "rlib", "cdylib" ]
+
+[dependencies]
+# The solve configuration `ColloscopeSolveConfig` mirrors, and the model
+# builder it will be handed to (`docs/python/new_api_design.md` §10).
+collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
+# The MPS writer `model.export_mps` hands the built problem to
+# (`docs/python/new_api_design.md` §9.4) — the same one the application's own
+# diagnostics export calls, so a script and a click write the same file.
+collomatique-mps = { path = "../../generic/mps" }
+collomatique-ops = { path = "../../colloscopes/ops" }
+collomatique-settings = { path = "../../colloscopes/settings" }
+collomatique-state = { path = "../../generic/state" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-storage = { path = "../../colloscopes/storage" }
+# The worker subprocesses a solve runs in, and `EngineExe` — which collomatique
+# binary they re-execute (`docs/python/new_api_design.md` §10).
+collomatique-subprocesses = { path = "../../colloscopes/subprocesses" }
+# The solve strategies `ConductorStrategy` mirrors, and the two presets its
+# classmethods hand back (`docs/python/new_api_design.md` §13) — the
+# application's own structs, so a script and a click run the same solve.
+collomatique-strategies = { path = "../../generic/strategies" }
+collomatique-time = { path = "../../generic/time" }
+# The entity renderers the pairing-rule reprs name a rule with.
+collomatique-ui-text = { path = "../../colloscopes/ui-text" }
+# The spreadsheet writer `doc.export_xlsx` hands the document to
+# (`docs/python/new_api_design.md` §9.4) — the same one the application's own
+# export button calls, so a script and a click write the same workbook.
+collomatique-xlsx = { path = "../../colloscopes/xlsx" }
+chrono.workspace = true
+# `chrono`: `datetime.date` <-> `chrono::NaiveDate`, for the first week of the
+# colles.
+pyo3 = { workspace = true, features = [ "chrono" ] }
+rfd.workspace = true
+# `rfd`: the native file dialogs of the `dialogs` submodule
+# (`docs/python/new_api_design.md` §9.3).
+serde.workspace = true
+# `serde`: nothing here is read or written. The `Serializer` trait is how the
+# model's write errors and the cascade's repairs are walked without naming a
+# variant (`src/payload.rs`).
+tokio = { workspace = true, features = [ "rt", "rt-multi-thread", "net", "time" ] }
+# `tokio`: nothing here calls it. `rfd`'s blocking calls go through `zbus`,
+# which spawns onto whatever runtime is in context, and a python interpreter
+# has none — so a dialog brings its own.

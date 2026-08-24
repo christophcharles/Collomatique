@@ -43,7 +43,7 @@ if [ "$cargo_version" != "$nix_version" ]; then
     exit 1
 fi
 
-# The third one cannot repeat the string. python/Cargo.toml is what maturin
+# The third one cannot repeat the string. colloscopes/python/Cargo.toml is what maturin
 # reads to build the wheel's metadata, and it wants PEP 440, which allows
 # nothing numeric after a prerelease -- so `0.1.0-alpha.1.99` is refused
 # outright. That crate therefore carries the same version with the dev counter
@@ -72,24 +72,24 @@ if shape is None:
 print(f"{release}-{shape.group(1)}.{shape.group(2)}")
 ') || exit 1
 
-python_version=$(staged_content python/Cargo.toml | awk '
+python_version=$(staged_content colloscopes/python/Cargo.toml | awk '
     /^\[package\]/ { in_section = 1; next }
     /^\[/          { in_section = 0 }
     in_section && /^version = / { gsub(/"/, "", $3); print $3; exit }')
 
 if [ -z "$python_version" ]; then
-    echo "pre-commit: could not read the version out of python/Cargo.toml." >&2
+    echo "pre-commit: could not read the version out of colloscopes/python/Cargo.toml." >&2
     echo "  That crate writes one out rather than inheriting the workspace's;" >&2
     echo "  the hook expects a [package] version = \"...\" line." >&2
     exit 1
 fi
 
 if [ "$python_version" != "$expected_python_version" ]; then
-    echo "pre-commit: python/Cargo.toml does not carry the version in Cargo.toml" >&2
+    echo "pre-commit: colloscopes/python/Cargo.toml does not carry the version in Cargo.toml" >&2
     echo "  with its dev counter cut off." >&2
-    echo "  Cargo.toml:        $cargo_version" >&2
-    echo "  python/Cargo.toml: $python_version" >&2
-    echo "  expected there:    $expected_python_version" >&2
+    echo "  Cargo.toml:                    $cargo_version" >&2
+    echo "  colloscopes/python/Cargo.toml: $python_version" >&2
+    echo "  expected there:                $expected_python_version" >&2
     exit 1
 fi
 
@@ -150,7 +150,7 @@ fi
 # the same reason as the json above: a broken one that slipped through earlier
 # is worth catching. Empty means it is not in the index at all, which is what a
 # commit deleting it looks like.
-manifest=gtk4/collomatique-gtk4.exe.manifest
+manifest=colloscopes/gtk4/collomatique-gtk4.exe.manifest
 manifest_xml=$(staged_content "$manifest")
 
 if [ -n "$manifest_xml" ] && ! printf '%s\n' "$manifest_xml" | python3 -c '

@@ -46,7 +46,7 @@ rustPlatform.buildRustPackage rec {
         clippy
         python3
         # Not used by this build, which wants no wheel: it is here for the dev
-        # shell, where `maturin build` in `python/` is how the standalone
+        # shell, where `maturin build` in `colloscopes/python/` is how the standalone
         # module gets tried by hand. `collomatique-python.nix` builds it for
         # real, with the hooks.
         maturin

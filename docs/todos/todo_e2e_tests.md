@@ -13,7 +13,7 @@ There are at least four categories:
   Pronote) against made-up data.
 - **Complex ops on fixtures** — check involved operations on fixtures, such as
   the period-merge case (once a data-losing bug, now pinned green by
-  `ops/tests/general_planning_content.rs`).
+  `colloscopes/ops/tests/general_planning_content.rs`).
 - **Data readable from Python is right** — with known fixtures, check that the
   data exposed to Python matches what is expected.
 

@@ -1,0 +1,63 @@
+[package]
+name = "collomatique-gtk4"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[build-dependencies]
+glib-build-tools = "0.20"
+
+[target.'cfg(windows)'.build-dependencies]
+# Compiles the application icon and the manifest into the executable. It shells
+# out to rc.exe from the Windows SDK, which pkgs\windows\bootstrap.ps1 installs,
+# and finds it the same way the rest of the build finds MSVC -- through the
+# registry, with no developer prompt needed. See build.rs.
+winresource = "0.1"
+
+[dependencies]
+collomatique-state = { path = "../../generic/state" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-storage = { path = "../../colloscopes/storage" }
+collomatique-time = { path = "../../generic/time" }
+collomatique-ilp = { path = "../../generic/ilp" }
+collomatique-ilp-modeler = { path = "../../generic/ilp-modeler" }
+collomatique-ops = { path = "../../colloscopes/ops" }
+# Only for the Python version shown in the advanced tools panel. The library is
+# linked into this binary either way, through rpc-engine.
+collomatique-python-runner = { path = "../../colloscopes/python-runner" }
+collomatique-rpc = { path = "../../colloscopes/rpc" }
+collomatique-rpc-engine = { path = "../../colloscopes/rpc-engine" }
+collomatique-settings = { path = "../../colloscopes/settings" }
+collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
+collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
+collomatique-xlsx = { path = "../../colloscopes/xlsx" }
+collomatique-mps = { path = "../../generic/mps" }
+collomatique-strategies = { path = "../../generic/strategies" }
+collomatique-subprocesses = { path = "../../colloscopes/subprocesses" }
+collomatique-ui-text = { path = "../../colloscopes/ui-text" }
+libadwaita = { version = "0.7", features = [ "v1_7" ] }
+gtk4 = { version = "0.9", features = [ "v4_10" ] }
+relm4 = { version = "0.9", features = [ "libadwaita" ] }
+rfd.workspace = true
+clap = { workspace = true, features = ["derive"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "process"] }
+chrono.workspace = true
+anyhow.workspace = true
+non-empty-string.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# Only for the three calls in src/windows_stdio.rs. Same version as the one
+# `subprocesses` pulls in, so the lock keeps a single copy. `NUL` is opened
+# through std::fs::OpenOptions rather than CreateFileW, which is what keeps the
+# feature list down to these two.
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_System_Console",
+] }
+# Both only to hand `rfd` the HWND of the window a file dialog belongs to, in
+# src/tools/open_save.rs. Without an owner window, Windows gives the dialog no
+# parent and hands the foreground to whatever is next in z-order when it
+# closes. `gdk4-win32` follows gdk4 0.9; `raw-window-handle` is the version
+# `rfd` 0.15 speaks.
+gdk4-win32 = "0.9"
+raw-window-handle = "0.6"

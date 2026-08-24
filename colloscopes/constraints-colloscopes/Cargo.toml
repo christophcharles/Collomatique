@@ -1,0 +1,17 @@
+[package]
+name = "collomatique-constraints-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-ilp = { path = "../../generic/ilp" }
+collomatique-time = { path = "../../generic/time" }
+collomatique-ilp-modeler = { path = "../../generic/ilp-modeler" }
+ordered-float.workspace = true
+
+[dev-dependencies]
+collomatique-storage = { path = "../../colloscopes/storage" }
+collomatique-state = { path = "../../generic/state" }
+collomatique-testgen-colloscopes = { path = "../../colloscopes/testgen-colloscopes" }

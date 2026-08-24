@@ -1,0 +1,13 @@
+[package]
+name = "collomatique-state"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[features]
+default = ["derive"]
+derive = ["dep:collomatique-state-derive"]
+
+[dependencies]
+collomatique-state-derive = { path = "../../generic/state-derive", optional = true }
+thiserror.workspace = true

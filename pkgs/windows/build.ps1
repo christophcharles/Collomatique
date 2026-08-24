@@ -93,7 +93,7 @@ $GtkBuildRoot = Join-Path $OutRoot 'gtk-build'
 $GtkPrefix    = Join-Path $GtkBuildRoot 'gtk\x64\release'
 
 # The application icon, in the one format Windows understands. Two things read
-# it: gtk4/build.rs compiles it into the executable, and Inno Setup puts it on
+# it: colloscopes/gtk4/build.rs compiles it into the executable, and Inno Setup puts it on
 # setup.exe. It is generated from the master PNG and committed by
 # resources/icons/generate-sizes.sh, which needs image tooling this machine does
 # not have -- so it is checked for here rather than produced.
@@ -179,7 +179,7 @@ if (-not (Test-Path $IconFile)) {
 # version-date 2024-06-04, coin-or-clp is dated 2023-02-01, coin-or-osi
 # 2024-04-16 -- no tags, and not even contemporaries of each other. Cbc's master
 # says AC_INIT([Cbc],[devel],...), so the cbc.pc vcpkg installs reports
-# "Version: devel", and collo-cbc/build.rs asks pkg-config for CBC >= 2.10, which
+# "Version: devel", and generic/collo-cbc/build.rs asks pkg-config for CBC >= 2.10, which
 # no version comparison can ever satisfy against the word "devel".
 #
 # COIN-OR publishes MSVC binaries with each release. This is not the same bargain
@@ -454,7 +454,7 @@ Write-Host
 # version must not abort the script the way 'Stop' would make it.
 $ErrorActionPreference = 'Continue'
 
-# cbc.pc is what collo-cbc/build.rs probes for; gtk4.pc and libadwaita-1.pc are
+# cbc.pc is what generic/collo-cbc/build.rs probes for; gtk4.pc and libadwaita-1.pc are
 # what the gtk4 and libadwaita crates probe for. Each lives in its own prefix,
 # which is why all three directories go on PKG_CONFIG_PATH further down.
 #
@@ -491,7 +491,7 @@ function Show-Tool {
     }
 }
 
-# gtk4/build.rs runs this one at compile time. It comes with glib, so it is in
+# colloscopes/gtk4/build.rs runs this one at compile time. It comes with glib, so it is in
 # the gvsbuild prefix and not the vcpkg one.
 Show-Tool -Label 'glib-compile-resources' `
     -Path (Join-Path $GtkPrefix 'bin\glib-compile-resources.exe') `
@@ -565,7 +565,7 @@ $env:PKG_CONFIG_PATH = @(
     (Join-Path $Prefix    'lib\pkgconfig')
 ) -join ';'
 
-# gtk4/build.rs compiles the .gresource bundle through glib-build-tools, which
+# colloscopes/gtk4/build.rs compiles the .gresource bundle through glib-build-tools, which
 # spawns glib-compile-resources by name and therefore needs it on PATH. It comes
 # with glib, so it is in the gvsbuild prefix.
 $env:PATH = (Join-Path $GtkPrefix 'bin') + ';' + $env:PATH

@@ -1,0 +1,10 @@
+[package]
+name = "collomatique-xlsx"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+chrono.workspace = true
+rust_xlsxwriter = "0.93"

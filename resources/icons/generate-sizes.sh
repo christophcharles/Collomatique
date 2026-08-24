@@ -10,7 +10,7 @@
 #
 # collomatique.ico is the same picture in the one format Windows understands,
 # and it is generated here for the same reason twice over: the Windows build
-# machine has no image tooling on it at all, and gtk4/build.rs embeds this file
+# machine has no image tooling on it at all, and colloscopes/gtk4/build.rs embeds this file
 # into the executable without looking at what is inside it.
 #
 # Needs python3 with Pillow. If the python3 in PATH does not have it, the

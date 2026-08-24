@@ -1,0 +1,9 @@
+[package]
+name = "collomatique-rooms-model"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-time = { path = "../../generic/time" }
+non-empty-string = { workspace = true }
