@@ -8,17 +8,9 @@ Collomatique est en développement actif et au stade alpha. L'interface et le fo
 
 ## Fonctionnalités
 
-- **Périodicités complexes** : périodicité exacte, par bloc de semaines, nombre de colles dans l'année, blocs arbitraires
-- **Construction automatique des groupes** par le solveur, avec possibilité d'exclure des élèves — attention, très lent pour l'instant
+- **Colloscopes complexes** : différents types de périodicités, colles ponctuelles, gestion des TD, groupes différents par matière, règles complexes pour les créneaux du midi...
 - **Import d'élèves depuis Pronote** (fichier CSV)
-- **Gestion des incompatibilités de créneaux**
 - **Export du colloscope en xlsx** : colloscope complet et fiches par groupe, avec couleurs et mise en page configurables
-
-## À venir
-
-- Complétion de colloscopes partiels
-- Meilleurs réglages pour l'équilibrage
-- Support d'autres solveurs
 
 ## Copies d'écran
 
@@ -42,16 +34,39 @@ La résolution en cours.
 
 ## Installation
 
+### Depuis un paquet binaire
+
+Des paquets *devraient* être disponibles sur la [page des releases](https://github.com/christophcharles/Collomatique/releases). Ce n'est pas une promesse : il n'y en a pas forcément pour chaque version, ni pour chaque plateforme.
+
+#### Flatpak (Linux)
+
+Il faut `flatpak` installé et le dépôt flathub configuré : le paquet ne contient pas le runtime dont il a besoin (`org.gnome.Platform`), flatpak le récupère depuis flathub au moment de l'installation.
+
+```bash
+# Une seule fois, si flathub n'est pas déjà configuré
+flatpak remote-add --if-not-exists --user flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+flatpak install --user ./collomatique-<version>.flatpak
+flatpak run fr.collomatique.Collomatique
+```
+
+#### Windows
+
+Télécharger l'installeur (`.exe`) et le lancer, puis suivre les instructions.
+
+### Depuis les sources
+
 Avec [Nix](https://nixos.org/download/) (peut être installé sur n'importe quelle distribution Linux) :
 ```bash
 nix-build
 ./result/bin/collomatique-gtk4
 
-# Ou avec flakes
-nix run
+# Ou avec le flake
+nix build
+./result/bin/collomatique-gtk4
 ```
 
-Sous Ubuntu (testé sur 25.11), il faut d'abord installer Rust (dernière version recommandée) via [rustup](https://rustup.rs), puis :
+Sous Ubuntu, il faut d'abord installer Rust (dernière version recommandée) via [rustup](https://rustup.rs), puis :
 ```bash
 sudo apt install build-essential libglib2.0-dev libpango1.0-dev libgdk-pixbuf-2.0-dev libgraphene-1.0-dev libgtk-4-dev libadwaita-1-dev coinor-libcbc-dev coinor-cbc libpython3-dev
 cargo build --release
@@ -72,7 +87,6 @@ Le principe :
 - **Variables binaires** : chaque décision est représentée par une variable qui vaut 0 ou 1. Par exemple, « l'élève X passe en créneau Y » → 0 (non) ou 1 (oui).
 - **Contraintes linéaires** : les règles du colloscope sont encodées sous forme d'inégalités. Par exemple, « chaque élève passe exactement une fois par période » se traduit par une somme de variables égale à 1.
 - **Fonction objectif** : une expression linéaire à minimiser (ou maximiser) qui permet d'optimiser l'équilibrage, de respecter les préférences, etc.
-- **Solveur** : COIN-CBC explore l'espace des solutions et trouve une affectation optimale, ou prouve qu'aucune solution n'existe.
 
 **Exemple simplifié** — deux élèves (A, B), deux créneaux (1, 2), chacun doit passer exactement une fois :
 
@@ -98,26 +112,47 @@ En résumé : toute version modifiée redistribuée ou exposée via un service r
 
 ## Organisation du code
 
-Le projet est un workspace Rust composé des crates suivantes :
+Le projet est un workspace Rust rangé en trois groupes : `generic/` est la machinerie écrite pour être réutilisable d'un problème à l'autre, `colloscopes/` est l'application, `rooms/` un projet annexe inachevé.
+
+### `generic/`
 
 | Crate | Rôle |
 |---|---|
 | `ilp/` | Primitives ILP : expressions linéaires, contraintes, objectifs, variables, construction de problèmes, interface solveur |
-| `ilp-modeler/` | Modéliseur ILP générique, indépendant du langage : expansion paresseuse de variables, réification, objectification, composition par bundles |
-| `ilp-modeler-derive/` | Macros dérivées pour ilp-modeler (`#[derive(DescribeVar)]`) |
-| `constraints-colloscopes/` | Modélisation des contraintes du colloscope en Rust natif : périodicités, appariements, équilibrage, structure d'emploi du temps |
-| `state/` et `state-colloscopes/` | Traits et structures d'état de l'application |
-| `sqlite-state/` | Persistance SQLite (SQLx) |
-| `storage/` | Sérialisation des fichiers (JSON) |
-| `gtk4/` | Interface graphique GTK4/Adwaita (Relm4) |
-| `python/` | Bindings Python (PyO3), utilisés notamment pour l'import Pronote |
-| `rpc/` et `rpc-engine/` | Protocole RPC pour la communication entre processus |
-| `time/` | Types pour représenter les jours, heures, etc dans Collomatique |
-| `ops/` | Opérations de haut-niveau (GUI et Python) sur l'état de l'application |
-| `xlsx/` | Export du colloscope au format xlsx |
+| `ilp-modeler/` | Modéliseur ILP indépendant du problème : expansion paresseuse de variables, réification, objectification, composition par bundles |
+| `ilp-modeler-derive/` | Macros dérivées pour `ilp-modeler` (`#[derive(DescribeVar)]`) |
+| `collo-cbc/` | Interface C++ pour le solveur CBC, avec `CbcEventHandler` |
+| `strategies/` | Stratégies de résolution au-dessus du solveur : résolution par étapes successives, recherche de la solution réalisable la plus proche d'une configuration donnée, perturbation aléatoire de celle-ci |
 | `mps/` | Export de problèmes ILP au format MPS |
-| `collo-cbc/` | Interface C++ pour le solveur CBC avec CbcEventHandler |
-| `subprocesses/` | Gestion de sous-processus (UI-agnostique) |
-| `rooms/` | Outil CLI pour la planification des salles |
-| `rooms-model/` | Modèle de données pour la planification des salles |
-| `constraints-rooms/` | Modélisation des contraintes de salles |
+| `state/` | Traits et structures d'état d'un éditeur, indépendants de l'interface |
+| `state-derive/` | Macros dérivées pour `state` : identifiants typés et références |
+| `subprocesses/` | Exécution de la résolution dans un sous-processus, indépendante de l'interface |
+| `rpc/` | Moitié générique du protocole RPC : transport, jobs ILP et stratégies |
+| `rpc-engine/` | Moteur qui exécute ces jobs et rend compte de leur avancement |
+| `time/` | Types pour représenter les jours, heures et durées dans Collomatique |
+
+### `colloscopes/`
+
+| Crate | Rôle |
+|---|---|
+| `gtk4/` | Interface graphique GTK4/Adwaita (Relm4) — c'est le binaire de l'application |
+| `state-colloscopes/` | État du document colloscope et opérations élémentaires dessus |
+| `ops/` | Opérations de haut niveau sur le document, telles qu'un utilisateur les fait (interface graphique et Python) |
+| `storage/` | Lecture et écriture du fichier (JSON) ; le format est spécifié dans [`docs/file_format`](docs/file_format/file_format.md) |
+| `constraints-colloscopes/` | Traduction des règles du colloscope en modèle ILP : périodicités, appariements, équilibrage, structure d'emploi du temps |
+| `constraints-groups/` | Modèle ILP séparé pour le remplissage automatique des listes de groupes |
+| `settings/` | Ce qui relève de l'installation et de la personne, pas du document : version du build, réglages persistants |
+| `ui-text/` | Les mots employés par l'application pour parler de ses propres données, partagés entre l'interface et l'API Python |
+| `xlsx/` | Export du colloscope au format xlsx |
+| `python/` | Le module Python `collomatique` (PyO3) |
+| `python-runner/` | Cycle de vie de l'interpréteur et exécution des scripts |
+| `rpc-colloscopes/` et `rpc-engine-colloscopes/` | Moitié colloscope du protocole et du moteur RPC : le document qui circule entre l'application et un script hébergé |
+| `testgen-colloscopes/` | Génération déterministe de séquences d'opérations, pour les tests de propriétés |
+
+### `rooms/`
+
+Projet annexe, inachevé : la planification des salles. `rooms/` (outil en ligne de commande), `rooms-model/` (modèle de données) et `constraints-rooms/` (modélisation des contraintes).
+
+### Hors des crates
+
+`pkgs/` contient l'empaquetage (Nix, Flatpak, Windows), `docs/` la spécification du format de fichier, la conception de l'API Python et les todos, `examples/` des fichiers d'exemple, `scripts/` des scripts Python utilisables depuis l'application, et `screenshots/` les copies d'écran.
