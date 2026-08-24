@@ -9,9 +9,9 @@
 //! from inside one interpreter.
 
 use std::path::PathBuf;
-use std::process::{Command, Output};
+use std::process::Command;
 
-use crate::COLLOMATIQUE;
+use crate::{COLLOMATIQUE, succeeds};
 
 /// The script every test here runs
 fn script() -> PathBuf {
@@ -34,28 +34,6 @@ fn child(mode: &str) -> Command {
         .env_remove("E2E_ENGINE");
 
     command
-}
-
-/// Runs `command` and insists it ended well
-///
-/// The script's own output is what says *why* when it did not, so both streams
-/// come back out here: an assertion failing inside python is otherwise a bare
-/// exit code.
-#[track_caller]
-fn succeeds(mut command: Command) -> Output {
-    let output = command
-        .output()
-        .expect("the collomatique binary should start");
-
-    assert!(
-        output.status.success(),
-        "the script failed ({}):\n--- stdout ---\n{}--- stderr ---\n{}",
-        output.status,
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr),
-    );
-
-    output
 }
 
 /// The whole road, on the engine the runner injected
