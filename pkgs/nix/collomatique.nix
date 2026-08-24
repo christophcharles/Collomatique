@@ -17,7 +17,7 @@
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
-    version = "0.1.0-alpha.1.99";
+    version = "0.1.0-alpha.2";
 
     src = lib.cleanSourceWith {
         # The whole repository: this file lives two levels down from its root.
@@ -31,7 +31,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-Rpe9bXxEpdToNqOV1p9Wq2p8BF/n7FsYiDfgy+D0jqo=";
+    cargoHash = "sha256-9eNukgClxJiWtbhop/ZSrNqqpFEFaDsXsAzUYGlJzIg=";
 
     # The test suite is run from the dev shell, not from the package build.
     doCheck = false;
