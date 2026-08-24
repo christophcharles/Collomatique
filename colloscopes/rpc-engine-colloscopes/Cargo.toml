@@ -1,0 +1,13 @@
+[package]
+name = "collomatique-rpc-engine-colloscopes"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-rpc = { path = "../../generic/rpc" }
+collomatique-rpc-colloscopes = { path = "../../colloscopes/rpc-colloscopes" }
+collomatique-rpc-engine = { path = "../../generic/rpc-engine" }
+collomatique-python-runner = { path = "../../colloscopes/python-runner" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+anyhow.workspace = true

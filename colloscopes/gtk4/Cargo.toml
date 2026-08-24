@@ -23,11 +23,13 @@ collomatique-ilp = { path = "../../generic/ilp" }
 collomatique-ilp-modeler = { path = "../../generic/ilp-modeler" }
 collomatique-ops = { path = "../../colloscopes/ops" }
 # Only for the Python version shown in the advanced tools panel. The library is
-# linked into this binary either way, through rpc-engine.
+# linked into this binary either way, through rpc-engine-colloscopes.
 collomatique-python-runner = { path = "../../colloscopes/python-runner" }
 collomatique-rpc = { path = "../../generic/rpc" }
 collomatique-rpc-colloscopes = { path = "../../colloscopes/rpc-colloscopes" }
-collomatique-rpc-engine = { path = "../../colloscopes/rpc-engine" }
+# Only the colloscope half is named here: `--rpc-engine` runs that one, and it
+# drives the generic engine underneath.
+collomatique-rpc-engine-colloscopes = { path = "../../colloscopes/rpc-engine-colloscopes" }
 collomatique-settings = { path = "../../colloscopes/settings" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
 collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }

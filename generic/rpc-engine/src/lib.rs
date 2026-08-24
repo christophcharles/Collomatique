@@ -1,11 +1,8 @@
 use anyhow::anyhow;
 use collomatique_rpc::{
-    InitMsg, ResultMsg, SerializedIlpProblem, SerializedStrategyRequest, SolverIncumbentInfo,
-    SolverMsg, SolverProgressData, SolverResultData, SolverStatus, StrategyMsg, StrategyResultData,
-    StrategyStatus, send_command,
-};
-use collomatique_rpc_colloscopes::{
-    AppAnswerMsg, AppCmdMsg, AppInitMsg, ColloCmdMsg, ColloProtocol, InternalDataStream,
+    AppProtocol, CmdMsg, InitMsg, ResultMsg, SerializedIlpProblem, SerializedStrategyRequest,
+    SolverIncumbentInfo, SolverMsg, SolverProgressData, SolverResultData, SolverStatus,
+    StrategyMsg, StrategyResultData, StrategyStatus, send_command,
 };
 
 #[cfg(test)]
@@ -49,10 +46,6 @@ impl ProgressThrottle {
     }
 }
 
-pub fn wait_for_init_msg() -> Result<InitMsg<ColloProtocol>, String> {
-    collomatique_rpc::receive_init::<ColloProtocol>().map_err(|e| e.to_string())
-}
-
 pub fn send_exit() {
     // The last thing this process does, so there is nothing left to abandon if
     // it fails; the host learns the same thing from the channel closing.
@@ -61,7 +54,10 @@ pub fn send_exit() {
     }
 }
 
-fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
+// `P` only names the channel's protocol; nothing here sends or expects an `App`
+// frame. It is carried so that one channel keeps one protocol from its init
+// message to its last answer, rather than switching to `NoApp` halfway.
+fn solve_ilp<P: AppProtocol>(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
     use collomatique_ilp::solvers::{
         IncumbentTimeLimitSolverModel, ProgressBounds, ProgressIncumbentData,
@@ -130,7 +126,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
                 }),
             };
 
-            let response = send_command(ColloCmdMsg::Solver(SolverMsg::Progress(progress_data)));
+            let response = send_command(CmdMsg::<P>::Solver(SolverMsg::Progress(progress_data)));
             last_control = matches!(response, Ok(ResultMsg::SolverControl(true)));
             last_control
         },
@@ -166,13 +162,16 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     };
 
     eprintln!("Sending result...");
-    send_command(ColloCmdMsg::Solver(SolverMsg::Result(result_data)))
+    send_command(CmdMsg::<P>::Solver(SolverMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending SolverResult: {}", e))?;
 
     Ok(())
 }
 
-fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Error> {
+// `P` is carried for the same reason as in `solve_ilp` above.
+fn run_strategy<P: AppProtocol>(
+    serialized: SerializedStrategyRequest,
+) -> Result<(), anyhow::Error> {
     use collomatique_ilp_modeler::InternalVar;
     use collomatique_rpc::{SerializedStrategyProgress, StrategyProgressRaw};
     use collomatique_strategies::{
@@ -225,7 +224,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         let progress_raw = StrategyProgressRaw {
             progress: SerializedStrategyProgress::from(serialized_progress),
         };
-        let response = send_command(ColloCmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
+        let response = send_command(CmdMsg::<P>::Strategy(StrategyMsg::Progress(progress_raw)));
         match response {
             Ok(ResultMsg::StrategyControl(cont)) => cont,
             _ => false,
@@ -268,45 +267,26 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     };
 
     eprintln!("Sending strategy result...");
-    send_command(ColloCmdMsg::Strategy(StrategyMsg::Result(result_data)))
+    send_command(CmdMsg::<P>::Strategy(StrategyMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending StrategyResult: {e}"))?;
 
     Ok(())
 }
 
-/// The application, as a hosted python script sees it
-///
-/// The script edits a copy and hands one back when it decides to; there is no
-/// stream of edits and no merge, so this is the whole document in either
-/// direction. The GUI already accepts `SetData` at any moment and any number of
-/// times, applying each one onto the session it commits at the end of the run,
-/// so a send needs nothing new on the other side of the pipe.
-struct RpcHost {
-    /// What the engine fetched before starting the script
-    ///
-    /// Held rather than re-fetched: the document the script is offered is the
-    /// one the GUI had when the run started, and a second `GetData` mid-run
-    /// would be a different document.
-    data: collomatique_state_colloscopes::Data,
-}
-
-impl collomatique_python_runner::Host for RpcHost {
-    fn data(&self) -> collomatique_state_colloscopes::Data {
-        self.data.clone()
-    }
-
-    fn send(&self, data: &collomatique_state_colloscopes::Data) -> Result<(), String> {
-        let data_stream = InternalDataStream::from(data);
-        send_command(ColloCmdMsg::App(AppCmdMsg::SetData(data_stream)))
-            .map(|_| ())
-            .map_err(|e| e.to_string())
-    }
-}
-
 /// Main RPC Engine function
 ///
-/// Runs the RPC engine on the channel named in the environment by whoever spawned it.
-pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
+/// Runs the RPC engine on the channel named in the environment by whoever
+/// spawned it. `SolveIlp` and `RunStrategy` are answered here; an `App` init
+/// message is handed to `app_handler`, which is the application's half of the
+/// engine.
+///
+/// A channel carries one job from start to finish, so `app_handler` is called
+/// at most once and takes ownership of what it is given.
+pub fn run_engine<P, F>(app_handler: F) -> Result<(), anyhow::Error>
+where
+    P: AppProtocol,
+    F: FnOnce(P::Init) -> Result<(), anyhow::Error>,
+{
     // Insurance for the Unix subprocess-teardown mechanism: children die when their
     // parent dies because closing the parent-held pty master hangs up the child's
     // controlling terminal, delivering SIGHUP (default disposition: terminate). Reset
@@ -324,46 +304,19 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
         .map_err(|e| anyhow!("Impossible de rejoindre le canal RPC : {e}"))?;
 
     eprintln!("Waiting for initial payload...");
-    let init_msg = match wait_for_init_msg() {
-        Ok(x) => x,
-        Err(e) => return Err(anyhow!("Unknown initial payload: {}", e)),
-    };
+    let init_msg = collomatique_rpc::receive_init::<P>()
+        .map_err(|e| anyhow!("Unknown initial payload: {}", e))?;
     eprintln!("Payload received!");
 
     match init_msg {
-        InitMsg::App(AppInitMsg::RunPythonScript(script)) => {
-            eprintln!("Receiving file data...");
-            let data_msg = send_command(ColloCmdMsg::App(AppCmdMsg::GetData))
-                .map_err(|e| anyhow!("Error on GetData: {}", e))?;
-            let data = match data_msg {
-                ResultMsg::App(AppAnswerMsg::Data(data)) => {
-                    collomatique_state_colloscopes::Data::from(data)
-                }
-                _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
-            };
-            let host = std::sync::Arc::new(RpcHost { data });
-
-            eprintln!("Running Python script...");
-            collomatique_python_runner::initialize();
-            // A hosted process is a collomatique binary, so the running
-            // executable is an engine a script's solve may re-execute —
-            // hosted or not, since a script may solve a document it loaded
-            // itself.
-            collomatique_python_runner::run_python_script(
-                script,
-                Some(host),
-                Some(collomatique_python_runner::EngineExe::Current),
-            )?;
-
-            // Nothing is sent back here: a script sends when it says so
-            // (`docs/python/new_api_design.md` §9.2), through the `send` of
-            // `RpcHost` above.
-        }
         InitMsg::SolveIlp(serialized) => {
-            solve_ilp(serialized)?;
+            solve_ilp::<P>(serialized)?;
         }
         InitMsg::RunStrategy(serialized) => {
-            run_strategy(serialized)?;
+            run_strategy::<P>(serialized)?;
+        }
+        InitMsg::App(app) => {
+            app_handler(app)?;
         }
     }
 

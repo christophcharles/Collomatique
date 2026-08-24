@@ -392,7 +392,7 @@ dependencies = [
  "collomatique-python-runner",
  "collomatique-rpc",
  "collomatique-rpc-colloscopes",
- "collomatique-rpc-engine",
+ "collomatique-rpc-engine-colloscopes",
  "collomatique-settings",
  "collomatique-state",
  "collomatique-state-colloscopes",
@@ -563,16 +563,25 @@ dependencies = [
  "anyhow",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-python-runner",
  "collomatique-rpc",
- "collomatique-rpc-colloscopes",
- "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",
  "collomatique-time",
  "libc",
  "ordered-float",
  "tokio",
+]
+
+[[package]]
+name = "collomatique-rpc-engine-colloscopes"
+version = "0.1.0-alpha.1.99"
+dependencies = [
+ "anyhow",
+ "collomatique-python-runner",
+ "collomatique-rpc",
+ "collomatique-rpc-colloscopes",
+ "collomatique-rpc-engine",
+ "collomatique-state-colloscopes",
 ]
 
 [[package]]

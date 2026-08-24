@@ -94,7 +94,7 @@ fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
 
     if args.rpc_engine {
-        return collomatique_rpc_engine::run_rpc_engine();
+        return collomatique_rpc_engine_colloscopes::run_rpc_engine();
     }
 
     if let Some(code) = python_code(&args)? {

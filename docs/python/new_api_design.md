@@ -555,7 +555,7 @@ None` check, and forgetting it gives an obscure `AttributeError` twenty lines la
 ### 9.2 Writing a document out
 
 **The hosted document is not sent back automatically.** Today's engine does that (one
-`SetData` at script exit, when the state was modified — `colloscopes/rpc-engine/src/lib.rs`, previously `rpc-engine/src/lib.rs`), but
+`SetData` at script exit, when the state was modified — code since removed, see below), but
 only because the old API gives the script no way to say it. Once there is a call,
 automatic becomes harmful: a script that raises halfway pushes its half-finished
 state, and a script that sends deliberately gets a second, unwanted send at exit. The
@@ -1071,7 +1071,8 @@ nothing here blocks the new crate any more.
 `RunPythonScript` path of `rpc-engine` stop sending `SetData` at script exit, and have
 the runner expose the send to the module instead. It is not needed. That send is
 conditioned on the old module's shared `AppState` having been modified (`state.can_undo()`
-in `colloscopes/rpc-engine/src/lib.rs`), and that `Arc<Mutex<AppState>>` is `python-old`'s own
+in the engine's `RunPythonScript` path — code since removed), and that
+`Arc<Mutex<AppState>>` is `python-old`'s own
 structure, handed to `run_python_script` as its file state. The new crate has its own
 document and never touches it, so the automatic send could not fire for a new-API
 script; it went with `python-old/`, together with the `AppState` the `RunPythonScript`
