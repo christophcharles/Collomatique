@@ -6,15 +6,15 @@ members = [
     "generic/collo-cbc", "generic/ilp", "generic/ilp-modeler",
     "generic/ilp-modeler-derive", "generic/mps", "generic/rpc",
     "generic/state", "generic/state-derive", "generic/strategies",
-    "generic/time",
+    "generic/subprocesses", "generic/time",
 
     "colloscopes/constraints-colloscopes", "colloscopes/constraints-groups",
     "colloscopes/gtk4", "colloscopes/ops", "colloscopes/python",
     "colloscopes/python-runner", "colloscopes/rpc-colloscopes",
     "colloscopes/rpc-engine", "colloscopes/settings",
     "colloscopes/state-colloscopes", "colloscopes/storage",
-    "colloscopes/subprocesses", "colloscopes/testgen-colloscopes",
-    "colloscopes/ui-text", "colloscopes/xlsx",
+    "colloscopes/testgen-colloscopes", "colloscopes/ui-text",
+    "colloscopes/xlsx",
 
     "rooms/rooms", "rooms/rooms-model", "rooms/constraints-rooms",
 ]

@@ -34,7 +34,7 @@ collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups
 collomatique-xlsx = { path = "../../colloscopes/xlsx" }
 collomatique-mps = { path = "../../generic/mps" }
 collomatique-strategies = { path = "../../generic/strategies" }
-collomatique-subprocesses = { path = "../../colloscopes/subprocesses" }
+collomatique-subprocesses = { path = "../../generic/subprocesses" }
 collomatique-ui-text = { path = "../../colloscopes/ui-text" }
 libadwaita = { version = "0.7", features = [ "v1_7" ] }
 gtk4 = { version = "0.9", features = [ "v4_10" ] }

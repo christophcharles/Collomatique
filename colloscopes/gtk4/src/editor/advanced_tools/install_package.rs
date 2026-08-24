@@ -207,7 +207,7 @@ impl SimpleComponent for Dialog {
                 let envs = [("PYTHONUNBUFFERED", OsStr::new("1"))];
 
                 // The same split, for the same reasons, as `Worker::spawn` in
-                // colloscopes/subprocesses/src/worker.rs: a pty on unix, plain pipes on
+                // generic/subprocesses/src/worker.rs: a pty on unix, plain pipes on
                 // windows, where ConPTY stalls at startup waiting for an answer
                 // to the cursor position report it sends.
                 #[cfg(unix)]
