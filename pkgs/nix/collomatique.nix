@@ -14,7 +14,6 @@
     python3,
     python3Packages,
     clippy,
-    maturin,
 }:
 rustPlatform.buildRustPackage rec {
     pname = "collomatique";
@@ -45,11 +44,6 @@ rustPlatform.buildRustPackage rec {
         cbc # We need it for tests
         clippy
         python3
-        # Not used by this build, which wants no wheel: it is here for the dev
-        # shell, where `maturin build` in `colloscopes/python/` is how the standalone
-        # module gets tried by hand. `collomatique-python.nix` builds it for
-        # real, with the hooks.
-        maturin
     ];
 
     buildInputs = [
