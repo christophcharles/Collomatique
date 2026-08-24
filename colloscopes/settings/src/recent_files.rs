@@ -18,7 +18,8 @@
 //! Entries are never dropped for having become unreachable. A file on an
 //! unplugged USB key is not a mistake to be cleaned up; the caller is expected
 //! to show such an entry as unavailable and leave it in place. An entry leaves
-//! the list only by being pushed off the end of it.
+//! the list by being pushed off the end of it, or because the user asked for
+//! the whole list to be forgotten -- never on its own.
 //!
 //! Like the rest of this crate, all of this is best effort: a history that
 //! cannot be read is treated as empty, and one that cannot be written is
@@ -59,6 +60,17 @@ pub fn record(access: &Path) {
     }
 }
 
+/// Forgets every remembered file
+///
+/// Best effort like `record`: a failure is reported on stderr and otherwise
+/// ignored, and the history is then still there the next time it is read, which
+/// is the honest outcome.
+pub fn clear() {
+    if let Err(e) = try_clear() {
+        eprintln!("Impossible d'effacer les fichiers récents : {e}");
+    }
+}
+
 /// The remembered files, newest first, or an empty list if they cannot be read
 ///
 /// Whether each file is still reachable is not answered here: that is a
@@ -77,29 +89,12 @@ pub fn list() -> Vec<Entry> {
 
 /// Writes `access` to the front of the stored history
 ///
-/// Several instances of Collomatique can run at once, and each of them writes
-/// this file whenever a document is opened or saved, so two of them can meet
-/// here. The whole read-modify-write is therefore done while holding an
-/// exclusive lock, and the file itself is replaced by an atomic rename so that
-/// a reader — which takes no lock at all — sees either the old history or the
-/// new one and never half of either.
-///
-/// The lock is taken on a file of its own rather than on the history. A lock
-/// belongs to the inode behind the file, and the rename below replaces that
-/// inode, so a second instance locking the history by name would end up
-/// holding a lock on a file that no longer exists and would let both writers
-/// through.
+/// The whole read-modify-write is done while holding the lock, and the file
+/// itself is replaced by an atomic rename so that a reader — which takes no
+/// lock at all — sees either the old history or the new one and never half of
+/// either.
 fn try_record(access: &Path) -> Result<(), String> {
-    let path = path().ok_or_else(|| String::from("aucun dossier de configuration disponible"))?;
-    let dir = path
-        .parent()
-        .ok_or_else(|| String::from("le fichier d'historique n'a pas de dossier parent"))?;
-    std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-
-    let lock = std::fs::File::create(dir.join("recent-files.json.lock"))
-        .map_err(|e| format!("impossible d'ouvrir le verrou des fichiers récents : {e}"))?;
-    fs4::fs_std::FileExt::lock_exclusive(&lock)
-        .map_err(|e| format!("impossible de verrouiller les fichiers récents : {e}"))?;
+    let (_lock, path, dir) = lock_history()?;
 
     // Re-read from disk under the lock rather than trusting anything read
     // before it: what another instance wrote while we were waiting is exactly
@@ -116,8 +111,52 @@ fn try_record(access: &Path) -> Result<(), String> {
     std::fs::write(&temp, render(&history)?).map_err(|e| e.to_string())?;
     std::fs::rename(&temp, &path).map_err(|e| e.to_string())?;
 
-    // The lock is released by dropping `lock` here.
+    // The lock is released by dropping `_lock` here.
     Ok(())
+}
+
+/// Removes the stored history
+///
+/// The file is deleted rather than rewritten empty: `list` already reads a
+/// missing file as an empty history, and leaving nothing behind is what was
+/// asked for. A history that is not there to begin with is not an error.
+fn try_clear() -> Result<(), String> {
+    let (_lock, path, _dir) = lock_history()?;
+
+    match std::fs::remove_file(&path) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
+/// Takes the exclusive lock on the history, and answers with it, the path of
+/// the history and the directory holding both
+///
+/// Several instances of Collomatique can run at once, and each of them writes
+/// this file whenever a document is opened or saved, so two of them can meet
+/// here. Everyone who changes the history goes through this first, and holds
+/// the returned file for as long as they are changing it.
+///
+/// The lock is taken on a file of its own rather than on the history. A lock
+/// belongs to the inode behind the file, and the rename in `try_record`
+/// replaces that inode, so a second instance locking the history by name would
+/// end up holding a lock on a file that no longer exists and would let both
+/// writers through.
+fn lock_history() -> Result<(std::fs::File, PathBuf, PathBuf), String> {
+    let path = path().ok_or_else(|| String::from("aucun dossier de configuration disponible"))?;
+    let dir = path
+        .parent()
+        .ok_or_else(|| String::from("le fichier d'historique n'a pas de dossier parent"))?
+        .to_path_buf();
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+
+    let lock = std::fs::File::create(dir.join("recent-files.json.lock"))
+        .map_err(|e| format!("impossible d'ouvrir le verrou des fichiers récents : {e}"))?;
+    fs4::fs_std::FileExt::lock_exclusive(&lock)
+        .map_err(|e| format!("impossible de verrouiller les fichiers récents : {e}"))?;
+
+    Ok((lock, path, dir))
 }
 
 /// The file holding the history

@@ -31,6 +31,8 @@ pub enum WelcomeInput {
     OpenNewColloscope,
     OpenExistingColloscope,
     OpenRecent(PathBuf),
+    /// Forgets every remembered file, because the user asked for it.
+    ClearRecents,
     /// Re-reads the recent files from disk. Worth sending whenever the welcome
     /// screen comes back into view: another running instance may have opened
     /// something meanwhile, and so may this one.
@@ -105,10 +107,26 @@ impl SimpleComponent for WelcomePanel {
                     #[watch]
                     set_visible: !model.recents.is_empty(),
 
-                    gtk::Label {
-                        set_halign: gtk::Align::Start,
-                        set_label: "Fichiers récents",
-                        set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Horizontal,
+
+                        gtk::Label {
+                            // The heading takes the free space, which is what
+                            // puts the button below on the right edge of the
+                            // column rather than next to the text.
+                            set_hexpand: true,
+                            set_halign: gtk::Align::Start,
+                            set_label: "Fichiers récents",
+                            set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                        },
+                        // No sensitivity to watch: the box holding all of this
+                        // is hidden when there is nothing to clear.
+                        gtk::Button {
+                            set_icon_name: "edit-delete-symbolic",
+                            add_css_class: "flat",
+                            set_tooltip_text: Some("Effacer la liste"),
+                            connect_clicked => WelcomeInput::ClearRecents,
+                        },
                     },
                     // A row asks for as much width as its text would like,
                     // however long that is, and nothing above would refuse it:
@@ -179,6 +197,13 @@ impl SimpleComponent for WelcomePanel {
                 sender
                     .output(WelcomeMessage::OpenRecentColloscope(path))
                     .unwrap();
+            }
+            WelcomeInput::ClearRecents => {
+                recent_files::clear();
+                // Read back rather than empty the rows here: clearing is best
+                // effort, and if it failed the user should keep seeing the files
+                // that are still remembered.
+                sender.input(WelcomeInput::Refresh);
             }
             WelcomeInput::Refresh => {
                 // Rebuilt wholesale rather than diffed: five rows, and each one
