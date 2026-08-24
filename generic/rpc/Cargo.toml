@@ -8,10 +8,7 @@ authors.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 ordered-float = { workspace = true, features = ["serde"] }
-anyhow.workspace = true
 thiserror.workspace = true
 interprocess = "2.4"
-collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
-collomatique-storage = { path = "../../colloscopes/storage" }
 collomatique-ilp = { path = "../../generic/ilp", features = ["serde"] }
 collomatique-time = { path = "../../generic/time" }

@@ -5,7 +5,7 @@ edition.workspace = true
 authors.workspace = true
 
 [dependencies]
-collomatique-rpc = { path = "../../colloscopes/rpc" }
+collomatique-rpc = { path = "../../generic/rpc" }
 collomatique-ilp = { path = "../../generic/ilp", features = ["serde"] }
 collomatique-ilp-modeler = { path = "../../generic/ilp-modeler", features = ["serde"] }
 collomatique-strategies = { path = "../../generic/strategies" }

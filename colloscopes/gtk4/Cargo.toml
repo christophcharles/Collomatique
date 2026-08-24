@@ -25,7 +25,8 @@ collomatique-ops = { path = "../../colloscopes/ops" }
 # Only for the Python version shown in the advanced tools panel. The library is
 # linked into this binary either way, through rpc-engine.
 collomatique-python-runner = { path = "../../colloscopes/python-runner" }
-collomatique-rpc = { path = "../../colloscopes/rpc" }
+collomatique-rpc = { path = "../../generic/rpc" }
+collomatique-rpc-colloscopes = { path = "../../colloscopes/rpc-colloscopes" }
 collomatique-rpc-engine = { path = "../../colloscopes/rpc-engine" }
 collomatique-settings = { path = "../../colloscopes/settings" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }

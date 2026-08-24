@@ -1,9 +1,11 @@
 use anyhow::anyhow;
-use collomatique_rpc::InternalDataStream;
 use collomatique_rpc::{
-    CmdMsg, InitMsg, ResultMsg, SerializedIlpProblem, SerializedStrategyRequest,
-    SolverIncumbentInfo, SolverMsg, SolverProgressData, SolverResultData, SolverStatus,
-    StrategyMsg, StrategyResultData, StrategyStatus, send_command,
+    InitMsg, ResultMsg, SerializedIlpProblem, SerializedStrategyRequest, SolverIncumbentInfo,
+    SolverMsg, SolverProgressData, SolverResultData, SolverStatus, StrategyMsg, StrategyResultData,
+    StrategyStatus, send_command,
+};
+use collomatique_rpc_colloscopes::{
+    AppAnswerMsg, AppCmdMsg, AppInitMsg, ColloCmdMsg, ColloProtocol, InternalDataStream,
 };
 
 #[cfg(test)]
@@ -47,8 +49,8 @@ impl ProgressThrottle {
     }
 }
 
-pub fn wait_for_init_msg() -> Result<InitMsg, String> {
-    collomatique_rpc::receive_init().map_err(|e| e.to_string())
+pub fn wait_for_init_msg() -> Result<InitMsg<ColloProtocol>, String> {
+    collomatique_rpc::receive_init::<ColloProtocol>().map_err(|e| e.to_string())
 }
 
 pub fn send_exit() {
@@ -128,7 +130,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
                 }),
             };
 
-            let response = send_command(CmdMsg::Solver(SolverMsg::Progress(progress_data)));
+            let response = send_command(ColloCmdMsg::Solver(SolverMsg::Progress(progress_data)));
             last_control = matches!(response, Ok(ResultMsg::SolverControl(true)));
             last_control
         },
@@ -164,7 +166,7 @@ fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     };
 
     eprintln!("Sending result...");
-    send_command(CmdMsg::Solver(SolverMsg::Result(result_data)))
+    send_command(ColloCmdMsg::Solver(SolverMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending SolverResult: {}", e))?;
 
     Ok(())
@@ -223,7 +225,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
         let progress_raw = StrategyProgressRaw {
             progress: SerializedStrategyProgress::from(serialized_progress),
         };
-        let response = send_command(CmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
+        let response = send_command(ColloCmdMsg::Strategy(StrategyMsg::Progress(progress_raw)));
         match response {
             Ok(ResultMsg::StrategyControl(cont)) => cont,
             _ => false,
@@ -266,7 +268,7 @@ fn run_strategy(serialized: SerializedStrategyRequest) -> Result<(), anyhow::Err
     };
 
     eprintln!("Sending strategy result...");
-    send_command(CmdMsg::Strategy(StrategyMsg::Result(result_data)))
+    send_command(ColloCmdMsg::Strategy(StrategyMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending StrategyResult: {e}"))?;
 
     Ok(())
@@ -295,7 +297,7 @@ impl collomatique_python_runner::Host for RpcHost {
 
     fn send(&self, data: &collomatique_state_colloscopes::Data) -> Result<(), String> {
         let data_stream = InternalDataStream::from(data);
-        send_command(CmdMsg::SetData(data_stream))
+        send_command(ColloCmdMsg::App(AppCmdMsg::SetData(data_stream)))
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
@@ -329,12 +331,14 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
     eprintln!("Payload received!");
 
     match init_msg {
-        InitMsg::RunPythonScript(script) => {
+        InitMsg::App(AppInitMsg::RunPythonScript(script)) => {
             eprintln!("Receiving file data...");
-            let data_msg =
-                send_command(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
+            let data_msg = send_command(ColloCmdMsg::App(AppCmdMsg::GetData))
+                .map_err(|e| anyhow!("Error on GetData: {}", e))?;
             let data = match data_msg {
-                ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data),
+                ResultMsg::App(AppAnswerMsg::Data(data)) => {
+                    collomatique_state_colloscopes::Data::from(data)
+                }
                 _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
             };
             let host = std::sync::Arc::new(RpcHost { data });

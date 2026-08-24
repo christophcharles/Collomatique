@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use collomatique_ilp::{ConfigData, UsableData};
 use collomatique_ilp_modeler::model_desc::ModelDesc;
 use collomatique_ilp_modeler::{InternalVar, Model};
-use collomatique_rpc::{InitMsg, ResultMsg, SerializedStrategyRequest, StrategyMsg};
+use collomatique_rpc::{InitMsg, NoApp, ResultMsg, SerializedStrategyRequest, StrategyMsg};
 use collomatique_strategies::{
     RawSolveOutcome, SolveStatus, SpawnableStrategy, StrategyKind, StrategyOutcome,
     StrategyPayloadData, StrategyProgressData, StrategyRequest,
@@ -47,7 +47,9 @@ pub enum StrategyStatus {
 
 pub struct StrategySubprocess {
     /// Held only for its `Drop`: dropping the handle kills the worker if still running.
-    _worker: Worker,
+    ///
+    /// `NoApp`: this channel runs one strategy and speaks nothing else.
+    _worker: Worker<NoApp>,
     stop_flag: Arc<AtomicBool>,
     last_progress: Arc<Mutex<Option<StrategyProgressData>>>,
 }
@@ -134,7 +136,7 @@ impl StrategySubprocess {
         };
         let serialized_str = request.serialize();
         let serialized = SerializedStrategyRequest::from(serialized_str);
-        let init_msg = InitMsg::RunStrategy(serialized);
+        let init_msg = InitMsg::<NoApp>::RunStrategy(serialized);
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let last_progress: Arc<Mutex<Option<StrategyProgressData>>> = Arc::new(Mutex::new(None));
@@ -144,7 +146,7 @@ impl StrategySubprocess {
         let last_progress_cb = last_progress.clone();
         let rpc_slot_cb = rpc_slot.clone();
 
-        let callback = move |event: WorkerEvent| match event {
+        let callback = move |event: WorkerEvent<NoApp>| match event {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
                 collomatique_rpc::CmdMsg::Strategy(StrategyMsg::Progress(data)) => {
                     let serialized_str: String = data.progress.into();
@@ -158,7 +160,7 @@ impl StrategySubprocess {
                     progress_callback(progress_result);
 
                     let stopped = stop_flag_cb.load(Ordering::Relaxed);
-                    let response = ResultMsg::StrategyControl(!stopped);
+                    let response = ResultMsg::<NoApp>::StrategyControl(!stopped);
 
                     let guard = rpc_slot_cb.lock().unwrap();
                     if let Some(rpc) = guard.as_ref() {
@@ -186,7 +188,7 @@ impl StrategySubprocess {
 
                     let guard = rpc_slot_cb.lock().unwrap();
                     if let Some(rpc) = guard.as_ref() {
-                        let _ = send_via_rpc(rpc, ResultMsg::Ack(None));
+                        let _ = send_via_rpc(rpc, ResultMsg::<NoApp>::Ack);
                     }
                     drop(guard);
 

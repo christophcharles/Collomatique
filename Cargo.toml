@@ -4,16 +4,17 @@ resolver = "2"
 # `colloscopes/` is the application, `rooms/` is the unfinished side project.
 members = [
     "generic/collo-cbc", "generic/ilp", "generic/ilp-modeler",
-    "generic/ilp-modeler-derive", "generic/mps", "generic/state",
-    "generic/state-derive", "generic/strategies", "generic/time",
+    "generic/ilp-modeler-derive", "generic/mps", "generic/rpc",
+    "generic/state", "generic/state-derive", "generic/strategies",
+    "generic/time",
 
     "colloscopes/constraints-colloscopes", "colloscopes/constraints-groups",
     "colloscopes/gtk4", "colloscopes/ops", "colloscopes/python",
-    "colloscopes/python-runner", "colloscopes/rpc", "colloscopes/rpc-engine",
-    "colloscopes/settings", "colloscopes/state-colloscopes",
-    "colloscopes/storage", "colloscopes/subprocesses",
-    "colloscopes/testgen-colloscopes", "colloscopes/ui-text",
-    "colloscopes/xlsx",
+    "colloscopes/python-runner", "colloscopes/rpc-colloscopes",
+    "colloscopes/rpc-engine", "colloscopes/settings",
+    "colloscopes/state-colloscopes", "colloscopes/storage",
+    "colloscopes/subprocesses", "colloscopes/testgen-colloscopes",
+    "colloscopes/ui-text", "colloscopes/xlsx",
 
     "rooms/rooms", "rooms/rooms-model", "rooms/constraints-rooms",
 ]

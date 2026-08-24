@@ -1,5 +1,6 @@
 use std::ffi::OsStr;
 use std::io::ErrorKind;
+use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -8,7 +9,7 @@ use std::time::{Duration, Instant};
 use collomatique_rpc::channel::{
     CHANNEL_ENV_VAR, ChannelError, Endpoint, FrameWriter, Listener as ChannelListener,
 };
-use collomatique_rpc::{CmdMsg, CompleteCmdMsg, InitMsg, ResultMsg, RpcDecodeError};
+use collomatique_rpc::{AppProtocol, CmdMsg, CompleteCmdMsg, InitMsg, ResultMsg, RpcDecodeError};
 
 use crate::process::{KillError, Process, ProcessEvent, SendError, SpawnError};
 
@@ -69,9 +70,9 @@ pub enum WorkerSpawnError {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum WorkerEvent {
+pub enum WorkerEvent<P: AppProtocol> {
     LogLine(String),
-    RpcCommand(Result<CmdMsg, RpcDecodeError>),
+    RpcCommand(Result<CmdMsg<P>, RpcDecodeError>),
     GracefulExit,
     ProcessExited(Option<u32>),
     Error(WorkerError),
@@ -93,19 +94,27 @@ pub enum WorkerEvent {
 /// have no fixed order relative to each other. Nothing needs one — the protocol
 /// is strict request/response, so any command the worker expects an answer to is
 /// delivered before it can do anything else.
-pub struct Worker {
+///
+/// `P` is the application half of the protocol this channel speaks; a channel
+/// that only runs an ILP or a strategy uses [`collomatique_rpc::NoApp`]. It is
+/// fixed at spawn time by the init message, so nothing but the marker itself
+/// needs to be stored.
+pub struct Worker<P: AppProtocol> {
     process: Process,
     rpc_writer: RpcWriter,
+    protocol: PhantomData<P>,
 }
 
-impl Worker {
+// `'static` on the parameter itself, not just on its message types: the init
+// message is moved into the channel thread, and `InitMsg<P>` mentions `P`.
+impl<P: AppProtocol + 'static> Worker<P> {
     pub fn spawn<F>(
         engine: &EngineExe,
-        init_msg: InitMsg,
+        init_msg: InitMsg<P>,
         callback: F,
-    ) -> Result<Worker, WorkerSpawnError>
+    ) -> Result<Worker<P>, WorkerSpawnError>
     where
-        F: Fn(WorkerEvent) + Send + 'static,
+        F: Fn(WorkerEvent<P>) + Send + 'static,
     {
         let exe = engine.resolve()?;
 
@@ -182,6 +191,7 @@ impl Worker {
         Ok(Worker {
             process,
             rpc_writer,
+            protocol: PhantomData,
         })
     }
 
@@ -196,7 +206,7 @@ impl Worker {
     ///
     /// Returns [`SendError::Finished`] if the worker has already exited or been killed,
     /// or [`SendError::Io`] on a genuine write failure.
-    pub fn send_rpc_message(&self, msg: ResultMsg) -> Result<(), SendError> {
+    pub fn send_rpc_message(&self, msg: ResultMsg<P>) -> Result<(), SendError> {
         send_via_rpc(&self.rpc_writer, msg)
     }
 
@@ -207,7 +217,13 @@ impl Worker {
 }
 
 /// Write one answer to the worker.
-pub(crate) fn send_via_rpc(writer: &RpcWriter, msg: ResultMsg) -> Result<(), SendError> {
+///
+/// The slot is untyped, so nothing here ties `P` to the worker it belongs to;
+/// the two callers outside this module both hold a `NoApp` worker.
+pub(crate) fn send_via_rpc<P: AppProtocol>(
+    writer: &RpcWriter,
+    msg: ResultMsg<P>,
+) -> Result<(), SendError> {
     let mut guard = writer.lock().unwrap();
     let Some(writer) = guard.as_mut() else {
         return Err(SendError::Finished);
@@ -234,12 +250,12 @@ pub(crate) fn send_via_rpc(writer: &RpcWriter, msg: ResultMsg) -> Result<(), Sen
 
 /// The channel thread: wait for the worker, hand it its init message, then relay
 /// everything it says until it stops saying anything.
-fn run_channel(
+fn run_channel<P: AppProtocol>(
     listener: ChannelListener,
-    init_msg: InitMsg,
+    init_msg: InitMsg<P>,
     rpc_writer: RpcWriter,
     exited: Arc<AtomicBool>,
-    emit: impl Fn(WorkerEvent),
+    emit: impl Fn(WorkerEvent<P>),
 ) {
     let endpoint = match accept_worker(&listener, &exited) {
         Ok(endpoint) => endpoint,
@@ -264,7 +280,7 @@ fn run_channel(
 
     loop {
         match reader.recv() {
-            Ok(Some(body)) => match CompleteCmdMsg::from_text_msg(&body) {
+            Ok(Some(body)) => match CompleteCmdMsg::<P>::from_text_msg(&body) {
                 Ok(CompleteCmdMsg::CmdMsg(cmd)) => emit(WorkerEvent::RpcCommand(Ok(cmd))),
                 Ok(CompleteCmdMsg::GracefulExit) => emit(WorkerEvent::GracefulExit),
                 Err(e) => emit(WorkerEvent::RpcCommand(Err(e))),

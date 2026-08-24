@@ -1,4 +1,7 @@
 use collomatique_rpc::{CmdMsg, ResultMsg};
+use collomatique_rpc_colloscopes::{
+    AppAnswerMsg, AppCmdMsg, AppInitMsg, ColloCmdMsg, ColloInitMsg, ColloProtocol, ColloResultMsg,
+};
 use collomatique_state::traits::Manager;
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
@@ -24,7 +27,7 @@ pub struct Dialog {
     script: String,
     end_with_error: bool,
     debug_view: Controller<DebugView>,
-    worker: Option<Worker>,
+    worker: Option<Worker<ColloProtocol>>,
     error_dialog: Controller<error_dialog::Dialog>,
     warning_running: Controller<warning_running::Dialog>,
     errors: FactoryVecDeque<error_display::Entry>,
@@ -41,7 +44,7 @@ pub enum DialogInput {
     Cancel,
     Echo(String),
     ProcessFinished,
-    Cmd(Result<collomatique_rpc::CmdMsg, collomatique_rpc::RpcDecodeError>),
+    Cmd(Result<ColloCmdMsg, collomatique_rpc::RpcDecodeError>),
     Error(String),
     /// One of this window's own dialogs just closed: bring this window back to
     /// the front.
@@ -258,7 +261,7 @@ impl Component for Dialog {
                 self.debug_view.emit(DebugViewInput::Clear);
 
                 let input = sender.input_sender().clone();
-                let callback = move |event: WorkerEvent| match event {
+                let callback = move |event: WorkerEvent<ColloProtocol>| match event {
                     WorkerEvent::LogLine(line) => {
                         input.emit(DialogInput::Echo(line));
                     }
@@ -275,7 +278,7 @@ impl Component for Dialog {
 
                 let spawn_result = Worker::spawn(
                     &EngineExe::Current,
-                    collomatique_rpc::InitMsg::RunPythonScript(self.script.clone()),
+                    ColloInitMsg::App(AppInitMsg::RunPythonScript(self.script.clone())),
                     callback,
                 );
 
@@ -313,15 +316,15 @@ impl Component for Dialog {
             }
             DialogInput::Cmd(cmd) => match cmd {
                 Ok(cmd_msg) => match cmd_msg {
-                    CmdMsg::GetData => {
+                    CmdMsg::App(AppCmdMsg::GetData) => {
                         let data = self
                             .app_session
                             .as_ref()
                             .expect("there should be some current state to accept")
                             .get_data();
-                        self.send_response(ResultMsg::generate_data_msg(data));
+                        self.send_response(ResultMsg::App(AppAnswerMsg::generate_data_msg(data)));
                     }
-                    CmdMsg::SetData(data_stream) => {
+                    CmdMsg::App(AppCmdMsg::SetData(data_stream)) => {
                         let app_session = self
                             .app_session
                             .as_mut()
@@ -336,7 +339,7 @@ impl Component for Dialog {
                         );
                         match collomatique_state::traits::Manager::apply(app_session, op, desc) {
                             Ok(_) => {
-                                self.send_response(ResultMsg::Ack(None));
+                                self.send_response(ResultMsg::Ack);
                             }
                             Err(e) => {
                                 self.send_response(ResultMsg::GlobalError(e.to_string()));
@@ -418,7 +421,7 @@ impl Dialog {
         self.app_session.as_ref().map_or(false, |s| s.can_undo())
     }
 
-    fn send_response(&self, msg: ResultMsg) {
+    fn send_response(&self, msg: ColloResultMsg) {
         if let Some(worker) = self.worker.as_ref() {
             match worker.send_rpc_message(msg) {
                 // The worker already exited: nothing to respond to (also handled by the

@@ -2,15 +2,19 @@
 //!
 //! This module contains the code to run an rpc server
 //! as well as the necessary RCP messages
+//!
+//! What lives here is the half of the protocol that knows nothing about any
+//! particular problem: the transport, the ILP and strategy jobs, and the
+//! envelopes that carry them. An application plugs its own messages in through
+//! [`AppProtocol`].
 
+use std::fmt::Debug;
 use std::sync::{Mutex, OnceLock};
 
-use serde::{Deserialize, Serialize};
+use serde::de::{self, DeserializeOwned};
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
 pub mod channel;
-
-pub mod cmd_msg;
-pub use cmd_msg::CmdMsg;
 
 pub mod solver_msg;
 pub use solver_msg::{
@@ -45,75 +49,97 @@ impl RpcDecodeError {
     }
 }
 
+/// The application half of the protocol, plugged into the generic envelopes.
+///
+/// A channel carries exactly one job from start to finish, so this parameter also
+/// records what kind of job it is. A channel that runs an ILP or a strategy and
+/// nothing else uses [`NoApp`], whose message type is uninhabited.
+///
+/// The two ends of a channel need not agree on `P`, and in practice they do not:
+/// the GUI spawns an ILP worker as `NoApp` while the engine binary reads its init
+/// as the application's protocol, because the same binary also hosts Python
+/// scripts. That works because serde's external tagging makes the non-`App`
+/// variants serialize identically for every `P` — their payload types never
+/// mention it.
+///
+/// The associated types are `Send + 'static` because an init message is handed to
+/// the host's channel thread, and answers are built from reader threads.
+pub trait AppProtocol {
+    type Init: Serialize + DeserializeOwned + Clone + Debug + PartialEq + Eq + Send + 'static;
+    type Cmd: Serialize + DeserializeOwned + Clone + Debug + PartialEq + Eq + Send + 'static;
+    type Answer: Serialize + DeserializeOwned + Clone + Debug + PartialEq + Eq + Send + 'static;
+}
+
+/// The application half of a channel that carries no application traffic.
+///
+/// The `Debug`/`Clone`/`PartialEq`/`Eq` impls are what the envelopes' derived
+/// impls ask of their parameter; a protocol marker is a unit type, so they cost
+/// nothing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NoApp;
+
+/// Nameable, never constructible: an `App` frame cannot exist on a [`NoApp`] channel.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NoAppMsg {}
+
+impl AppProtocol for NoApp {
+    type Init = NoAppMsg;
+    type Cmd = NoAppMsg;
+    type Answer = NoAppMsg;
+}
+
+// Written out rather than derived, so that the failure message is ours. The
+// serialize side is unreachable by construction; the deserialize side is what a
+// peer sending an `App` frame down a `NoApp` channel would hit.
+impl Serialize for NoAppMsg {
+    fn serialize<S: Serializer>(&self, _serializer: S) -> Result<S::Ok, S::Error> {
+        match *self {}
+    }
+}
+
+impl<'de> Deserialize<'de> for NoAppMsg {
+    fn deserialize<D: Deserializer<'de>>(_deserializer: D) -> Result<Self, D::Error> {
+        Err(de::Error::custom(
+            "this channel carries no application messages",
+        ))
+    }
+}
+
+// The envelopes. `bound = ""` because the bounds serde would infer are on `P`
+// itself, whereas what the bodies need is on its associated types, and
+// `AppProtocol` already guarantees that much.
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum InitMsg {
-    RunPythonScript(String),
+#[serde(bound = "")]
+pub enum InitMsg<P: AppProtocol> {
     SolveIlp(SerializedIlpProblem),
     RunStrategy(SerializedStrategyRequest),
+    App(P::Init),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct InternalDataStream {
-    serialized: String,
-}
-
-// The data stream carries the storage crate's file-format (spec-2) JSON, not a
-// raw serde dump of the in-memory data. The file format is decoupled from the
-// in-memory types (it goes through the storage layer's own `format` structs), so
-// it is guaranteed serializable no matter how the in-memory representation
-// evolves — it does not depend on any `Serialize` impl of `Data` or the tables
-// it contains.
-//
-// The conversion is `To`/`From Data` (not `InnerData`) on purpose: `Data`
-// carries the "is valid" invariant, whereas an arbitrary `InnerData` is not
-// guaranteed to be a valid document, and only valid documents should cross a
-// process boundary. The storage layer itself works on `InnerData`, so both
-// directions bridge explicitly: the write direction hands it the inner
-// document, and the read direction runs the invariant gate. It only ever sees
-// documents this very writer produced, so a rejection would be a bug and is
-// treated as one. Writing a valid document can still fail on one thing the
-// model allows and the file format does not — an id above the format's
-// ceiling — which this panics on for now, like every other consumer of the
-// writer.
-impl From<&collomatique_state_colloscopes::Data> for InternalDataStream {
-    fn from(value: &collomatique_state_colloscopes::Data) -> Self {
-        InternalDataStream {
-            serialized: collomatique_storage::serialize_data(value.get_inner_data())
-                .expect("document ids exceed the file-format ceiling"),
-        }
-    }
-}
-
-impl From<InternalDataStream> for collomatique_state_colloscopes::Data {
-    fn from(value: InternalDataStream) -> Self {
-        // Round-tripping our own writer's output must always succeed; any
-        // caveats only arise for foreign or newer-version files, never here.
-        let (inner_data, _caveats) = collomatique_storage::deserialize_data(&value.serialized)
-            .expect("data from our own data stream should always be deserializable");
-        collomatique_state_colloscopes::Data::from_inner_data(inner_data)
-            .expect("our own writer only serializes valid documents")
-    }
+#[serde(bound = "")]
+pub enum CmdMsg<P: AppProtocol> {
+    Solver(SolverMsg),
+    Strategy(StrategyMsg),
+    App(P::Cmd),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum ResultMsg {
+#[serde(bound = "")]
+pub enum ResultMsg<P: AppProtocol> {
     InvalidMsg,
-    Ack(Option<collomatique_state_colloscopes::NewId>),
-    Data(InternalDataStream),
+    Ack,
     GlobalError(String),
     SolverControl(bool),
     StrategyControl(bool),
-}
-
-impl ResultMsg {
-    pub fn generate_data_msg(data: &collomatique_state_colloscopes::Data) -> ResultMsg {
-        ResultMsg::Data(data.into())
-    }
+    App(P::Answer),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub enum CompleteCmdMsg {
-    CmdMsg(CmdMsg),
+#[serde(bound = "")]
+pub enum CompleteCmdMsg<P: AppProtocol> {
+    CmdMsg(CmdMsg<P>),
     GracefulExit,
 }
 
@@ -121,7 +147,7 @@ pub enum CompleteCmdMsg {
 // the pretty form only ever existed because the old transport chopped a message
 // into lines and needed them short enough for a terminal not to wrap.
 
-impl InitMsg {
+impl<P: AppProtocol> InitMsg<P> {
     pub fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
@@ -134,7 +160,7 @@ impl InitMsg {
     }
 }
 
-impl ResultMsg {
+impl<P: AppProtocol> ResultMsg<P> {
     pub fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
@@ -147,7 +173,7 @@ impl ResultMsg {
     }
 }
 
-impl CompleteCmdMsg {
+impl<P: AppProtocol> CompleteCmdMsg<P> {
     pub fn from_text_msg(data: &str) -> Result<Self, RpcDecodeError> {
         match serde_json::from_str::<Self>(data) {
             Ok(cmd) => Ok(cmd),
@@ -182,6 +208,10 @@ pub enum RpcError {
 /// no such guarantee — it was a bare `print!` followed by a bare `read_line` on the
 /// process's own stdio — and a hosted Python script can perfectly well call into
 /// the RPC from two threads at once.
+///
+/// Nothing here is parameterized by [`AppProtocol`]: the slot holds untyped
+/// frame halves, and the protocol only appears in the signatures of the
+/// functions that encode and decode.
 static CHANNEL: OnceLock<Mutex<Connection>> = OnceLock::new();
 
 struct Connection {
@@ -204,21 +234,21 @@ fn with_channel<T>(f: impl FnOnce(&mut Connection) -> Result<T, RpcError>) -> Re
 }
 
 /// Wait for the host's opening message, which says what this worker is for.
-pub fn receive_init() -> Result<InitMsg, RpcError> {
+pub fn receive_init<P: AppProtocol>() -> Result<InitMsg<P>, RpcError> {
     with_channel(|connection| {
         let body = connection.reader.recv()?.ok_or(RpcError::Closed)?;
-        Ok(InitMsg::from_text_msg(&body)?)
+        Ok(InitMsg::<P>::from_text_msg(&body)?)
     })
 }
 
 /// One round trip: send a command, block until its answer comes back.
-pub fn send_command(cmd: CmdMsg) -> Result<ResultMsg, RpcError> {
+pub fn send_command<P: AppProtocol>(cmd: CmdMsg<P>) -> Result<ResultMsg<P>, RpcError> {
     with_channel(|connection| {
         connection
             .writer
             .send(&CompleteCmdMsg::CmdMsg(cmd).to_text_msg())?;
         let body = connection.reader.recv()?.ok_or(RpcError::Closed)?;
-        Ok(ResultMsg::from_text_msg(&body)?)
+        Ok(ResultMsg::<P>::from_text_msg(&body)?)
     })
 }
 
@@ -227,7 +257,7 @@ pub fn send_graceful_exit() -> Result<(), RpcError> {
     with_channel(|connection| {
         connection
             .writer
-            .send(&CompleteCmdMsg::GracefulExit.to_text_msg())?;
+            .send(&CompleteCmdMsg::<NoApp>::GracefulExit.to_text_msg())?;
         Ok(())
     })
 }

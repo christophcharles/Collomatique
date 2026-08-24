@@ -2,7 +2,9 @@ use std::fmt;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use collomatique_rpc::{IlpSolveRequest, InitMsg, ResultMsg, SerializedIlpProblem, SolverMsg};
+use collomatique_rpc::{
+    IlpSolveRequest, InitMsg, NoApp, ResultMsg, SerializedIlpProblem, SolverMsg,
+};
 
 use crate::worker::{EngineExe, RpcWriter, Worker, WorkerEvent, WorkerSpawnError, send_via_rpc};
 
@@ -74,7 +76,9 @@ pub enum IlpStatus {
 
 pub struct SolverSubprocess {
     /// Held only for its `Drop`: dropping the handle kills the worker if still running.
-    _worker: Worker,
+    ///
+    /// `NoApp`: this channel runs one ILP and speaks nothing else.
+    _worker: Worker<NoApp>,
     stop_flag: Arc<AtomicBool>,
     last_progress: Arc<Mutex<Option<IlpProgress>>>,
 }
@@ -109,7 +113,7 @@ impl SolverSubprocess {
             disable_logging: config.disable_logging,
         };
         let serialized = SerializedIlpProblem::from(request);
-        let init_msg = InitMsg::SolveIlp(serialized);
+        let init_msg = InitMsg::<NoApp>::SolveIlp(serialized);
 
         let stop_flag = Arc::new(AtomicBool::new(false));
         let last_progress: Arc<Mutex<Option<IlpProgress>>> = Arc::new(Mutex::new(None));
@@ -119,7 +123,7 @@ impl SolverSubprocess {
         let last_progress_cb = last_progress.clone();
         let rpc_slot_cb = rpc_slot.clone();
 
-        let callback = move |event: WorkerEvent| match event {
+        let callback = move |event: WorkerEvent<NoApp>| match event {
             WorkerEvent::RpcCommand(Ok(cmd)) => match cmd {
                 collomatique_rpc::CmdMsg::Solver(SolverMsg::Progress(data)) => {
                     let progress = IlpProgress {
@@ -139,7 +143,7 @@ impl SolverSubprocess {
                     *last_progress_cb.lock().unwrap() = Some(progress);
 
                     let stopped = stop_flag_cb.load(Ordering::Relaxed);
-                    let response = ResultMsg::SolverControl(!stopped);
+                    let response = ResultMsg::<NoApp>::SolverControl(!stopped);
 
                     let guard = rpc_slot_cb.lock().unwrap();
                     if let Some(rpc) = guard.as_ref() {
@@ -166,7 +170,7 @@ impl SolverSubprocess {
 
                     let guard = rpc_slot_cb.lock().unwrap();
                     if let Some(rpc) = guard.as_ref() {
-                        let _ = send_via_rpc(rpc, ResultMsg::Ack(None));
+                        let _ = send_via_rpc(rpc, ResultMsg::<NoApp>::Ack);
                     }
                     drop(guard);
 

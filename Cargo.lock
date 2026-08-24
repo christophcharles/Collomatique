@@ -391,6 +391,7 @@ dependencies = [
  "collomatique-ops",
  "collomatique-python-runner",
  "collomatique-rpc",
+ "collomatique-rpc-colloscopes",
  "collomatique-rpc-engine",
  "collomatique-settings",
  "collomatique-state",
@@ -536,16 +537,23 @@ dependencies = [
 name = "collomatique-rpc"
 version = "0.1.0-alpha.1.99"
 dependencies = [
- "anyhow",
  "collomatique-ilp",
- "collomatique-state-colloscopes",
- "collomatique-storage",
  "collomatique-time",
  "interprocess",
  "ordered-float",
  "serde",
  "serde_json",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "collomatique-rpc-colloscopes"
+version = "0.1.0-alpha.1.99"
+dependencies = [
+ "collomatique-rpc",
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "serde",
 ]
 
 [[package]]
@@ -557,6 +565,7 @@ dependencies = [
  "collomatique-ilp-modeler",
  "collomatique-python-runner",
  "collomatique-rpc",
+ "collomatique-rpc-colloscopes",
  "collomatique-state-colloscopes",
  "collomatique-strategies",
  "collomatique-subprocesses",
