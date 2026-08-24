@@ -328,13 +328,20 @@ where
     })
 }
 
-/// `collomatique.__version__` is the package version
+/// `collomatique.__version__` is the program's version
 ///
-/// The two sides of the comparison do not come from the same crate:
-/// `__version__` is built from `collomatique_settings::current_version()`,
-/// i.e. the *settings* crate's `CARGO_PKG_VERSION`, while the `env!` here is
-/// this crate's. So this pins two things at once — that the module exposes the
-/// version, and that the workspace really does speak with one version number.
+/// The comparison is against `collomatique_settings::current_version()`, and
+/// not against this crate's `env!("CARGO_PKG_VERSION")`. Those two are not the
+/// same string. maturin wants PEP 440, so `Cargo.toml` next door carries the
+/// workspace version with the dev counter cut off: `0.1.0-alpha.1.99` is
+/// written `0.1.0-alpha.1` there. The program's version is the whole one, so
+/// that is the one the module must report.
+///
+/// What is left still pins something real: `__version__` has to be there, it
+/// has to be a string, and it has to be the settings version rather than this
+/// crate's truncated one. The assertion tells those two apart whenever a dev
+/// counter is on — at a release they are the same string, and it only says the
+/// module exposes a version at all.
 #[test]
 fn the_module_reports_the_package_version() {
     let globals = run(include_str!("scripts/version.py"), |_| Ok(()));
@@ -349,7 +356,10 @@ fn the_module_reports_the_package_version() {
             .expect("`__version__` is a string")
     });
 
-    assert_eq!(version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(
+        version,
+        collomatique_settings::current_version().to_string()
+    );
 }
 
 /// A private directory for one test to write in, emptied first
