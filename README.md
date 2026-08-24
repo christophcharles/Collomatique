@@ -62,8 +62,7 @@ nix-build
 ./result/bin/collomatique-gtk4
 
 # Ou avec le flake
-nix build
-./result/bin/collomatique-gtk4
+nix run
 ```
 
 Sous Ubuntu, il faut d'abord installer Rust (dernière version recommandée) via [rustup](https://rustup.rs), puis :

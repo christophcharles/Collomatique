@@ -28,7 +28,11 @@
           default = collomatique;
           collomatique = {
             type = "app";
-            program = "${workspace}/bin/collomatique";
+            # The name cargo gives the binary is the gtk4 package's own, since
+            # no crate declares a [[bin]] of its own. `command:` in the flatpak
+            # manifest and the `rr` alias in .cargo/config.toml name the same
+            # one.
+            program = "${workspace}/bin/collomatique-gtk4";
           };
         };
       }
