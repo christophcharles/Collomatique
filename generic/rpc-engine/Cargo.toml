@@ -10,7 +10,6 @@ collomatique-ilp = { path = "../../generic/ilp", features = ["serde", "collo_cbc
 collomatique-ilp-modeler = { path = "../../generic/ilp-modeler", features = ["serde"] }
 collomatique-strategies = { path = "../../generic/strategies" }
 collomatique-subprocesses = { path = "../../generic/subprocesses" }
-collomatique-time = { path = "../../generic/time" }
 ordered-float.workspace = true
 anyhow.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread"] }
