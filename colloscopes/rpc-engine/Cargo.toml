@@ -8,7 +8,6 @@ authors.workspace = true
 collomatique-rpc = { path = "../../colloscopes/rpc" }
 collomatique-python-runner = { path = "../../colloscopes/python-runner" }
 collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
-collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
 collomatique-ilp = { path = "../../generic/ilp", features = ["serde", "collo_cbc"] }
 collomatique-ilp-modeler = { path = "../../generic/ilp-modeler", features = ["serde"] }
 collomatique-strategies = { path = "../../generic/strategies" }

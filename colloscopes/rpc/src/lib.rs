@@ -51,7 +51,6 @@ impl RpcDecodeError {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum InitMsg {
     RunPythonScript(String),
-    SolveColloscope,
     SolveIlp(SerializedIlpProblem),
     RunStrategy(SerializedStrategyRequest),
 }

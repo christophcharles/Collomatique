@@ -59,67 +59,6 @@ pub fn send_exit() {
     }
 }
 
-fn try_solve() -> Result<(), anyhow::Error> {
-    use anyhow::anyhow;
-    use std::time::Instant;
-
-    let data_msg = send_command(CmdMsg::GetData).map_err(|e| anyhow!("Error on GetData: {}", e))?;
-    let inner_data = match data_msg {
-        ResultMsg::Data(data) => collomatique_state_colloscopes::Data::from(data).into_inner_data(),
-        _ => return Err(anyhow!("Bad Data packet: {:?}", data_msg)),
-    };
-
-    let t_build = Instant::now();
-    eprintln!("Building ILP problem...");
-
-    let export_config = inner_data.export_config;
-    let env = inner_data.params;
-    let problem = collomatique_constraints_colloscopes::build_model_with_log(&env, &mut |msg| {
-        eprintln!("  {msg}")
-    });
-    eprintln!("ILP problem built in {:.2?}", t_build.elapsed());
-    let stats = problem.stats();
-    eprintln!("  Model statistics:");
-    eprintln!("    Base variables: {}", stats.base_variable_count);
-    eprintln!("    User constraints: {}", stats.user_constraint_count);
-    eprintln!(
-        "    Constraint extras: {} ({} defining constraints)",
-        stats.constraint_extra_count, stats.constraint_defining_constraint_count,
-    );
-    eprintln!(
-        "    Objective extras: {} ({} defining constraints)",
-        stats.objective_extra_count, stats.objective_defining_constraint_count,
-    );
-
-    eprintln!("Solving ILP problem...");
-    let solver = collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(false);
-    let sol_opt = problem.solve(&solver);
-    let Some(sol) = sol_opt else {
-        eprintln!("No solution found");
-        return Ok(());
-    };
-    eprintln!("Solution found!");
-    let config_data = sol.get_data();
-    let new_colloscope =
-        collomatique_constraints_colloscopes::convert::build_colloscope(&env, &config_data)
-            .expect("Config data should be compatible with colloscope parameters");
-
-    eprintln!("Sending updated data...");
-    let new_inner_data = collomatique_state_colloscopes::InnerData {
-        params: env,
-        colloscope: new_colloscope,
-        export_config,
-    };
-    let new_data = collomatique_state_colloscopes::Data::from_inner_data(new_inner_data)
-        .map_err(|e| anyhow!("Solver produced invalid data: {}", e))?;
-    let data_stream = InternalDataStream::from(&new_data);
-    send_command(CmdMsg::SetData(data_stream)).map_err(|e| anyhow!("Error on SetData: {}", e))?;
-
-    eprintln!("Done.");
-
-    Ok(())
-}
-
 fn solve_ilp(serialized: SerializedIlpProblem) -> Result<(), anyhow::Error> {
     use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
     use collomatique_ilp::solvers::{
@@ -415,9 +354,6 @@ pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
             // Nothing is sent back here: a script sends when it says so
             // (`docs/python/new_api_design.md` §9.2), through the `send` of
             // `RpcHost` above.
-        }
-        InitMsg::SolveColloscope => {
-            try_solve()?;
         }
         InitMsg::SolveIlp(serialized) => {
             solve_ilp(serialized)?;

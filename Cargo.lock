@@ -553,7 +553,6 @@ name = "collomatique-rpc-engine"
 version = "0.1.0-alpha.1.99"
 dependencies = [
  "anyhow",
- "collomatique-constraints-colloscopes",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
  "collomatique-python-runner",
