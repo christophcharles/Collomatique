@@ -10,7 +10,8 @@ members = [
 
     "colloscopes/constraints-colloscopes", "colloscopes/constraints-groups",
     "colloscopes/gtk4", "colloscopes/ops", "colloscopes/python",
-    "colloscopes/python-runner", "colloscopes/rpc-colloscopes",
+    "colloscopes/property-tests", "colloscopes/python-runner",
+    "colloscopes/rpc-colloscopes",
     "colloscopes/rpc-engine-colloscopes", "colloscopes/settings",
     "colloscopes/state-colloscopes", "colloscopes/storage",
     "colloscopes/testgen-colloscopes", "colloscopes/ui-text",

@@ -1,0 +1,25 @@
+[package]
+name = "collomatique-property-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# A package with no code: the crate below is empty and exists only to give the
+# property walks in `tests/` a home. They live here rather than beside the code
+# they exercise so that they can be turned on and off without touching the
+# fingerprint of a package half the workspace depends on. Nothing depends on
+# this one, so a feature flag here rebuilds nothing but these test binaries.
+
+[dependencies]
+
+[dev-dependencies]
+collomatique-testgen-colloscopes = { path = "../../colloscopes/testgen-colloscopes" }
+collomatique-state = { path = "../../generic/state" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-ops = { path = "../../colloscopes/ops" }
+collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
+collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
+collomatique-ilp = { path = "../../generic/ilp" }
+collomatique-time = { path = "../../generic/time" }
+# `property_update_ops` builds note payloads directly.
+non-empty-string = { workspace = true, features = ["serde"] }

@@ -344,10 +344,8 @@ version = "0.1.0-alpha.2.99"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
- "collomatique-testgen-colloscopes",
  "collomatique-time",
  "ordered-float",
 ]
@@ -358,10 +356,8 @@ version = "0.1.0-alpha.2.99"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
- "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
- "collomatique-testgen-colloscopes",
  "thiserror 1.0.69",
 ]
 
@@ -467,12 +463,26 @@ dependencies = [
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
- "collomatique-testgen-colloscopes",
  "collomatique-time",
  "collomatique-ui-text",
  "non-empty-string",
  "serde",
  "thiserror 1.0.69",
+]
+
+[[package]]
+name = "collomatique-property-tests"
+version = "0.1.0-alpha.2.99"
+dependencies = [
+ "collomatique-constraints-colloscopes",
+ "collomatique-constraints-groups",
+ "collomatique-ilp",
+ "collomatique-ops",
+ "collomatique-state",
+ "collomatique-state-colloscopes",
+ "collomatique-testgen-colloscopes",
+ "collomatique-time",
+ "non-empty-string",
 ]
 
 [[package]]
