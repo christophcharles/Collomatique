@@ -54,6 +54,7 @@ mod error_dialog;
 mod advanced_tools;
 mod assignments;
 mod balancing;
+mod build_model;
 mod check_script;
 mod colloscope;
 mod diagnostics;

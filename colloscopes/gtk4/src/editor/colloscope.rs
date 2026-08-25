@@ -7,6 +7,7 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::ColloscopeUpdateOp;
 
+use crate::editor::build_model::{config_dialog, loading_dialog};
 use crate::editor::run_solver;
 
 /// The solver dialog instantiated for the configured colloscope ILP model. The solve path runs
@@ -32,11 +33,9 @@ const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(
 
 mod blame_dialog;
 mod colloscope_display;
-mod config_dialog;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
-mod loading_dialog;
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
