@@ -9,6 +9,7 @@ use ordered_float::OrderedFloat;
 use collomatique_ilp::Constraint;
 use collomatique_ilp_modeler::{
     ConstraintBundle, ConstraintSource, InternalVar, Modeler, Var as ModelerVar,
+    ViolationImplication,
 };
 
 use crate::ConfiguredColloscopeModel;
@@ -54,6 +55,37 @@ pub enum ConfiguredConstraintDesc {
     /// A `var == value` equality: either a hard pin of a non-recomputed variable or the
     /// (objectified) anchor of a recomputed opt-in variable to its current value.
     Fixed { var: Var, value: OrderedFloat<f64> },
+}
+
+/// Blame support: an `Inner` violation dedups exactly as the base description it wraps
+/// does, so a configured model's minimal blame reads like the base model's.
+///
+/// A `Fixed` pin has no category. `MinimalBlame` keeps every uncategorized item that is
+/// not an outright duplicate and never asks about implication between them, so distinct
+/// pins all survive and none can suppress another — which is what one wants: two broken
+/// pins are two separate things the user asked for and did not get.
+impl ViolationImplication for ConfiguredConstraintDesc {
+    type CategoryKey = crate::types::violation_order::ViolationCategoryKey;
+
+    fn violation_category(&self) -> Option<Self::CategoryKey> {
+        match self {
+            ConfiguredConstraintDesc::Inner(desc) => desc.violation_category(),
+            ConfiguredConstraintDesc::Fixed { .. } => None,
+        }
+    }
+
+    fn violation_implies(&self, other: &Self) -> bool {
+        match (self, other) {
+            (ConfiguredConstraintDesc::Inner(a), ConfiguredConstraintDesc::Inner(b)) => {
+                a.violation_implies(b)
+            }
+            // Across the two variants there is nothing to say, and a `Fixed` only ever
+            // implies itself. Both arms are unreachable from `MinimalBlame` — it consults
+            // implication inside a category only, and `Fixed` has none — but the trait
+            // asks for a total answer.
+            _ => self == other,
+        }
+    }
 }
 
 /// The modelization-relevant half of a solve request: the problem-scoping refinements (which
@@ -541,3 +573,6 @@ fn wrap_source(
         },
     }
 }
+
+#[cfg(test)]
+mod tests;
