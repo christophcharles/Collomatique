@@ -717,11 +717,13 @@ name = "collomatique-ui-text"
 version = "0.1.0-alpha.2.99"
 dependencies = [
  "chrono",
+ "collomatique-constraints-colloscopes",
  "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-strategies",
  "collomatique-time",
+ "non-empty-string",
  "thiserror 1.0.69",
 ]
 
