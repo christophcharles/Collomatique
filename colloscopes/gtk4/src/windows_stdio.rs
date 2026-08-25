@@ -10,9 +10,9 @@
 //! So the output is thrown away on purpose. [`discard_output`] points the two
 //! output streams at `NUL`, where a write succeeds and goes nowhere.
 //!
-//! **There is no command line on Windows.** `--help`, `--version` and `--debug`
-//! print nothing there, and that is the accepted state rather than a gap to
-//! fill later. Windows decides console-or-GUI from a single flag in the
+//! **There is no command line on Windows.** `--help` and `--version` print
+//! nothing there, and that is the accepted state rather than a gap to fill
+//! later. Windows decides console-or-GUI from a single flag in the
 //! executable, at build time, and a program cannot be both. The way back was
 //! tried and abandoned: `AttachConsole(ATTACH_PARENT_PROCESS)` plus
 //! `SetStdHandle`, plus `_open_osfhandle`/`_dup2` for the C runtime's separate

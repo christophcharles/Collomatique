@@ -12,10 +12,10 @@
 // too. That costs it nothing: its standard streams are pipes the parent
 // creates and hands over, which need no console at either end.
 //
-// The cost is the command line: with no console, `--help`, `--version` and
-// `--debug` have nowhere to print. `windows_stdio` stops that from being fatal,
-// and `windows_cli` answers in a dialog instead of in silence. Unix is
-// unaffected throughout, command line included.
+// The cost is the command line: with no console, `--help` and `--version` have
+// nowhere to print. `windows_stdio` stops that from being fatal, and
+// `windows_cli` answers in a dialog instead of in silence. Unix is unaffected
+// throughout, command line included.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use anyhow::Context as _;
@@ -24,7 +24,6 @@ use collomatique_gtk4::AppModel;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
-mod debug;
 #[cfg(windows)]
 mod windows_cli;
 #[cfg(windows)]
@@ -42,17 +41,13 @@ const WORKER_THREAD_COUNT: usize = 4;
 #[command(group(
     ArgGroup::new("script")
         .args(["python", "python_file"])
-        .conflicts_with_all(["rpc_engine", "debug", "new"]),
+        .conflicts_with_all(["rpc_engine", "new"]),
 ))]
 /// Collomatique gtk4 UI
 struct Args {
     /// Ignore all other parameters and run the python engine
     #[arg(long, default_value_t = false)]
     rpc_engine: bool,
-
-    /// Run in debug mode (requires a file argument)
-    #[arg(long, value_enum)]
-    debug: Option<debug::DebugMode>,
 
     /// Open Collomatique directly editing a new colloscope
     #[arg(short, long, default_value_t = false)]
@@ -85,9 +80,9 @@ fn main() -> Result<(), anyhow::Error> {
     #[cfg(windows)]
     windows_stdio::discard_output();
 
-    // On windows the parse can end in a dialog rather than in a return: the
-    // arguments that only make sense at a terminal are refused there, `--debug`
-    // among them, so the block below is unix-only in practice.
+    // On windows the parse can end in a dialog rather than in a return:
+    // `--help`, `--version` and a mistyped option have no terminal to answer
+    // in, so they answer in a message box and exit.
     #[cfg(windows)]
     let args = windows_cli::parse();
     #[cfg(not(windows))]
@@ -110,14 +105,6 @@ fn main() -> Result<(), anyhow::Error> {
             (!args.python_no_engine).then_some(collomatique_python_runner::EngineExe::Current);
         collomatique_python_runner::initialize();
         return collomatique_python_runner::run_python_script(code, None, engine);
-    }
-
-    if let Some(mode) = args.debug {
-        if matches!(mode, debug::DebugMode::Help) {
-            return debug::print_help();
-        }
-        let file = args.file.expect("--debug requires a file argument");
-        return debug::run(mode, file);
     }
 
     let payload = collomatique_gtk4::AppInit {

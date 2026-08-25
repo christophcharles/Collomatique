@@ -1,9 +1,9 @@
 # TODO: End-to-end tests
 
-We are lacking end-to-end tests, particularly around the Python API. Once
-[the CLI revamp](todo_cli.md) lands and gives us a simple way to run Python
-scripts against files, we should add tests that drive the whole software through
-Python scripts.
+We are lacking end-to-end tests, particularly around the Python API. Now that
+`--python` and `--python-file` give us a simple way to run Python scripts
+against files, we should add tests that drive the whole software through Python
+scripts.
 
 There are at least four categories:
 
