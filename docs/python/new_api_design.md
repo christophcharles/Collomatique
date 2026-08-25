@@ -860,14 +860,16 @@ class ColloscopeSolveConfig:
 
 ### 10.2 The model object
 
-The config is the common gate to both remaining doors — writing the problem out
-and solving it. Both take the same road: build the model once, then use it.
+The config is the common gate to the remaining doors — writing the problem out,
+solving it, and asking what a colloscope breaks. They all take the same road:
+build the model once, then use it.
 
 ```python
 model = doc.build_colloscope_model(config, on_log=...)   # config is required
 model.export_mps("problem.mps")                          # §9.4
 model.export_mps("checker.mps", checker=True)
 run = model.solve(strategy, on_progress=..., on_log=...)
+violations = model.blame(colloscope)                     # §10.4
 ```
 
 - `config` is **required**. The GUI never solves without passing its dialog, and
@@ -995,6 +997,56 @@ alive, and a script run from `pkgs/nix/python-env.nix` solves without naming
 anything. A wheel built anywhere else simply has no fourth rung unless its builder
 sets the variable. `--python-no-engine` (§1) withholds the injection, which is how a
 script — and `colloscopes/gtk4/tests/e2e/` — reaches the rungs below it.
+
+### 10.4 The blame: what a colloscope breaks
+
+The third door on a model answers the other question — not « what is the best
+colloscope » but « what is wrong with this one », which is what the GUI shows
+under « Vérification du colloscope ».
+
+```python
+for violation in model.blame(doc.colloscope.to_data()):
+    print(violation.severity, "-", violation)
+```
+
+- **It takes a `ColloscopeData`** — `doc.colloscope.to_data()`, or a solve's
+  `outcome.colloscope`. The model is detached (§10.2), so there is no document
+  to resolve a handle against: the keys are **ids alone**, which is what
+  `to_data()` hands back, and a handle is a `TypeError` saying so.
+- **It blocks**, unlike `solve()`. Filling in what a colloscope does not say —
+  the helper variables the constraints are really written against — takes a
+  solver, so an engine runs in its own process here too; it is a quick
+  feasibility problem with nothing to optimize, and there is no progress to
+  report, so a run handle would be an empty ceremony. `engine=` and `on_log=`
+  mean what they mean for `solve()`. Ctrl-C interrupts the wait and kills the
+  engine with it.
+- **A violation is a severity and a sentence**, and nothing else:
+  `ConstraintViolation` carries a `SeverityLevel` and the French text
+  `ConstraintDesc::user_readable` writes, which is what `str()` gives. A
+  structured mirror of the model's constraint descriptions would pin the
+  internal vocabulary of `constraints-colloscopes` as public API — the same rule
+  that keeps the model itself opaque (§10.2).
+- **`SeverityLevel` has six members where the model has five.** `FIXED <
+  INFEASIBILITY < STRUCTURAL < QUALITY < PROGRESSIVE < PREFERENCE`, worst first,
+  so `sorted()` and `min()` do the obvious thing. `FIXED` is not one of the
+  model's tiers: it marks a broken **pin** of the solve configuration — a
+  variable the config said not to recompute, which the colloscope contradicts —
+  and that outranks anything the model says, being the one thing the person
+  driving the solve asked for by hand. Its sentence lives in
+  `collomatique_ui_text::solver::fixed_pin_violation_text`, beside the solve
+  dialog's own. The Rust `SeverityLevel` keeps its five tiers.
+- **The list is the *minimal* blame**, sorted worst first: a violation another
+  reported one already implies is left out. Every constraint of the model is
+  hard, so a `PREFERENCE` violation is a real violation — the tiers say what a
+  relaxation would give up first, not what the colloscope is allowed to break.
+  An empty list is a colloscope the model has nothing against.
+- **Refusal order, as `solve()`'s** (§5): the value is read, then judged against
+  the model's parameters, and only then is an engine looked for. A colloscope
+  this model cannot read — an unknown slot or week, a group number past the
+  list's last group, a student it does not place — is a `ValueError` raised
+  before any machine is asked for; an engine that cannot verify it is a
+  `SolveError`. Nothing is written to the document, which the model is not
+  attached to anyway.
 
 ## 11. Rust-side prerequisites
 
