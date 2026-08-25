@@ -25,6 +25,8 @@ const COLLOMATIQUE: &str = env!("CARGO_BIN_EXE_collomatique-gtk4");
 mod blame;
 #[path = "e2e/open_and_solve.rs"]
 mod open_and_solve;
+#[path = "e2e/script_document.rs"]
+mod script_document;
 #[path = "e2e/solve.rs"]
 mod solve;
 
