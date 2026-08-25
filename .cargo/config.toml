@@ -1,2 +1,18 @@
+# The test suite comes in blocks. `cargo test` is the day-to-day one and runs
+# neither of the slow ones; the aliases below turn them on. A block is a cargo
+# feature on a package nothing else depends on, so switching one on or off
+# rebuilds only that package's own test binaries — and cargo keeps both
+# configurations cached, so alternating costs nothing after the first build.
+#
+# Not in any block, and reached by neither `cargo test` nor `cargo full-test`:
+# the two `#[ignore]` tests. One rewrites a golden fixture and the other opens
+# real file choosers, so both are run by hand and on purpose.
 [alias]
 rr = "run -p collomatique-gtk4"
+# The end-to-end tests: the built binary driven through real solves (~2 min).
+e2e = "test -p collomatique-gtk4 --features e2e"
+# The randomized property walks (~2 min).
+fuzz = "test -p collomatique-property-tests --features fuzz"
+# Everything at once. The features are package-qualified because that is the
+# form cargo requires when more than one package is being built.
+full-test = "test --workspace --features collomatique-gtk4/e2e,collomatique-property-tests/fuzz"

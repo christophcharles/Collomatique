@@ -27,11 +27,13 @@ use collomatique_state_colloscopes::{Data, InnerData};
 
 use harness::RunConfig;
 
-/// Single hardcoded configuration used by every property on every
-/// `cargo test` run (user decision: no env variables, no `#[ignore]`
-/// tiers). 100 seeds was verified to still catch every bug found by the
-/// original 500-seed configuration; the 500-seed version is kept as the
-/// slow reference for occasional milestone checks.
+/// Single hardcoded configuration used by every property on every run
+/// (user decision: no env variables, no `#[ignore]` tiers — the `fuzz`
+/// feature that decides *whether* this target is built is a separate
+/// matter, and does not vary what it does). 100 seeds was verified to
+/// still catch every bug found by the original 500-seed configuration;
+/// the 500-seed version is kept as the slow reference for occasional
+/// milestone checks.
 const CONFIG: RunConfig = RunConfig {
     seeds: 100,
     ops_per_run: 1000,
