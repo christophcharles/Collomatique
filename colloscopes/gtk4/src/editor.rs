@@ -54,6 +54,7 @@ mod error_dialog;
 mod advanced_tools;
 mod assignments;
 mod balancing;
+mod build_model;
 mod check_script;
 mod colloscope;
 mod diagnostics;
@@ -105,7 +106,11 @@ pub enum EditorInput {
     NewStateFromSecondInstance(AppState<Data, Desc>),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportMpsClicked,
-    ExportMpsAs(PathBuf),
+    /// The MPS export is now writing its file: the advanced-tools panel drives the export, the
+    /// editor owns the toasts.
+    ExportMpsWriting(PathBuf),
+    ExportMpsSuccessful(PathBuf),
+    ExportMpsFailed(PathBuf, String),
     UpdateIlpProblem(Option<collomatique_constraints_colloscopes::IlpInnerProblem>),
     /// A dialog somewhere below this panel just closed. The panel hosts no
     /// window of its own, so it passes the request up to the application.
@@ -137,10 +142,6 @@ pub enum EditorCommandOutput {
     ScriptLoadingFailed(PathBuf, String),
     ExportXlsxSuccessful(PathBuf),
     ExportXlsxFailed(PathBuf, String),
-    MpsFileChosen(PathBuf),
-    MpsFileNotChosen,
-    ExportMpsSuccessful(PathBuf),
-    ExportMpsFailed(PathBuf, String),
 }
 
 const DEFAULT_TOAST_TIMEOUT: Option<NonZeroU32> = NonZeroU32::new(3);
@@ -255,12 +256,6 @@ pub struct EditorPanel {
     /// Same pattern as [Self::state_to_commit]: the payload of a save
     /// that cannot go through as-is waits here while the user answers.
     save_pending_compaction: Option<(PathBuf, collomatique_state_colloscopes::InnerData)>,
-
-    /// The current ILP problem, pushed here by the colloscope panel.
-    ///
-    /// It lives in the editor — and not in a panel — because two buttons
-    /// export it now. The panels only ever receive its size.
-    ilp_problem: Option<collomatique_constraints_colloscopes::IlpInnerProblem>,
 
     show_particular_panel: Option<PanelNumbers>,
 
@@ -961,6 +956,15 @@ impl Component for EditorPanel {
                 advanced_tools::AdvancedToolsOutput::ExportMpsClicked => {
                     EditorInput::ExportMpsClicked
                 }
+                advanced_tools::AdvancedToolsOutput::MpsExportWriting(path) => {
+                    EditorInput::ExportMpsWriting(path)
+                }
+                advanced_tools::AdvancedToolsOutput::MpsExportSuccessful(path) => {
+                    EditorInput::ExportMpsSuccessful(path)
+                }
+                advanced_tools::AdvancedToolsOutput::MpsExportFailed(path, error) => {
+                    EditorInput::ExportMpsFailed(path, error)
+                }
                 advanced_tools::AdvancedToolsOutput::CompactIdsClicked => {
                     EditorInput::CompactIdsClicked
                 }
@@ -1035,7 +1039,6 @@ impl Component for EditorPanel {
             show_particular_panel: None,
             state_to_commit: None,
             save_pending_compaction: None,
-            ilp_problem: None,
             error_dialog,
             general_planning,
             subjects,
@@ -1105,6 +1108,8 @@ impl Component for EditorPanel {
                     .sender()
                     .send(group_lists::GroupListsInput::ResetGenerationConfig)
                     .unwrap();
+                self.advanced_tools
+                    .emit(advanced_tools::AdvancedToolsInput::ResetMpsExportConfig);
                 self.send_msg_for_interface_update(sender);
             }
             EditorInput::SaveClicked => match &self.file_name {
@@ -1351,11 +1356,11 @@ impl Component for EditorPanel {
                     }
                 });
             }
-            // The file chooser lives here rather than in a panel: both the
-            // export panel and the advanced-tools panel offer this export, and
-            // the editor is the one holding the problem to export.
+            // The export itself belongs to the advanced-tools panel, which owns the workflow
+            // driving it. Only the document snapshot and the default file name come from here:
+            // the editor is the one holding the document and the current file name.
             EditorInput::ExportMpsClicked => {
-                let default = match self.file_name.path() {
+                let default_file = match self.file_name.path() {
                     Some(path) => {
                         let mut mps_path = path.clone();
                         mps_path.set_extension("mps");
@@ -1365,36 +1370,36 @@ impl Component for EditorPanel {
                         format!("{DEFAULT_FILE_STEM}.mps").into(),
                     ),
                 };
-                let parent = tools::open_save::ParentWindowHandle::from_widget(root);
-                sender.oneshot_command(async move {
-                    match tools::open_save::save_mps_dialog(parent, default).await {
-                        Some(path) => EditorCommandOutput::MpsFileChosen(path),
-                        None => EditorCommandOutput::MpsFileNotChosen,
-                    }
-                });
+                let inner_data = self.data.get_data().get_inner_data();
+                self.advanced_tools
+                    .emit(advanced_tools::AdvancedToolsInput::StartMpsExport {
+                        params: inner_data.params.clone(),
+                        colloscope: inner_data.colloscope.clone(),
+                        default_file,
+                    });
             }
-            EditorInput::ExportMpsAs(path) => {
-                // Both buttons are insensitive without a problem, but the click
-                // and the arrival of a `None` can cross: give up silently.
-                let Some(problem) = self.ilp_problem.clone() else {
-                    return;
-                };
+            EditorInput::ExportMpsWriting(path) => {
                 self.toast_info = Some(ToastInfo::Toast {
                     text: format!("Export MPS en cours de {}...", path.to_string_lossy()),
                     timeout: None,
                 });
-                sender.oneshot_command(async move {
-                    match diagnostics::export_to_mps(&problem, &path).await {
-                        Ok(()) => EditorCommandOutput::ExportMpsSuccessful(path),
-                        Err(e) => EditorCommandOutput::ExportMpsFailed(path, e.to_string()),
-                    }
+            }
+            EditorInput::ExportMpsSuccessful(path) => {
+                self.toast_info = Some(ToastInfo::Toast {
+                    text: format!("{} exporté", path.to_string_lossy()),
+                    timeout: DEFAULT_TOAST_TIMEOUT,
                 });
+            }
+            EditorInput::ExportMpsFailed(path, error) => {
+                self.toast_info = Some(ToastInfo::Dismiss);
+                sender
+                    .output(EditorOutput::ExportError(path, error))
+                    .unwrap();
             }
             EditorInput::UpdateIlpProblem(problem) => {
                 let info = problem
                     .as_ref()
                     .map(advanced_tools::IlpProblemInfo::from_problem);
-                self.ilp_problem = problem;
                 self.advanced_tools
                     .emit(advanced_tools::AdvancedToolsInput::UpdateIlpProblemInfo(
                         info,
@@ -1470,22 +1475,6 @@ impl Component for EditorPanel {
                 });
             }
             EditorCommandOutput::ExportXlsxFailed(path, error) => {
-                self.toast_info = Some(ToastInfo::Dismiss);
-                sender
-                    .output(EditorOutput::ExportError(path, error))
-                    .unwrap();
-            }
-            EditorCommandOutput::MpsFileNotChosen => {}
-            EditorCommandOutput::MpsFileChosen(path) => {
-                sender.input(EditorInput::ExportMpsAs(path));
-            }
-            EditorCommandOutput::ExportMpsSuccessful(path) => {
-                self.toast_info = Some(ToastInfo::Toast {
-                    text: format!("{} exporté", path.to_string_lossy()),
-                    timeout: DEFAULT_TOAST_TIMEOUT,
-                });
-            }
-            EditorCommandOutput::ExportMpsFailed(path, error) => {
                 self.toast_info = Some(ToastInfo::Dismiss);
                 sender
                     .output(EditorOutput::ExportError(path, error))

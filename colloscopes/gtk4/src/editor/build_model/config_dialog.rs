@@ -2,7 +2,7 @@ mod advanced_dialog;
 mod group_list_group;
 mod period_group;
 
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, Cast, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::{
     Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
@@ -14,20 +14,19 @@ use collomatique_constraints_colloscopes::{
     GroupListRecompute, GroupListSolveData, PeriodSolveData, SolveConfig,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
-use collomatique_strategies::ConductorStrategy;
 
-use crate::editor::run_solver::conductor_config;
+use crate::editor::build_model::{ConfigExtension, ExtensionOutput};
 
-pub struct Dialog {
+pub struct Dialog<E: ConfigExtension> {
     hidden: bool,
     move_front: bool,
     /// The parameters the assembled [`SolveConfig`] will build its model from, set on `Show`.
     params: Parameters,
-    /// The problem/solver configuration this window is assembling. For now only the conductor
-    /// strategy is tracked; problem-scoping widgets will be added here later.
-    strategy: ConductorStrategy,
-    /// The advanced solver-configuration dialog, opened via "Paramètres avancés du résolveur".
-    conductor_config_dialog: Controller<conductor_config::Dialog>,
+    /// The consumer-specific part of the configuration, shown at the bottom of the window.
+    extension: Controller<E>,
+    /// The last value announced by `extension`, handed back on validation. `None` until the
+    /// first `Show`, which seeds the extension.
+    extension_value: Option<E::Value>,
     /// The advanced model-parameter dialog (cross-period softening and L1 anchor weight), opened
     /// via the "Paramètres avancés" button.
     advanced_dialog: Controller<advanced_dialog::Dialog>,
@@ -46,15 +45,19 @@ pub struct Dialog {
     l1_anchor_weight: f64,
 }
 
+/// `V` is the extension's value type ([`ConfigExtension::Value`]).
 #[derive(Debug)]
-pub enum DialogInput {
-    Show(SolveConfig, ConductorStrategy, Parameters),
+pub enum DialogInput<V> {
+    Show(SolveConfig, V, Parameters),
     Cancel,
     Accept,
-    OpenAdvanced,
     OpenAdvancedParams,
-    UpdateStrategy(ConductorStrategy),
+    /// The extension announced a new value.
+    ExtensionValueChanged(V),
     UpdateAdvancedParams(Option<f64>, f64),
+    /// Reset every period and group list to "recompute from scratch"; the advanced model
+    /// parameters are left alone.
+    ResetModelConfig,
     IgnoreOrRefresh,
     SetPeriodRecompute(usize, bool),
     SetPeriodUseCurrent(usize, bool),
@@ -65,30 +68,17 @@ pub enum DialogInput {
     Present,
 }
 
+/// `V` is the extension's value type ([`ConfigExtension::Value`]).
 #[derive(Debug)]
-pub enum DialogOutput {
+pub enum DialogOutput<V> {
     Cancelled,
-    Accepted(SolveConfig, ConductorStrategy, Parameters),
+    Accepted(SolveConfig, V, Parameters),
     /// This window just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
     PresentParent,
 }
 
-impl Dialog {
-    fn is_opt_strategy(&self) -> bool {
-        self.strategy == ConductorStrategy::with_parallelism_defaults()
-    }
-
-    fn is_search_strategy(&self) -> bool {
-        self.strategy == ConductorStrategy::default()
-    }
-
-    fn is_other_strategy(&self) -> bool {
-        !self.is_opt_strategy() && !self.is_search_strategy()
-    }
-}
-
-impl Dialog {
+impl<E: ConfigExtension> Dialog<E> {
     fn has_periods(&self) -> bool {
         !self.params.periods.is_empty()
     }
@@ -235,11 +225,14 @@ impl Dialog {
 }
 
 #[relm4::component(pub)]
-impl SimpleComponent for Dialog {
+impl<E> SimpleComponent for Dialog<E>
+where
+    E: ConfigExtension + 'static,
+{
     type Init = ();
 
-    type Input = DialogInput;
-    type Output = DialogOutput;
+    type Input = DialogInput<E::Value>;
+    type Output = DialogOutput<E::Value>;
 
     view! {
         #[root]
@@ -248,7 +241,7 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Configuration de la résolution"),
+            set_title: Some(E::WINDOW_TITLE),
             set_default_size: (1024, 576),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
@@ -257,6 +250,12 @@ impl SimpleComponent for Dialog {
                     pack_start = &gtk::Button {
                         set_label: "Annuler",
                         connect_clicked => DialogInput::Cancel,
+                    },
+                    pack_start = &gtk::Button {
+                        set_icon_name: "view-refresh-symbolic",
+                        add_css_class: "flat",
+                        set_tooltip: "Tout recalculer : réinitialiser toutes les périodes et toutes les listes automatiques pour reconstruire un modèle complet",
+                        connect_clicked => DialogInput::ResetModelConfig,
                     },
                     pack_end = &gtk::Button {
                         set_label: "Valider",
@@ -367,72 +366,8 @@ impl SimpleComponent for Dialog {
                         set_margin_all: 0,
                         set_orientation: gtk::Orientation::Horizontal,
                         set_hexpand: true,
-                        gtk::Frame {
-                            set_hexpand: true,
-                            set_margin_all: 5,
-                            gtk::Box {
-                                set_orientation: gtk::Orientation::Horizontal,
-                                set_spacing: 5,
-                                gtk::Label {
-                                    set_margin_start: 10,
-                                    set_margin_all: 5,
-                                    set_label: "<b>Configuration du résolveur :</b>",
-                                    set_use_markup: true,
-                                },
-                                gtk::Box {
-                                    set_spacing: 0,
-                                    add_css_class: "linked",
-                                    #[name(opt_toggle_btn)]
-                                    gtk::ToggleButton {
-                                        set_margin_top: 5,
-                                        set_margin_bottom: 5,
-                                        set_label: "Optimisation complète",
-                                        #[track(opt_toggle_btn.is_active() != model.is_opt_strategy())]
-                                        set_active: model.is_opt_strategy(),
-                                        connect_toggled[sender] => move |widget| {
-                                            let new_state = widget.is_active();
-                                            sender.input(if new_state {
-                                                DialogInput::UpdateStrategy(ConductorStrategy::with_parallelism_defaults())
-                                            } else {
-                                                DialogInput::IgnoreOrRefresh
-                                            });
-                                        }
-                                    },
-                                    #[name(search_toggle_btn)]
-                                    gtk::ToggleButton {
-                                        set_margin_top: 5,
-                                        set_margin_bottom: 5,
-                                        set_label: "Recherche simple",
-                                        #[track(search_toggle_btn.is_active() != model.is_search_strategy())]
-                                        set_active: model.is_search_strategy(),
-                                        connect_toggled[sender] => move |widget| {
-                                            let new_state = widget.is_active();
-                                            sender.input(if new_state {
-                                                DialogInput::UpdateStrategy(ConductorStrategy::default())
-                                            } else {
-                                                DialogInput::IgnoreOrRefresh
-                                            });
-                                        }
-                                    },
-                                },
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "<i><small>Personnalisée</small></i>",
-                                    set_use_markup: true,
-                                    #[watch]
-                                    set_visible: model.is_other_strategy(),
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Button {
-                                    add_css_class: "frame",
-                                    set_margin_all: 5,
-                                    set_label: "Personnalisée",
-                                    connect_clicked => DialogInput::OpenAdvanced,
-                                },
-                            },
-                        },
+                        #[local_ref]
+                        extension_widget -> gtk::Widget {},
                         gtk::Button {
                             add_css_class: "frame",
                             add_css_class: "warning",
@@ -454,15 +389,12 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let conductor_config_dialog = conductor_config::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
+        // The extension is handed this window so that its own dialogs can be transient for it.
+        let extension = E::builder()
+            .launch(root.clone().upcast::<gtk::Window>())
             .forward(sender.input_sender(), |msg| match msg {
-                conductor_config::DialogOutput::Accepted(strategy) => {
-                    DialogInput::UpdateStrategy(strategy)
-                }
-                conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
-                conductor_config::DialogOutput::PresentParent => DialogInput::Present,
+                ExtensionOutput::ValueChanged(value) => DialogInput::ExtensionValueChanged(value),
+                ExtensionOutput::Present => DialogInput::Present,
             });
 
         let advanced_dialog = advanced_dialog::Dialog::builder()
@@ -501,8 +433,8 @@ impl SimpleComponent for Dialog {
             hidden: true,
             move_front: false,
             params: Parameters::default(),
-            strategy: ConductorStrategy::with_parallelism_defaults(),
-            conductor_config_dialog,
+            extension,
+            extension_value: None,
             advanced_dialog,
             periods_list,
             group_lists_list,
@@ -514,6 +446,7 @@ impl SimpleComponent for Dialog {
 
         let periods_box = model.periods_list.widget();
         let group_lists_box = model.group_lists_list.widget();
+        let extension_widget: &gtk::Widget = model.extension.widget().as_ref();
 
         let widgets = view_output!();
 
@@ -523,24 +456,36 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(config, strategy, params) => {
+            DialogInput::Show(config, extension_value, params) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.params = params;
-                self.strategy = strategy;
+                self.extension_value = Some(extension_value.clone());
+                self.extension.emit(E::set_value_msg(extension_value));
                 self.set_data_from_config(config);
 
                 self.refresh_periods_list();
                 self.refresh_group_lists_list();
             }
-            DialogInput::OpenAdvanced => {
-                self.conductor_config_dialog
-                    .sender()
-                    .send(conductor_config::DialogInput::Show(self.strategy.clone()))
-                    .unwrap();
+            DialogInput::ExtensionValueChanged(value) => {
+                self.extension_value = Some(value);
             }
-            DialogInput::UpdateStrategy(strategy) => {
-                self.strategy = strategy;
+            DialogInput::ResetModelConfig => {
+                let default_period = PeriodSolveData::default();
+                for data in &mut self.periods_data {
+                    data.recompute = default_period.recompute;
+                    data.use_current_values = default_period.use_current_values;
+                }
+                let default_group_list = GroupListSolveData::default();
+                for data in &mut self.group_lists_data {
+                    data.recompute = default_group_list.recompute.is_some();
+                    data.previous_values_as_objective = default_group_list
+                        .recompute
+                        .as_ref()
+                        .is_some_and(|r| r.previous_values_as_objective);
+                }
+                self.refresh_periods_list();
+                self.refresh_group_lists_list();
             }
             DialogInput::IgnoreOrRefresh => {}
             DialogInput::SetPeriodRecompute(index, value) => {
@@ -591,10 +536,14 @@ impl SimpleComponent for Dialog {
                 if !self.hidden {
                     self.hidden = true;
                     sender.output(DialogOutput::PresentParent).unwrap();
+                    let extension_value = self
+                        .extension_value
+                        .clone()
+                        .expect("the dialog is only visible after a `Show` seeded the extension");
                     sender
                         .output(DialogOutput::Accepted(
                             self.config_from_data(),
-                            self.strategy.clone(),
+                            extension_value,
                             self.params.clone(),
                         ))
                         .unwrap();

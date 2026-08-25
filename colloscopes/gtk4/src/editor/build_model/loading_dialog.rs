@@ -4,10 +4,9 @@ use relm4::{
     adw, gtk,
 };
 
-use collomatique_constraints_colloscopes::{ConfiguredColloscopeModel, SolveConfig, Var};
+use collomatique_constraints_colloscopes::{ConfiguredColloscopeModel, SolveConfig};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::colloscopes::Colloscope;
-use collomatique_strategies::{ConductorPayload, IncrementalPayload};
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -36,21 +35,12 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    ModelReady(ConfiguredColloscopeModel, ConductorPayload<Var>),
+    ModelReady(ConfiguredColloscopeModel),
+    /// The build was abandoned through "Annuler": nothing will be handed back.
+    Cancelled,
     /// The dialog just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
     PresentParent,
-}
-
-/// Build the incremental epoch payload from the freshly-built model: every `StudentInGroup` base
-/// variable is solved first (epoch 0), then each `GroupInInterrogation` variable is solved in the
-/// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
-/// group assignment. Base variables absent from the map fall into the strategy's final epoch.
-fn build_incremental_payload(model: &ConfiguredColloscopeModel) -> ConductorPayload<Var> {
-    let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
-    ConductorPayload {
-        incremental: IncrementalPayload { epochs },
-    }
 }
 
 #[derive(Debug)]
@@ -236,6 +226,7 @@ impl Component for Dialog {
                 if !self.hidden {
                     self.hidden = true;
                     sender.output(DialogOutput::PresentParent).unwrap();
+                    sender.output(DialogOutput::Cancelled).unwrap();
                 }
             }
             DialogInput::Close => {
@@ -267,10 +258,7 @@ impl Component for Dialog {
                     self.hidden = true;
                     sender.output(DialogOutput::PresentParent).unwrap();
                 }
-                let payload = build_incremental_payload(&model);
-                sender
-                    .output(DialogOutput::ModelReady(model, payload))
-                    .unwrap();
+                sender.output(DialogOutput::ModelReady(model)).unwrap();
             }
             Err(e) => {
                 self.error = Some(e);
