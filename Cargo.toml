@@ -46,3 +46,40 @@ pyo3 = "0.29"
 # features across the workspace, so a crate asking for `async-std` here would
 # hand every other crate a `zbus` with both runtimes turned on.
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
+
+# Building the constraint model is the slowest thing the test suite does, and
+# almost all of that cost is the optimizer being switched off. A realistic
+# document (a full Hogwarts year, ~50 kB) yields a model of ~61 000 variables
+# and ~114 000 constraints; `build_model` takes ~29 s on it unoptimized and
+# ~4 s optimized. There is no hotspot to fix — the time is spread evenly across
+# the modeler pipeline (transmutation, DFS expansion, partitioning, main
+# problem) and the balancing bundle. It is simply a lot of work.
+#
+# So the five crates that do that work are compiled optimized even in the dev
+# profile. Measured over a typical test session, compilation included: about
+# five minutes before, about one minute after.
+#
+# Compilation is the part to keep an eye on, because these crates do get rebuilt
+# from cold often — a branch switch or a change to a widely-used type is enough,
+# so it is not a rare event to be amortized away. It still comes out well ahead,
+# but if that ever stops being true, `state` and `state-colloscopes` are the two
+# to drop first: they are the expensive ones to compile and they buy the smaller
+# half of the speedup.
+#
+# What this does NOT cost is the correctness of the tests. A package profile
+# override changes only the key it names, so `-C debug-assertions=on` still
+# holds. That matters here, because these tests assert by *not* panicking, and
+# the invariant assertions are what they are watching.
+#
+# It does cost debugging: stepping through these five crates gets worse with
+# inlining. Comment the block out for a session if that ever bites.
+[profile.dev.package.collomatique-ilp]
+opt-level = 2
+[profile.dev.package.collomatique-ilp-modeler]
+opt-level = 2
+[profile.dev.package.collomatique-state]
+opt-level = 2
+[profile.dev.package.collomatique-state-colloscopes]
+opt-level = 2
+[profile.dev.package.collomatique-constraints-colloscopes]
+opt-level = 2
