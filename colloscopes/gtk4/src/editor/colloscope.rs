@@ -1126,8 +1126,11 @@ impl Colloscope {
                     ));
                     let log_cb = {
                         let input_sender = input_sender.clone();
+                        // The worker reads its child's output with `read_until`,
+                        // so each line still carries its own terminator: appending
+                        // one here would double-space the whole CBC log.
                         move |line: &str| {
-                            input_sender.emit(ColloscopeInput::DebugLog(seq, format!("{line}\n")));
+                            input_sender.emit(ColloscopeInput::DebugLog(seq, line.to_owned()));
                         }
                     };
                     let subprocess = match SolverSubprocess::spawn(
