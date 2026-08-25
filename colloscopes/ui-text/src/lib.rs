@@ -10,8 +10,10 @@
 //! [`solver::solve_verdict_text`] and [`solver::fixed_pin_violation_text`] do
 //! the same for the sentences the solve dialog writes about a strategy's
 //! configuration, about how a run ended, and about a pin of the solve
-//! configuration a colloscope breaks.
+//! configuration a colloscope breaks. [`script`] holds the two sentences the
+//! command line's script mode writes on stderr about the document it hosts.
 
 pub mod caveats;
 pub mod rendering;
+pub mod script;
 pub mod solver;
