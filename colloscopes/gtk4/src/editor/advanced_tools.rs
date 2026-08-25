@@ -1,4 +1,6 @@
-use gtk::prelude::{BoxExt, ButtonExt, WidgetExt};
+use std::path::PathBuf;
+
+use gtk::prelude::{BoxExt, ButtonExt, Cast, WidgetExt};
 use relm4::gtk::prelude::OrientableExt;
 use relm4::{Component, ComponentController, ComponentParts, ComponentSender, Controller};
 use relm4::{RelmWidgetExt, adw, gtk};
@@ -8,6 +10,7 @@ use collomatique_constraints_colloscopes::IlpInnerProblem;
 use python_packages::python_is_bundled;
 
 mod install_package;
+pub mod mps;
 mod python_packages;
 
 /// Whether the document cannot be written to a file as it stands
@@ -207,6 +210,9 @@ pub struct AdvancedTools {
     /// nothing outside this panel -- it does not touch the document, and there
     /// is no answer to bring back.
     install_package_dialog: Controller<install_package::Dialog>,
+    /// The MPS export, from the configuration dialog to the written file. Owned here rather
+    /// than by the editor: only this panel starts it, and the editor is left with the toasts.
+    mps_workflow: Controller<mps::Workflow>,
 }
 
 #[derive(Debug)]
@@ -217,6 +223,19 @@ pub enum AdvancedToolsInput {
     RunPythonScriptClicked,
     InstallPackageClicked,
     ExportMpsClicked,
+    /// Snapshot of the document, taken by the editor when the export was asked for: hand it to
+    /// the export workflow, which drives the rest on its own.
+    StartMpsExport {
+        params: collomatique_state_colloscopes::colloscope_params::Parameters,
+        colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
+        default_file: crate::tools::open_save::DefaultSaveFile,
+    },
+    MpsExportWriting(PathBuf),
+    MpsExportSuccessful(PathBuf),
+    MpsExportFailed(PathBuf, String),
+    /// Another document was loaded: the export workflow forgets what the previous one was
+    /// configured with.
+    ResetMpsExportConfig,
     CompactIdsClicked,
     /// A dialog of this panel just closed. The panel hosts no window of its
     /// own, so it passes the request up to the editor.
@@ -227,6 +246,10 @@ pub enum AdvancedToolsInput {
 pub enum AdvancedToolsOutput {
     RunPythonScriptClicked,
     ExportMpsClicked,
+    /// The model is built and the MPS file is being written.
+    MpsExportWriting(PathBuf),
+    MpsExportSuccessful(PathBuf),
+    MpsExportFailed(PathBuf, String),
     CompactIdsClicked,
     /// A dialog of this panel just closed: the window underneath should be
     /// brought back to the front, because Windows will not do it on its own.
@@ -509,11 +532,25 @@ impl Component for AdvancedTools {
                 install_package::DialogOutput::PresentParent => AdvancedToolsInput::PresentParent,
             });
 
+        let mps_workflow = mps::Workflow::builder()
+            .launch(root.clone().upcast::<gtk::Widget>())
+            .forward(sender.input_sender(), |msg| match msg {
+                mps::WorkflowOutput::Writing(path) => AdvancedToolsInput::MpsExportWriting(path),
+                mps::WorkflowOutput::Successful(path) => {
+                    AdvancedToolsInput::MpsExportSuccessful(path)
+                }
+                mps::WorkflowOutput::Failed(path, error) => {
+                    AdvancedToolsInput::MpsExportFailed(path, error)
+                }
+                mps::WorkflowOutput::PresentParent => AdvancedToolsInput::PresentParent,
+            });
+
         let model = AdvancedTools {
             stats: Stats::default(),
             ilp_info: None,
             python: PythonInfo::read(),
             install_package_dialog,
+            mps_workflow,
         };
         let widgets = view_output!();
 
@@ -539,9 +576,46 @@ impl Component for AdvancedTools {
                     .send(install_package::DialogInput::Show)
                     .unwrap();
             }
+            // The click goes up to the editor, which alone can snapshot the document, and comes
+            // back down as `StartMpsExport`.
             AdvancedToolsInput::ExportMpsClicked => {
                 sender
                     .output(AdvancedToolsOutput::ExportMpsClicked)
+                    .unwrap();
+            }
+            AdvancedToolsInput::StartMpsExport {
+                params,
+                colloscope,
+                default_file,
+            } => {
+                self.mps_workflow
+                    .sender()
+                    .send(mps::WorkflowInput::Start {
+                        params,
+                        colloscope,
+                        default_file,
+                    })
+                    .unwrap();
+            }
+            AdvancedToolsInput::MpsExportWriting(path) => {
+                sender
+                    .output(AdvancedToolsOutput::MpsExportWriting(path))
+                    .unwrap();
+            }
+            AdvancedToolsInput::MpsExportSuccessful(path) => {
+                sender
+                    .output(AdvancedToolsOutput::MpsExportSuccessful(path))
+                    .unwrap();
+            }
+            AdvancedToolsInput::MpsExportFailed(path, error) => {
+                sender
+                    .output(AdvancedToolsOutput::MpsExportFailed(path, error))
+                    .unwrap();
+            }
+            AdvancedToolsInput::ResetMpsExportConfig => {
+                self.mps_workflow
+                    .sender()
+                    .send(mps::WorkflowInput::Reset)
                     .unwrap();
             }
             AdvancedToolsInput::CompactIdsClicked => {
