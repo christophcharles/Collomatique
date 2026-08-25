@@ -252,8 +252,9 @@ where
                         connect_clicked => DialogInput::Cancel,
                     },
                     pack_start = &gtk::Button {
-                        set_label: "Tout recalculer",
-                        set_tooltip: "Réinitialiser toutes les périodes et toutes les listes automatiques pour reconstruire un modèle complet",
+                        set_icon_name: "view-refresh-symbolic",
+                        add_css_class: "flat",
+                        set_tooltip: "Tout recalculer : réinitialiser toutes les périodes et toutes les listes automatiques pour reconstruire un modèle complet",
                         connect_clicked => DialogInput::ResetModelConfig,
                     },
                     pack_end = &gtk::Button {
