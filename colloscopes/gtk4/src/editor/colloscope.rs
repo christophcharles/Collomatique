@@ -88,6 +88,11 @@ pub enum ColloscopeInput {
     EraseGroupListsClicked,
 
     ShowBlamedConstraints,
+    /// Text for the debug view. *Every* debug line goes through here — phase
+    /// headers included — so that the single input queue is what orders them:
+    /// sending a header straight to the dialog would let it overtake log lines
+    /// still queued from the phase that just ended.
+    DebugLog(String),
     /// A dialog of this panel just closed. The panel hosts no window of its
     /// own, so it passes the request up to the editor.
     PresentParent,
@@ -100,7 +105,10 @@ pub enum ColloscopeCommandOutput {
         env: collomatique_state_colloscopes::colloscope_params::Parameters,
         result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String>,
     },
-    IlpReprComputed(IlpRepr),
+    /// `None` when the reconstruction was killed because its data went stale:
+    /// there is nothing to store, and the choke point relaunches from the
+    /// current data.
+    IlpReprComputed(Option<IlpRepr>),
 }
 
 #[derive(Debug)]
@@ -126,7 +134,39 @@ pub struct IlpProblem {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IlpRepr {
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
-    warnings: Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>,
+    /// `Err` when the reconstruction itself failed (the subprocess crashed or
+    /// could not be spawned). Stored like a success, so the choke point does not
+    /// retry it in a loop; it is retried when the colloscope changes.
+    warnings: Result<Vec<(collomatique_constraints_colloscopes::SeverityLevel, String)>, String>,
+}
+
+/// Shared control block for the in-flight reconstruction subprocess, held by the
+/// component (main thread) and by the worker closure that drives the solve.
+struct ReprControl {
+    /// Raised by the component to abort. Checked by the worker closure around
+    /// spawning, and by both log callbacks so that the output of a child being
+    /// torn down does not land in the middle of the next run.
+    ///
+    /// Kept out of the mutex on purpose: the log callback runs on the worker's
+    /// reader thread and must never block on a lock the killing thread holds
+    /// while dropping the handle.
+    killed: std::sync::atomic::AtomicBool,
+    /// The handle, once spawned. Held only for its `Drop`: clearing this kills
+    /// the child, which is how the kill is carried out.
+    subprocess: std::sync::Mutex<Option<collomatique_subprocesses::SolverSubprocess>>,
+}
+
+impl ReprControl {
+    fn new() -> Self {
+        ReprControl {
+            killed: std::sync::atomic::AtomicBool::new(false),
+            subprocess: std::sync::Mutex::new(None),
+        }
+    }
+
+    fn is_killed(&self) -> bool {
+        self.killed.load(std::sync::atomic::Ordering::Acquire)
+    }
 }
 
 /// The computation data we currently have (as opposed to the data in flight).
@@ -159,7 +199,9 @@ impl ComputationArtifact {
 }
 
 /// Which computation, if any, is currently in flight. Collomatique never runs
-/// two computations at once, and neither step is cancelable.
+/// two computations at once. `IlpProblem` runs in-process and is not cancelable
+/// (a stale result is dropped at the boundary); `IlpRepr` solves in a
+/// subprocess, which is killed as soon as its data goes stale.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InflightComputation {
     None,
@@ -210,6 +252,8 @@ pub struct Colloscope {
     computation_artifact: Option<ComputationArtifact>,
     // What is currently in flight (debounce timer and/or a computation).
     inflight_cmd: InflightCommand,
+    // Control block for the in-flight reconstruction subprocess, if any.
+    repr_ctl: Option<std::sync::Arc<ReprControl>>,
 }
 
 impl Colloscope {
@@ -232,7 +276,7 @@ impl Colloscope {
             Some(ComputationArtifact::Built {
                 ilp_repr: Some(ilp_repr),
                 ..
-            }) => Some(&ilp_repr.warnings),
+            }) => ilp_repr.warnings.as_ref().ok(),
             _ => None,
         }
     }
@@ -279,10 +323,26 @@ impl Colloscope {
 
     fn has_evaluation_error(&self) -> bool {
         self.is_settled()
-            && matches!(
-                &self.computation_artifact,
-                Some(ComputationArtifact::BuildFailed { .. })
-            )
+            && match &self.computation_artifact {
+                Some(ComputationArtifact::BuildFailed { .. }) => true,
+                Some(ComputationArtifact::Built {
+                    ilp_repr: Some(ilp_repr),
+                    ..
+                }) => ilp_repr.warnings.is_err(),
+                _ => false,
+            }
+    }
+
+    /// Which of the two failures the error label reports: building the model
+    /// (`BuildFailed`) or verifying the colloscope against it.
+    fn evaluation_error_text(&self) -> &'static str {
+        match &self.computation_artifact {
+            Some(ComputationArtifact::Built {
+                ilp_repr: Some(ilp_repr),
+                ..
+            }) if ilp_repr.warnings.is_err() => "<b>Erreur de vérification</b>",
+            _ => "<b>Erreur de base de données</b>",
+        }
     }
 
     fn has_success(&self) -> bool {
@@ -435,7 +495,8 @@ impl Component for Colloscope {
                                     set_icon_name: Some("dialog-error-symbolic"),
                                 },
                                 gtk::Label {
-                                    set_label: "<b>Erreur de base de données</b>",
+                                    #[watch]
+                                    set_label: model.evaluation_error_text(),
                                     set_use_markup: true,
                                 },
                             },
@@ -641,6 +702,7 @@ impl Component for Colloscope {
                 debouncing: false,
                 computation: InflightComputation::None,
             },
+            repr_ctl: None,
         };
 
         let list_box = model.group_list_entries.widget();
@@ -653,6 +715,16 @@ impl Component for Colloscope {
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
             ColloscopeInput::Update(params, colloscope) => {
+                // An unkilled in-flight reconstruction was launched from the
+                // current `params`/`colloscope`, so comparing before overwriting
+                // tells us whether it just went stale. If it did, kill it now
+                // instead of letting CBC run to completion in the subprocess.
+                if self.inflight_cmd.computation == InflightComputation::IlpRepr
+                    && (params != self.params || colloscope != self.colloscope)
+                {
+                    self.kill_inflight_repr(&sender);
+                }
+
                 self.params = params;
                 self.colloscope = colloscope;
                 self.last_update = Some(std::time::Instant::now());
@@ -875,6 +947,9 @@ impl Component for Colloscope {
                     .send(blame_dialog::DialogInput::Show)
                     .unwrap();
             }
+            ColloscopeInput::DebugLog(line) => {
+                self.debug_log(&line);
+            }
             ColloscopeInput::PresentParent => {
                 sender.output(ColloscopeOutput::PresentParent).unwrap();
             }
@@ -905,18 +980,23 @@ impl Component for Colloscope {
                     });
                 }
             }
-            ColloscopeCommandOutput::IlpReprComputed(ilp_repr) => {
+            ColloscopeCommandOutput::IlpReprComputed(repr) => {
                 self.inflight_cmd.computation = InflightComputation::None;
-                // Attach the verification only if the problem is still the one it
-                // was computed against and the colloscope still matches.
-                if ilp_repr.colloscope == self.colloscope {
-                    if let Some(ComputationArtifact::Built {
-                        ilp_problem,
-                        ilp_repr: slot,
-                    }) = &mut self.computation_artifact
-                    {
-                        if ilp_problem.env == self.params {
-                            *slot = Some(ilp_repr);
+                self.repr_ctl = None;
+                // `None`: the subprocess was killed as stale — nothing to store,
+                // the choke point below relaunches from the current data.
+                // Otherwise attach the verification only if the problem is still
+                // the one it was computed against and the colloscope still matches.
+                if let Some(ilp_repr) = repr {
+                    if ilp_repr.colloscope == self.colloscope {
+                        if let Some(ComputationArtifact::Built {
+                            ilp_problem,
+                            ilp_repr: slot,
+                        }) = &mut self.computation_artifact
+                        {
+                            if ilp_problem.env == self.params {
+                                *slot = Some(ilp_repr);
+                            }
                         }
                     }
                 }
@@ -941,17 +1021,55 @@ impl Colloscope {
         });
     }
 
+    /// The debug view's sink. Reached only from the [`ColloscopeInput::DebugLog`]
+    /// handler, so that the input queue keeps every line in order; everywhere
+    /// else, send a `DebugLog` instead of calling this.
+    fn debug_log(&self, text: &str) {
+        self.blame_dialog
+            .sender()
+            .send(blame_dialog::DialogInput::DebugAppend(text.to_string()))
+            .unwrap();
+    }
+
+    /// Kill the in-flight reconstruction subprocess. The computation slot stays
+    /// occupied until the worker closure reports back — it returns as soon as
+    /// the child dies, because the result channel then disconnects — so the
+    /// single-slot invariant is preserved.
+    fn kill_inflight_repr(&mut self, sender: &ComponentSender<Self>) {
+        if let Some(ctl) = &self.repr_ctl {
+            // Raise the flag first: it is what stops the dying child's last
+            // lines from reaching the debug view. Clearing the handle then kills
+            // the child.
+            ctl.killed.store(true, std::sync::atomic::Ordering::Release);
+            *ctl.subprocess.lock().unwrap() = None;
+            sender.input(ColloscopeInput::DebugLog(
+                "— calcul interrompu : données modifiées —\n".to_string(),
+            ));
+        }
+    }
+
     /// Build the ILP model from the current parameters/colloscope. Requires that
     /// no computation is already in flight.
     fn launch_ilp_problem(&mut self, sender: ComponentSender<Self>) {
         assert!(self.inflight_cmd.computation == InflightComputation::None);
         self.inflight_cmd.computation = InflightComputation::IlpProblem;
 
+        sender.input(ColloscopeInput::DebugLog(
+            "\n════════ Construction du modèle ════════\n".to_string(),
+        ));
+
         let params = self.params.clone();
+        let input_sender = sender.input_sender().clone();
 
         sender.spawn_oneshot_command(move || {
-            let result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String> =
-                Ok(collomatique_constraints_colloscopes::build_model(&params));
+            // `build_model_with_log` already logs one line per bundle plus the
+            // timings, so this phase needs no completion line of its own.
+            let mut log = |line: &str| {
+                input_sender.emit(ColloscopeInput::DebugLog(format!("{line}\n")));
+            };
+            let result: Result<collomatique_constraints_colloscopes::ColloscopeModel, String> = Ok(
+                collomatique_constraints_colloscopes::build_model_with_log(&params, &mut log),
+            );
 
             ColloscopeCommandOutput::IlpProblemComputed {
                 env: params,
@@ -963,6 +1081,13 @@ impl Colloscope {
     /// Verify the current colloscope against the built ILP problem, producing the
     /// warnings. Requires no computation in flight and a successfully built
     /// problem in the artifact.
+    ///
+    /// Reconstructing the missing variable values needs a solver, and CBC cannot
+    /// be interrupted in-process, so that step runs in a subprocess through the
+    /// usual RPC path: the reconstruction problem is built here, shipped as a
+    /// [`collomatique_ilp::ProblemDesc`], and the returned raw solution is mapped
+    /// back onto the variable order. The blame itself stays in this process, on
+    /// the typed model.
     fn launch_ilp_repr(&mut self, sender: ComponentSender<Self>) {
         assert!(self.inflight_cmd.computation == InflightComputation::None);
         let ilp_problem = match &self.computation_artifact {
@@ -971,29 +1096,202 @@ impl Colloscope {
         };
         self.inflight_cmd.computation = InflightComputation::IlpRepr;
 
+        let ctl = std::sync::Arc::new(ReprControl::new());
+        self.repr_ctl = Some(ctl.clone());
+
+        sender.input(ColloscopeInput::DebugLog(
+            "\n════════ Vérification du colloscope ════════\n".to_string(),
+        ));
+
         let colloscope = self.colloscope.clone();
+        let input_sender = sender.input_sender().clone();
 
         sender.spawn_oneshot_command(move || {
+            use collomatique_subprocesses::{EngineExe, IlpSolverConfig, SolverSubprocess};
+
+            // Once killed, this run has nothing left to say: its remaining lines
+            // would only interleave with the next run's.
+            let log = |line: String| {
+                if ctl.is_killed() {
+                    return;
+                }
+                input_sender.emit(ColloscopeInput::DebugLog(line));
+            };
+
+            // Every line below reports the duration of the step it closes, so
+            // the phases add up to the total on the last line.
+            let t_start = std::time::Instant::now();
             let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
                 &ilp_problem.env,
                 &colloscope,
-            );
-            let solver =
-                collomatique_ilp::solvers::collo_cbc::ColloCbcSolver::with_disable_logging(true);
-            let sol = ilp_problem
+            )
+            .expect("colloscope from the document is compatible with its parameters");
+            log(format!(
+                "Configuration de base construite ({:.2?})\n",
+                t_start.elapsed()
+            ));
+
+            // Set at the end of the closure, so the work ilp-modeler does *after*
+            // it (merging the base and reconstructed values, then building and
+            // checking the complete checker configuration) can be timed from out
+            // here without a hook inside the crate.
+            let closure_end = std::cell::Cell::new(None::<std::time::Instant>);
+
+            let t_prepare = std::time::Instant::now();
+            let outcome = ilp_problem
                 .problem
-                .checker_solution_from_data(&config_data, &solver)
-                .expect("There should be a complete ilp config for the colloscope");
-            let mut warnings: Vec<_> = sol
-                .minimal_blame()
-                .iter()
-                .map(|desc| (desc.severity_level(), desc.user_readable(&ilp_problem.env)))
-                .collect();
-            warnings.sort_by_key(|(s, _)| *s);
-            ColloscopeCommandOutput::IlpReprComputed(IlpRepr {
-                colloscope,
-                warnings,
-            })
+                .checker_solution_from_data_with(&config_data, |pb| {
+                    let (problem_desc, var_order) = pb.get_desc();
+                    // Closes the reconstruction-problem build (inside ilp-modeler)
+                    // and its conversion to a `ProblemDesc`.
+                    log(format!(
+                        "Problème de reconstruction préparé ({:.2?})\n",
+                        t_prepare.elapsed()
+                    ));
+                    let (tx, rx) = std::sync::mpsc::channel();
+
+                    // Never hold the handle's lock across `spawn`: it blocks
+                    // until the child connects back, and the kill path (on the
+                    // UI thread) must not wait on that. Check, spawn, re-check.
+                    if ctl.is_killed() {
+                        return None;
+                    }
+                    let t_spawn = std::time::Instant::now();
+                    let log_cb = {
+                        let input_sender = input_sender.clone();
+                        let ctl = ctl.clone();
+                        // The worker reads its child's output with `read_until`,
+                        // so each line still carries its own terminator: appending
+                        // one here would double-space the whole CBC log. The
+                        // prefix is what separates the child's output — CBC's
+                        // included — from this process's own lines.
+                        move |line: &str| {
+                            if ctl.is_killed() {
+                                return;
+                            }
+                            input_sender
+                                .emit(ColloscopeInput::DebugLog(format!("[subprocess] {line}")));
+                        }
+                    };
+                    let subprocess = match SolverSubprocess::spawn(
+                        &EngineExe::Current,
+                        IlpSolverConfig {
+                            problem_desc,
+                            warm_start: None,
+                            // The reconstruction is a feasibility problem with a
+                            // trivial objective: CBC finishes quickly, and the
+                            // kill path covers the pathological case.
+                            time_limit: collomatique_time::TimeLimit::none(),
+                            incumbent_time_limit: collomatique_time::TimeLimit::none(),
+                            disable_logging: false,
+                        },
+                        move |result| {
+                            let _ = tx.send(result);
+                        },
+                        // No progress display for this solve; `SolverSubprocess`
+                        // answers the cooperative stop protocol on its own, and
+                        // our cancellation is the harder kill.
+                        |_| {},
+                        log_cb,
+                    ) {
+                        Ok(subprocess) => subprocess,
+                        Err(e) => {
+                            log(format!("Échec du lancement du sous-processus : {e}\n"));
+                            return None;
+                        }
+                    };
+                    // Spawning covers writing the serialized problem out and
+                    // waiting for the child to connect back on the RPC channel.
+                    // The trailing blank line opens the child's own block.
+                    log(format!(
+                        "Sous-processus lancé ({:.2?})\n\n",
+                        t_spawn.elapsed()
+                    ));
+                    let t_solve = std::time::Instant::now();
+                    {
+                        let mut guard = ctl.subprocess.lock().unwrap();
+                        if ctl.is_killed() {
+                            // Killed while spawning: dropping the fresh handle
+                            // here kills the child we just started.
+                            return None;
+                        }
+                        *guard = Some(subprocess);
+                    }
+
+                    // Blocks until the result arrives or the worker dies (killed
+                    // or crashed): either way the sending half is dropped and
+                    // `recv` returns.
+                    let received = rx.recv();
+                    // Reap the handle whatever happened; killing is idempotent.
+                    // This is also why the child's last line is usually cut off:
+                    // it dies mid-`println` the moment its result lands here.
+                    *ctl.subprocess.lock().unwrap() = None;
+                    // The whole round trip, from a launched child to its answer
+                    // in hand: the subprocess's own log lines break it down. The
+                    // leading blank line closes the child's block.
+                    log(format!(
+                        "\nRésultat reçu du sous-processus ({:.2?})\n",
+                        t_solve.elapsed()
+                    ));
+
+                    let result = received.ok()?;
+                    let solution = result.solution?;
+                    let t_rebuild = std::time::Instant::now();
+                    let data = collomatique_ilp::solution_to_config_data(&solution, &var_order);
+                    let config = pb.build_config(data).ok()?.into_feasible();
+                    log(format!(
+                        "Configuration de reconstruction validée ({:.2?})\n",
+                        t_rebuild.elapsed()
+                    ));
+                    closure_end.set(Some(std::time::Instant::now()));
+                    config
+                });
+
+            if let Some(t_assemble) = closure_end.get() {
+                log(format!(
+                    "Solution complète assemblée ({:.2?})\n",
+                    t_assemble.elapsed()
+                ));
+            }
+
+            let repr = match outcome {
+                Ok(sol) => {
+                    let t_blame = std::time::Instant::now();
+                    let mut warnings: Vec<_> = sol
+                        .minimal_blame()
+                        .iter()
+                        .map(|desc| (desc.severity_level(), desc.user_readable(&ilp_problem.env)))
+                        .collect();
+                    warnings.sort_by_key(|(s, _)| *s);
+                    log(format!(
+                        "Blâme calculé : {} contrainte(s) violée(s) ({:.2?})\n",
+                        warnings.len(),
+                        t_blame.elapsed()
+                    ));
+                    log(format!(
+                        "Vérification terminée ({:.2?} au total)\n",
+                        t_start.elapsed()
+                    ));
+                    Some(IlpRepr {
+                        colloscope,
+                        warnings: Ok(warnings),
+                    })
+                }
+                Err(e) => {
+                    if ctl.is_killed() {
+                        // Killed as stale: nothing to report, nothing to store.
+                        None
+                    } else {
+                        log(format!("Échec de la vérification : {e}\n"));
+                        Some(IlpRepr {
+                            colloscope,
+                            warnings: Err("La vérification du colloscope a échoué".to_string()),
+                        })
+                    }
+                }
+            };
+
+            ColloscopeCommandOutput::IlpReprComputed(repr)
         });
     }
 
@@ -1089,9 +1387,9 @@ impl Colloscope {
                     Some(ComputationArtifact::Built {
                         ilp_repr: Some(ilp_repr),
                         ..
-                    }) => blame_dialog::ComputationState::ResultAvailable(Ok(ilp_repr
-                        .warnings
-                        .clone())),
+                    }) => {
+                        blame_dialog::ComputationState::ResultAvailable(ilp_repr.warnings.clone())
+                    }
                     // Transient state between deciding and launching a computation.
                     _ => blame_dialog::ComputationState::ComputingConstraints,
                 },

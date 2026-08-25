@@ -30,7 +30,7 @@ pub use types::{
 
 pub use collomatique_ilp_modeler::{
     ConstraintSource, FeasibleSolution, InternalVar, MinimalBlame, Model, ModelStats, Solution,
-    ViolationImplication,
+    SolutionFromDataError, ViolationImplication,
 };
 pub use vars::Var;
 

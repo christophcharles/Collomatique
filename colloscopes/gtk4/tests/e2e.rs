@@ -21,6 +21,8 @@ use std::process::{Command, Output};
 
 const COLLOMATIQUE: &str = env!("CARGO_BIN_EXE_collomatique-gtk4");
 
+#[path = "e2e/blame.rs"]
+mod blame;
 #[path = "e2e/open_and_solve.rs"]
 mod open_and_solve;
 #[path = "e2e/solve.rs"]

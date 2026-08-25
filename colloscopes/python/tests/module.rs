@@ -14505,3 +14505,79 @@ fn a_model_exports_to_mps() {
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
+
+/// A colloscope the model cannot read is refused before an engine is looked for
+///
+/// The happy path of `model.blame` needs an engine subprocess, which no test in
+/// this crate spawns; what this says is everything that happens before one is
+/// asked for — that the value crosses the boundary by id, that a colloscope of
+/// another shape is refused there rather than panicked over, and that the
+/// refusal is a `ValueError` naming the mismatch.
+///
+/// The refusal order is the point: the colloscope is read, then judged against
+/// the model's own parameters, and only then is a machine looked for. So this
+/// runs on a machine with no engine at all.
+///
+/// The document is the filled synthetic colloscope of the read surface's
+/// commit ([colloscope_document]) — the example was never resolved, so it has
+/// no placements to break.
+#[test]
+fn a_blame_refuses_a_colloscope_the_model_cannot_read() {
+    let dir = workspace("blame-incompatible");
+    let source = dir.join("colloscope.collomatique");
+    colloscope_document(&source);
+
+    let globals = run(include_str!("scripts/blame_incompatible.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // One sentence for the one mistake, whichever of the two distances it was
+    // found at: this colloscope and this model are not about the same document.
+    let out_of_range = global::<String>(&globals, "out_of_range");
+    assert!(
+        out_of_range.contains("not compatible with the model"),
+        "the refusal should say what does not fit: {out_of_range}"
+    );
+
+    // The detached refusal says what a key may be, and where to get one.
+    let handle_refused = global::<String>(&globals, "handle_refused");
+    assert!(
+        handle_refused.contains("SlotId") && handle_refused.contains("to_data()"),
+        "the refusal should name the id class and where ids come from: {handle_refused}"
+    );
+
+    // And a value that is not one at all is refused by the field it lacks, in
+    // the voice every other value class is read with.
+    let not_a_colloscope = global::<String>(&globals, "not_a_colloscope");
+    assert!(
+        not_a_colloscope.contains("ColloscopeData") && not_a_colloscope.contains("interrogations"),
+        "the refusal should name the class expected: {not_a_colloscope}"
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The six severity levels compare, sort worst first, and hash
+///
+/// A blame is a list a script sorts and filters, so the order of the levels is
+/// part of the API and not an accident of how they are written down. `FIXED` is
+/// the one that is not a tier of the model: a broken pin of the solve
+/// configuration outranks anything the model itself says.
+#[test]
+fn the_severity_levels_are_ordered_worst_first() {
+    let globals = run(include_str!("scripts/blame_severity.py"), |_globals| Ok(()));
+
+    // The names python knows them by, in the order a sort puts them in.
+    assert_eq!(
+        global::<Vec<String>>(&globals, "names"),
+        [
+            "SeverityLevel.FIXED",
+            "SeverityLevel.INFEASIBILITY",
+            "SeverityLevel.STRUCTURAL",
+            "SeverityLevel.QUALITY",
+            "SeverityLevel.PROGRESSIVE",
+            "SeverityLevel.PREFERENCE",
+        ]
+    );
+}

@@ -2162,17 +2162,68 @@ type InterrogationRows = BTreeMap<(RawId<Slot>, RawId<Week>), BTreeSet<u32>>;
 /// with each other.
 type PlacementRows = BTreeMap<RawId<GroupList>, BTreeMap<RawId<Student>, u32>>;
 
+/// What the entity references inside a colloscope value are resolved against
+///
+/// A colloscope crosses the boundary in two situations, and they differ in
+/// what a key may be. Read *for a document* — `doc.colloscope.install(...)` —
+/// a key is a handle or an id, resolved like every other entity reference.
+/// Read *for a detached model* — `model.blame(...)` — there is no document to
+/// ask: the model is a snapshot, the parameters it was built against are the
+/// authority, and the only key that means anything is an id.
+///
+/// The two readers below are written once against this rather than twice
+/// against the two conventions: what changes between the two situations is
+/// what a key may be, and nothing else — not the shapes, not the duplicate
+/// refusals, not the sentences any of them carry.
+#[derive(Clone, Copy)]
+enum Keys<'a> {
+    /// Against the live document: a handle or an id, checked for ownership and
+    /// liveness by [crate::handles::argument].
+    Document(&'a Py<Document>),
+    /// Against nothing: ids alone, which is what `to_data()` hands back.
+    Detached,
+}
+
+impl Keys<'_> {
+    /// The entity one key names, or the refusal this convention calls for
+    ///
+    /// The detached refusal is a `TypeError` in [crate::handles::argument]'s
+    /// own voice, and it says why a handle is not taken: a handle names an
+    /// entity *of a document*, and there is no document here to check it
+    /// against — its number alone would be somebody else's word.
+    fn resolve<H>(self, obj: &Bound<'_, PyAny>) -> PyResult<RawId<H>>
+    where
+        H: Handle + PyClass<Frozen = True> + Sync,
+        H::IdClass: PyClass<Frozen = True> + Sync,
+    {
+        match self {
+            Keys::Document(doc) => argument::<H>(doc, obj),
+            Keys::Detached => match obj.cast::<H::IdClass>() {
+                Ok(id) => Ok(id.get().raw()),
+                Err(_) => Err(PyTypeError::new_err(format!(
+                    "a {} of a detached colloscope takes a {}, and {} is not one: read \
+                     without a document, a colloscope names entities by id alone — which \
+                     is what to_data() hands back",
+                    H::NOUN,
+                    <H::IdClass as IdClass>::CLASS,
+                    shown(obj, "that object"),
+                ))),
+            },
+        }
+    }
+}
+
 /// A field holding the interrogation rows of a colloscope
 ///
 /// A mapping of `(slot, week)` pairs to sets of group numbers — one of the
 /// two sparse tables of the colloscope, read out as a value. Each end of a
-/// pair resolves like every other entity reference: a handle or an id,
-/// against this document, so a foreign handle and a dead id are refused
-/// here, by the same [crate::handles::argument] check every method uses.
-/// The group numbers are plain ints, and an empty set is the "no row" the
-/// payload promises rather than a shape to correct.
+/// pair resolves as [Keys] says: against a document, a handle or an id, so a
+/// foreign handle and a dead id are refused here by the same
+/// [crate::handles::argument] check every method uses; detached, an id and
+/// nothing else. The group numbers are plain ints, and an empty set is the
+/// "no row" the payload promises rather than a shape to correct.
 fn interrogation_rows(
-    doc: &Py<Document>,
+    keys: Keys<'_>,
     site: Site<'_>,
     name: &str,
     obj: &Bound<'_, PyAny>,
@@ -2212,7 +2263,7 @@ fn interrogation_rows(
             ))
         })?;
 
-        let cell = (argument::<Slot>(doc, &slot)?, argument::<Week>(doc, &week)?);
+        let cell = (keys.resolve::<Slot>(&slot)?, keys.resolve::<Week>(&week)?);
         if rows.insert(cell, groups).is_some() {
             return Err(PyValueError::new_err(format!(
                 "{} names the ({}, {}) cell twice",
@@ -2229,13 +2280,13 @@ fn interrogation_rows(
 /// A field holding the placements rows of a colloscope
 ///
 /// The second of the two sparse tables: a mapping of group lists to student
-/// placements. The outer keys resolve like every other entity reference —
-/// a `GroupList` handle or a `GroupListId` — and so do the inner ones, the
-/// placed students. A prefilled list never appears here: it has groups of
-/// its own, so the model never fills it. An empty placement map is the "no
-/// row" the payload promises rather than a shape to correct.
+/// placements. The outer keys resolve as [Keys] says — against a document, a
+/// `GroupList` handle or a `GroupListId`; detached, the id alone — and so do
+/// the inner ones, the placed students. A prefilled list never appears here:
+/// it has groups of its own, so the model never fills it. An empty placement
+/// map is the "no row" the payload promises rather than a shape to correct.
 fn placement_rows(
-    doc: &Py<Document>,
+    keys: Keys<'_>,
     site: Site<'_>,
     name: &str,
     obj: &Bound<'_, PyAny>,
@@ -2260,7 +2311,7 @@ fn placement_rows(
                     shown(&item, "that pair"),
                 ))
             })?;
-        let group_list = argument::<GroupList>(doc, &group_list)?;
+        let group_list = keys.resolve::<GroupList>(&group_list)?;
 
         let placed_items = placements.call_method0("items").map_err(|_| {
             PyTypeError::new_err(format!(
@@ -2288,7 +2339,7 @@ fn placement_rows(
                 ))
             })?;
 
-            let student = argument::<Student>(doc, &student)?;
+            let student = keys.resolve::<Student>(&student)?;
             if placed.insert(student, group).is_some() {
                 return Err(PyValueError::new_err(format!(
                     "{} names {} twice in one placement",
@@ -2334,8 +2385,8 @@ impl Value for ColloscopeData {
         // The fields are read in the order they are declared in the dataclass,
         // so the first bad one is the one a refusal names.
         Ok(ColloscopeContents {
-            interrogations: interrogation_rows(doc, site, "interrogations", obj)?,
-            group_lists: placement_rows(doc, site, "group_lists", obj)?,
+            interrogations: interrogation_rows(Keys::Document(doc), site, "interrogations", obj)?,
+            group_lists: placement_rows(Keys::Document(doc), site, "group_lists", obj)?,
         })
     }
 
@@ -2363,6 +2414,25 @@ impl Value for ColloscopeData {
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }
+}
+
+/// The colloscope one value names, read without a document
+///
+/// What `model.blame(...)` reads its argument with. A built model is detached
+/// — it holds a snapshot of the parameters and no document at all — so the
+/// resolution a `ColloscopeData` normally goes through has nothing to ask:
+/// the keys are ids, and [Keys::Detached] is what refuses everything else.
+///
+/// Nothing here judges whether the colloscope *fits* those parameters. That is
+/// `convert::build_complete_config`'s question, and asking it twice is how the
+/// two answers drift apart.
+pub(crate) fn detached_colloscope(obj: &Bound<'_, PyAny>) -> PyResult<ColloscopeContents> {
+    let site = Site::whole(ColloscopeData::CLASS);
+
+    Ok(ColloscopeContents {
+        interrogations: interrogation_rows(Keys::Detached, site, "interrogations", obj)?,
+        group_lists: placement_rows(Keys::Detached, site, "group_lists", obj)?,
+    })
 }
 
 /// One week — the period it belongs to, whether colles run on it, and its label

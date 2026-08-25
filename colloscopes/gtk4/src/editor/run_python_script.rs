@@ -218,7 +218,7 @@ impl Component for Dialog {
                 warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
-        let debug_view = DebugView::builder().launch(()).detach();
+        let debug_view = DebugView::builder().launch(None).detach();
 
         let errors = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())

@@ -514,7 +514,7 @@ where
                 }
             });
 
-        let global_debug_view = DebugView::builder().launch(()).detach();
+        let global_debug_view = DebugView::builder().launch(None).detach();
 
         let model = Dialog {
             hidden: true,
