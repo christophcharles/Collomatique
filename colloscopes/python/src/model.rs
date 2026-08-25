@@ -17,13 +17,32 @@
 //! it — it is not a handle.
 
 use std::path::PathBuf;
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-use collomatique_constraints_colloscopes::ConfiguredColloscopeModel;
+use collomatique_constraints_colloscopes::{
+    ConfiguredColloscopeModel, ConfiguredConstraintDesc, SolutionFromDataError, convert,
+};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
+use collomatique_state_colloscopes::colloscopes::Colloscope;
+use collomatique_subprocesses::{IlpSolverConfig, SolverSubprocess};
 
-use crate::errors::ExportError;
+use crate::blame::{ConstraintViolation, SeverityLevel};
+use crate::errors::{ExportError, SolveError};
+
+/// What a colloscope the model's own parameters cannot read is refused with
+///
+/// One sentence for the two moments it can be found out at — the conversion
+/// here, and the wider variable check inside the modeler — because they are
+/// one mistake seen from two distances: this colloscope and this model are
+/// not about the same document.
+const INCOMPATIBLE: &str = "this colloscope is not compatible with the model: it names \
+                            something the model's parameters do not hold, or places a \
+                            student the model does not place";
 
 /// A colloscope problem, built and ready to be written out or solved
 ///
@@ -213,6 +232,230 @@ impl ColloscopeModel {
             on_progress,
             on_log,
         )
+    }
+
+    /// The constraints one colloscope violates, worst first
+    ///
+    /// ```python
+    /// for violation in model.blame(doc.colloscope.to_data()):
+    ///     print(violation.severity, "-", violation)
+    /// ```
+    ///
+    /// The question the application answers under « Vérification du
+    /// colloscope »: not « what is the best colloscope » but « what is wrong
+    /// with this one ». An empty list is a colloscope the model has nothing
+    /// against.
+    ///
+    /// `colloscope` is a `ColloscopeData` — `doc.colloscope.to_data()`, or the
+    /// `outcome.colloscope` of a solve. It is read against the model's own
+    /// snapshot of the document and not against a live one, so its keys are
+    /// ids: a handle names an entity of a document, and a detached model has
+    /// none to check it against.
+    ///
+    /// What comes back is the *minimal* blame: a violation another reported one
+    /// already implies is left out, so what remains is the shortest honest
+    /// account. It is sorted worst severity first, the way the application
+    /// lists it, and every constraint of the model is hard — `PREFERENCE` is
+    /// the last thing a relaxation would give up, not something the colloscope
+    /// is allowed to break.
+    ///
+    /// **This blocks**, unlike `solve()`. Filling in what the colloscope does
+    /// not say — the helper variables every constraint is really written
+    /// against — takes a solver, so an engine runs in its own process here too;
+    /// it is a quick feasibility problem with nothing to optimize. Ctrl-C
+    /// interrupts the wait and kills that process. `engine=` and `on_log=` mean
+    /// what they mean for `solve()`, and `NoEngine` is raised the same way.
+    ///
+    /// A colloscope this model cannot read at all — a slot or a week that is
+    /// not in it, a group number past the list's last group, a student it does
+    /// not place — raises `ValueError`. An engine that cannot verify it raises
+    /// `SolveError`. Nothing is written to the document, which this model is
+    /// not attached to anyway.
+    #[pyo3(signature = (colloscope, *, engine=None, on_log=None))]
+    fn blame(
+        &self,
+        py: Python<'_>,
+        colloscope: &Bound<'_, PyAny>,
+        engine: Option<PathBuf>,
+        on_log: Option<Py<PyAny>>,
+    ) -> PyResult<Vec<ConstraintViolation>> {
+        // The refusal order `solve` follows, most local first: what the script
+        // wrote down, then whether it fits this model at all, and only then the
+        // machine it would take to check it. So a script can be told its
+        // colloscope is the wrong one without an engine anywhere in sight.
+        let contents = crate::data::detached_colloscope(colloscope)?;
+
+        // Both setters are plain upserts — they validate nothing, and nothing
+        // here wants them to: `build_complete_config` below is the one skeptic,
+        // and it reads the colloscope against the parameters that will judge it.
+        let mut rebuilt = Colloscope::default();
+        for ((slot, week), groups) in contents.interrogations {
+            rebuilt.set_interrogation(slot, week, groups);
+        }
+        for (group_list, placements) in contents.group_lists {
+            rebuilt.set_group_list(group_list, placements);
+        }
+
+        let config_data = convert::build_complete_config(self.params(), &rebuilt)
+            .map_err(|_| PyValueError::new_err(INCOMPATIBLE))?;
+
+        let engine = crate::engine::resolve(engine)?;
+
+        // The first exception a callback raised, and what the interrupted wait
+        // leaves behind. Either one wins over whatever the run made of it:
+        // `wait()`'s rule, and `build_colloscope_model`'s before it.
+        let failure: Arc<Mutex<Option<PyErr>>> = Arc::new(Mutex::new(None));
+
+        let quiet = on_log.is_none();
+        let log_failure = Arc::clone(&failure);
+        let log_callback = move |line: &str| {
+            let Some(callback) = on_log.as_ref() else {
+                return;
+            };
+            if log_failure.lock().unwrap().is_some() {
+                return;
+            }
+
+            // A worker thread with no interpreter of its own, so each line
+            // takes it back for the length of one call and gives it up again.
+            Python::attach(|py| {
+                if let Err(error) = callback.call1(py, (line,)) {
+                    let mut slot = log_failure.lock().unwrap();
+                    if slot.is_none() {
+                        *slot = Some(error);
+                    }
+                }
+            });
+        };
+
+        let spawn_failure = Arc::clone(&failure);
+        let wait_failure = Arc::clone(&failure);
+
+        // Released for the whole verification: an engine is started, a problem
+        // is solved and an answer comes back, and none of it is the
+        // interpreter's business — which is also what lets the log callback
+        // above take the interpreter when it has a line.
+        let outcome = py.detach(|| {
+            self.inner()
+                .checker_solution_from_data_with(&config_data, |pb| {
+                    let (problem_desc, var_order) = pb.get_desc();
+                    let (tx, rx) = mpsc::channel();
+
+                    let subprocess = match SolverSubprocess::spawn(
+                        &engine,
+                        IlpSolverConfig {
+                            problem_desc,
+                            warm_start: None,
+                            // A feasibility problem with a trivial objective:
+                            // CBC finishes quickly, and Ctrl-C covers the
+                            // pathological case (the application's own
+                            // verification runs it with no limit either).
+                            time_limit: collomatique_time::TimeLimit::none(),
+                            incumbent_time_limit: collomatique_time::TimeLimit::none(),
+                            // A script that asked for no lines gets a quiet
+                            // engine rather than a log read and thrown away.
+                            disable_logging: quiet,
+                        },
+                        move |result| {
+                            // The receiver is right here and outlives this, but
+                            // a send that finds nobody is not worth a panic.
+                            let _ = tx.send(result);
+                        },
+                        // No progress: a reconstruction has an answer, not a
+                        // proportion. `SolverSubprocess` answers the
+                        // cooperative stop protocol on its own.
+                        |_| {},
+                        log_callback,
+                    ) {
+                        Ok(subprocess) => subprocess,
+                        Err(e) => {
+                            let mut slot = spawn_failure.lock().unwrap();
+                            if slot.is_none() {
+                                *slot = Some(SolveError::new_err(format!(
+                                    "the engine could not be started: {e}"
+                                )));
+                            }
+                            return None;
+                        }
+                    };
+
+                    let result = loop {
+                        match rx.recv_timeout(Duration::from_millis(100)) {
+                            Ok(result) => break result,
+                            // Woken every 100ms so Ctrl-C reaches the script.
+                            // Returning here drops the handle, and dropping it
+                            // kills the engine — the wait and the work end
+                            // together, which is what a blocking call owes.
+                            Err(RecvTimeoutError::Timeout) => {
+                                if let Err(error) = Python::attach(|py| py.check_signals()) {
+                                    let mut slot = wait_failure.lock().unwrap();
+                                    if slot.is_none() {
+                                        *slot = Some(error);
+                                    }
+                                    return None;
+                                }
+                            }
+                            // The engine died without answering; the outcome
+                            // says so as `NoSolutionFromSolver`.
+                            Err(RecvTimeoutError::Disconnected) => return None,
+                        }
+                    };
+                    // Killing is idempotent, and the child has nothing left to
+                    // say once its result is in hand.
+                    drop(subprocess);
+
+                    let solution = result.solution?;
+                    let data = collomatique_ilp::solution_to_config_data(&solution, &var_order);
+                    pb.build_config(data).ok()?.into_feasible()
+                })
+        });
+
+        // A callback that raised, or an interrupted wait: either is the answer,
+        // and the run's own outcome is not looked at.
+        if let Some(error) = failure.lock().unwrap().take() {
+            return Err(error);
+        }
+
+        let solution = outcome.map_err(|e| match e {
+            // The two deeper mismatches the conversion cannot see on its own —
+            // a student the model does not place, a row for a list it fills
+            // itself — surfacing as a variable set that does not match. One
+            // mistake, so one sentence.
+            SolutionFromDataError::MissingVariables
+            | SolutionFromDataError::BuildConfigError(_) => PyValueError::new_err(INCOMPATIBLE),
+            SolutionFromDataError::NoSolutionFromSolver => {
+                SolveError::new_err("the engine could not verify this colloscope")
+            }
+        })?;
+
+        let mut violations: Vec<ConstraintViolation> = solution
+            .minimal_blame()
+            .iter()
+            .map(|desc| {
+                let message = match desc {
+                    ConfiguredConstraintDesc::Inner(inner) => inner.user_readable(self.params()),
+                    ConfiguredConstraintDesc::Fixed { var, value } => {
+                        collomatique_ui_text::solver::fixed_pin_violation_text(
+                            var,
+                            value.into_inner(),
+                            self.params(),
+                        )
+                    }
+                };
+                ConstraintViolation::new(SeverityLevel::from_desc(desc), message)
+            })
+            .collect();
+
+        // Worst first, the way the application lists a blame; and the sentence
+        // as the tie-break, because a blame comes out of hash sets and two runs
+        // over one colloscope must read the same.
+        violations.sort_by(|a, b| {
+            a.severity()
+                .cmp(&b.severity())
+                .then_with(|| a.message_text().cmp(b.message_text()))
+        });
+
+        Ok(violations)
     }
 }
 

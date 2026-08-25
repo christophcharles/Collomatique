@@ -7,6 +7,7 @@
 
 use pyo3::prelude::*;
 
+pub mod blame;
 pub mod caveats;
 pub mod collections;
 pub mod data;
@@ -40,6 +41,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
         collomatique_settings::current_version().to_string(),
     )?;
 
+    blame::register(m)?;
     caveats::register(m)?;
     collections::register(m)?;
     data::register(m)?;
