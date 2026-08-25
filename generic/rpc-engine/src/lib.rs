@@ -197,11 +197,19 @@ fn run_strategy<P: AppProtocol>(
     use std::sync::Arc;
 
     let request_str: String = serialized.into();
+    let t_decode = std::time::Instant::now();
     let request = StrategyRequest::deserialize(&request_str)
         .map_err(|e| anyhow!("Failed to deserialize strategy request: {e}"))?;
+    eprintln!(
+        "Strategy request decoded: {} bytes ({:.2?})",
+        request_str.len(),
+        t_decode.elapsed()
+    );
 
     eprintln!("Building model from desc...");
+    let t_model = std::time::Instant::now();
     let (model, var_order) = request.model_desc.to_model();
+    eprintln!("Model built from desc ({:.2?})", t_model.elapsed());
 
     let warm_start = request
         .warm_start
