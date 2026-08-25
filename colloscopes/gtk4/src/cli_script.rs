@@ -109,9 +109,17 @@ pub fn run(
         let state = host.state.lock().unwrap();
         match (&result, &out) {
             (Ok(()), Some(path)) => save_document(&state.data, path)?,
-            // No file will keep what was sent — because none was asked for, or
-            // because the script failed and `--out` is not written on failure.
-            _ if state.modified => {
+            // Nothing will keep what was sent, and the two reasons read
+            // differently to whoever ran this: with a destination given, the
+            // failure is what stopped the write, and naming `--out` would be
+            // advice for a mistake they did not make.
+            (Err(_), Some(_)) if state.modified => {
+                eprintln!(
+                    "{}",
+                    collomatique_ui_text::script::interrupted_modifications_text()
+                );
+            }
+            (_, None) if state.modified => {
                 eprintln!(
                     "{}",
                     collomatique_ui_text::script::lost_modifications_text()
