@@ -1,15 +1,28 @@
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
 use relm4::typed_view::list::{RelmListItem, TypedListView};
-use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    SimpleComponent,
+};
 use relm4::{adw, gtk};
 
 use collomatique_constraints_colloscopes::SeverityLevel;
 
+use crate::widgets::debug_view::{DebugView, DebugViewInput};
+
+/// The debug view is never cleared — successive verifications are separated by
+/// injected header lines instead — so it needs a cap: one CBC log per edit adds
+/// up over an editing session.
+const MAX_DEBUG_LINES: usize = 10_000;
+
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
+    /// Whether the debug output replaces the warnings list in the window body.
+    show_debug: bool,
     warnings: ComputationState,
     messages: TypedListView<BlameEntry, gtk::SingleSelection>,
+    debug_view: Controller<DebugView>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -34,6 +47,11 @@ pub enum DialogInput {
     Show,
     Close,
     Update(ComputationState),
+    /// Show (`true`) or hide (`false`) the debug output.
+    ToggleDebug(bool),
+    /// Append verbatim text to the debug output. The caller supplies the
+    /// newlines.
+    DebugAppend(String),
 }
 
 impl Dialog {
@@ -88,6 +106,21 @@ impl SimpleComponent for Dialog {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
                     set_show_end_title_buttons: false,
+                    #[name(terminal_toggle)]
+                    pack_start = &gtk::ToggleButton {
+                        set_icon_name: "utilities-terminal-symbolic",
+                        // Block the `toggled` handler while we set `active` programmatically:
+                        // otherwise the setter re-emits `toggled`, which re-sends `ToggleDebug`,
+                        // which sets `active` again — an infinite loop under rapid clicking.
+                        // `#[track]` keeps the setter (and its update) from running for nothing.
+                        #[track(terminal_toggle.is_active() != model.show_debug)]
+                        #[block_signal(toggled_handler)]
+                        set_active: model.show_debug,
+                        set_tooltip: "Afficher/Cacher la sortie de débogage",
+                        connect_toggled[sender] => move |btn| {
+                            sender.input(DialogInput::ToggleDebug(btn.is_active()));
+                        } @toggled_handler,
+                    },
                     pack_end = &gtk::Button {
                         set_label: "Fermer",
                         add_css_class: "suggested-action",
@@ -95,133 +128,147 @@ impl SimpleComponent for Dialog {
                     },
                 },
                 #[wrap(Some)]
-                set_content = &gtk::ScrolledWindow {
+                set_content = &gtk::Box {
+                    set_orientation: gtk::Orientation::Vertical,
                     set_hexpand: true,
                     set_vexpand: true,
-                    set_margin_all: 5,
                     gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
                         set_hexpand: true,
+                        set_vexpand: true,
+                        #[watch]
+                        set_visible: model.show_debug,
+                        append: model.debug_view.widget(),
+                    },
+                    gtk::ScrolledWindow {
+                        set_hexpand: true,
+                        set_vexpand: true,
+                        set_margin_all: 5,
+                        #[watch]
+                        set_visible: !model.show_debug,
                         gtk::Box {
+                            set_orientation: gtk::Orientation::Vertical,
                             set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 10,
-                            #[watch]
-                            set_visible: model.is_debouncing(),
                             gtk::Box {
                                 set_hexpand: true,
-                            },
-                            adw::Spinner {
-                                set_size_request: (30,30),
-                            },
-                            gtk::Label {
-                                set_label: "En attente des données...",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 10,
-                            #[watch]
-                            set_visible: model.is_constructing_constraints(),
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            adw::Spinner {
-                                set_size_request: (30,30),
-                            },
-                            gtk::Label {
-                                set_label: "Contraintes en cours de construction...",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 10,
-                            #[watch]
-                            set_visible: model.is_rebuilding_warnings(),
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            adw::Spinner {
-                                set_size_request: (30,30),
-                            },
-                            gtk::Label {
-                                set_label: "Vérification du colloscope en cours...",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 10,
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            #[watch]
-                            set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if w.is_empty()),
-                            gtk::Image {
-                                set_pixel_size: 30,
-                                set_icon_name: Some("object-select-symbolic"),
-                            },
-                            gtk::Label {
-                                set_label: "Toutes les contraintes sont satisfaites",
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
-                            },
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                        },
-                        gtk::Box {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            set_orientation: gtk::Orientation::Horizontal,
-                            set_spacing: 10,
-                            add_css_class: "error",
-                            gtk::Box {
-                                set_hexpand: true,
-                            },
-                            #[watch]
-                            set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Err(_))),
-                            gtk::Image {
-                                set_pixel_size: 30,
-                                set_icon_name: Some("dialog-error-symbolic"),
-                            },
-                            gtk::Label {
+                                set_vexpand: true,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 10,
                                 #[watch]
-                                set_label: &model.warnings.as_ref()
-                                    .and_then(|r| r.as_ref().err())
-                                    .map(|e| e.to_string())
-                                    .unwrap_or_default(),
-                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                set_visible: model.is_debouncing(),
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                adw::Spinner {
+                                    set_size_request: (30,30),
+                                },
+                                gtk::Label {
+                                    set_label: "En attente des données...",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
                             },
                             gtk::Box {
                                 set_hexpand: true,
+                                set_vexpand: true,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 10,
+                                #[watch]
+                                set_visible: model.is_constructing_constraints(),
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                adw::Spinner {
+                                    set_size_request: (30,30),
+                                },
+                                gtk::Label {
+                                    set_label: "Contraintes en cours de construction...",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
                             },
+                            gtk::Box {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 10,
+                                #[watch]
+                                set_visible: model.is_rebuilding_warnings(),
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                adw::Spinner {
+                                    set_size_request: (30,30),
+                                },
+                                gtk::Label {
+                                    set_label: "Vérification du colloscope en cours...",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 10,
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                #[watch]
+                                set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if w.is_empty()),
+                                gtk::Image {
+                                    set_pixel_size: 30,
+                                    set_icon_name: Some("object-select-symbolic"),
+                                },
+                                gtk::Label {
+                                    set_label: "Toutes les contraintes sont satisfaites",
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                set_orientation: gtk::Orientation::Horizontal,
+                                set_spacing: 10,
+                                add_css_class: "error",
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                                #[watch]
+                                set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Err(_))),
+                                gtk::Image {
+                                    set_pixel_size: 30,
+                                    set_icon_name: Some("dialog-error-symbolic"),
+                                },
+                                gtk::Label {
+                                    #[watch]
+                                    set_label: &model.warnings.as_ref()
+                                        .and_then(|r| r.as_ref().err())
+                                        .map(|e| e.to_string())
+                                        .unwrap_or_default(),
+                                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                },
+                                gtk::Box {
+                                    set_hexpand: true,
+                                },
+                            },
+                            #[local_ref]
+                            messages_listview -> gtk::ListView {
+                                set_hexpand: true,
+                                set_vexpand: true,
+                                add_css_class: "boxed-list",
+                                #[watch]
+                                set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if !w.is_empty()),
+                            }
                         },
-                        #[local_ref]
-                        messages_listview -> gtk::ListView {
-                            set_hexpand: true,
-                            set_vexpand: true,
-                            add_css_class: "boxed-list",
-                            #[watch]
-                            set_visible: matches!(&model.warnings, ComputationState::ResultAvailable(Ok(w)) if !w.is_empty()),
-                        }
                     },
                 },
             }
@@ -235,11 +282,15 @@ impl SimpleComponent for Dialog {
     ) -> ComponentParts<Self> {
         let messages: TypedListView<BlameEntry, gtk::SingleSelection> = TypedListView::new();
 
+        let debug_view = DebugView::builder().launch(Some(MAX_DEBUG_LINES)).detach();
+
         let model = Dialog {
             hidden: true,
             move_front: false,
+            show_debug: false,
             warnings: ComputationState::ComputingConstraints,
             messages,
+            debug_view,
         };
 
         let messages_listview = &model.messages.view;
@@ -265,6 +316,14 @@ impl SimpleComponent for Dialog {
             DialogInput::Update(warnings) => {
                 self.warnings = warnings;
                 self.update_messages();
+            }
+            DialogInput::ToggleDebug(show) => {
+                self.show_debug = show;
+            }
+            DialogInput::DebugAppend(text) => {
+                // The debug view keeps accumulating even while the dialog is
+                // hidden: it is a log of the whole session, not of one opening.
+                self.debug_view.emit(DebugViewInput::Append(text));
             }
         }
     }
