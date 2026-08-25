@@ -31,11 +31,30 @@ type ConfiguredInternalVar = collomatique_constraints_colloscopes::InternalVar<
 
 const DEBOUNCE_DURATION: std::time::Duration = std::time::Duration::from_millis(500);
 
+/// The model-configuration dialog instantiated for the solve path: its extension slot holds the
+/// conductor-strategy widgets, so the dialog hands back a strategy alongside the [`SolveConfig`].
+///
+/// [`SolveConfig`]: collomatique_constraints_colloscopes::SolveConfig
+type ConfigDialog = config_dialog::Dialog<run_solver::strategy_extension::Extension>;
+
 mod blame_dialog;
 mod colloscope_display;
 mod group_list_dialog;
 mod group_lists_display;
 mod interrogation_dialog;
+
+/// Build the incremental epoch payload from the freshly-built model: every `StudentInGroup` base
+/// variable is solved first (epoch 0), then each `GroupInInterrogation` variable is solved in the
+/// epoch matching its week (week + 1), so the schedule fills in week by week on top of the fixed
+/// group assignment. Base variables absent from the map fall into the strategy's final epoch.
+fn build_incremental_payload(
+    model: &collomatique_constraints_colloscopes::ConfiguredColloscopeModel,
+) -> collomatique_strategies::ConductorPayload<collomatique_constraints_colloscopes::Var> {
+    let epochs = collomatique_constraints_colloscopes::build_incremental_epochs(model);
+    collomatique_strategies::ConductorPayload {
+        incremental: collomatique_strategies::IncrementalPayload { epochs },
+    }
+}
 
 #[derive(Debug)]
 pub enum ColloscopeInput {
@@ -61,10 +80,9 @@ pub enum ColloscopeInput {
         collomatique_state_colloscopes::colloscope_params::Parameters,
     ),
     ConductorConfigCancelled,
-    ModelBuilt(
-        collomatique_constraints_colloscopes::ConfiguredColloscopeModel,
-        collomatique_strategies::ConductorPayload<collomatique_constraints_colloscopes::Var>,
-    ),
+    /// The model build was abandoned from the loading dialog.
+    ModelBuildCancelled,
+    ModelBuilt(collomatique_constraints_colloscopes::ConfiguredColloscopeModel),
     SolveResult(collomatique_ilp::ConfigData<ConfiguredInternalVar>),
     EraseColloscopeClicked,
     EraseGroupListsClicked,
@@ -166,7 +184,7 @@ pub struct Colloscope {
     interrogation_dialog: Controller<interrogation_dialog::Dialog>,
     blame_dialog: Controller<blame_dialog::Dialog>,
     run_solver_dialog: Controller<SolverDialog>,
-    config_dialog: Controller<config_dialog::Dialog>,
+    config_dialog: Controller<ConfigDialog>,
     loading_dialog: Controller<loading_dialog::Dialog>,
     /// The last-validated solve configuration, kept so the config dialog reopens pre-primed
     /// instead of resetting every time.
@@ -580,7 +598,7 @@ impl Component for Colloscope {
                 run_solver::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
-        let config_dialog = config_dialog::Dialog::builder()
+        let config_dialog = ConfigDialog::builder()
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
@@ -595,9 +613,10 @@ impl Component for Colloscope {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                loading_dialog::DialogOutput::ModelReady(model, payload) => {
-                    ColloscopeInput::ModelBuilt(model, payload)
+                loading_dialog::DialogOutput::ModelReady(model) => {
+                    ColloscopeInput::ModelBuilt(model)
                 }
+                loading_dialog::DialogOutput::Cancelled => ColloscopeInput::ModelBuildCancelled,
                 loading_dialog::DialogOutput::PresentParent => ColloscopeInput::PresentParent,
             });
 
@@ -800,9 +819,10 @@ impl Component for Colloscope {
                     ))
                     .unwrap();
             }
-            ColloscopeInput::ModelBuilt(model, payload) => {
+            ColloscopeInput::ModelBuilt(model) => {
                 // The model has been built: launch the solver with the stored strategy and the
                 // incremental epoch payload.
+                let payload = build_incremental_payload(&model);
                 self.run_solver_dialog
                     .sender()
                     .send(run_solver::DialogInput::Run(
@@ -812,7 +832,7 @@ impl Component for Colloscope {
                     ))
                     .unwrap();
             }
-            ColloscopeInput::ConductorConfigCancelled => {
+            ColloscopeInput::ConductorConfigCancelled | ColloscopeInput::ModelBuildCancelled => {
                 // The solve was abandoned before it started; nothing to undo.
             }
             ColloscopeInput::ResetSolveConfig => {

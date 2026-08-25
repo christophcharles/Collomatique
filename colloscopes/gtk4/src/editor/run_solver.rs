@@ -18,6 +18,7 @@ use collomatique_subprocesses::{EngineExe, StrategySubprocess};
 pub mod conductor_config;
 mod error_dialog;
 mod strategy_display;
+pub mod strategy_extension;
 mod warning_icon;
 mod warning_running;
 
