@@ -172,7 +172,7 @@ impl Component for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let debug_view = DebugView::builder().launch(()).detach();
+        let debug_view = DebugView::builder().launch(None).detach();
 
         let model = Dialog {
             hidden: true,
