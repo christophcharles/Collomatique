@@ -50,8 +50,10 @@ use collomatique_state_colloscopes::{Data, Error, InnerData, Op};
 use harness::{OpLog, RunConfig};
 
 /// The house configuration for the step-6-family harnesses: one hardcoded
-/// const, no environment variables, no `#[ignore]` tiers. Matches
-/// `property_cascade.rs`, whose walk this one mirrors.
+/// const, no environment variables, no `#[ignore]` tiers — the `fuzz`
+/// feature that decides *whether* this target is built is a separate
+/// matter, and does not vary what it does. Matches `property_cascade.rs`,
+/// whose walk this one mirrors.
 const CONFIG: RunConfig = RunConfig {
     seeds: 50,
     ops_per_run: 500,

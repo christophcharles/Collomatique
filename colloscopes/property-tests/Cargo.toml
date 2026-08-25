@@ -1,0 +1,67 @@
+[package]
+name = "collomatique-property-tests"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+# A package with no code: the crate below is empty and exists only to give the
+# property walks in `tests/` a home. They live here rather than beside the code
+# they exercise so that they can be turned on and off without touching the
+# fingerprint of a package half the workspace depends on. Nothing depends on
+# this one, so a feature flag here rebuilds nothing but these test binaries.
+
+[dependencies]
+
+[dev-dependencies]
+collomatique-testgen-colloscopes = { path = "../../colloscopes/testgen-colloscopes" }
+collomatique-state = { path = "../../generic/state" }
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+collomatique-ops = { path = "../../colloscopes/ops" }
+collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
+collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
+collomatique-ilp = { path = "../../generic/ilp" }
+collomatique-time = { path = "../../generic/time" }
+# `property_update_ops` builds note payloads directly.
+non-empty-string = { workspace = true, features = ["serde"] }
+
+# The walks are off by default and turned on by `cargo fuzz` (see
+# .cargo/config.toml): together they cost a bit over two minutes, which is too
+# much for the day-to-day `cargo test`. Cargo has no way to attach
+# `required-features` to a whole directory, so every target is spelled out.
+[features]
+fuzz = []
+
+[[test]]
+name = "property_apply_gate"
+path = "tests/property_apply_gate.rs"
+required-features = ["fuzz"]
+
+[[test]]
+name = "property_build_colloscopes"
+path = "tests/property_build_colloscopes.rs"
+required-features = ["fuzz"]
+
+[[test]]
+name = "property_build_groups"
+path = "tests/property_build_groups.rs"
+required-features = ["fuzz"]
+
+[[test]]
+name = "property_cascade"
+path = "tests/property_cascade.rs"
+required-features = ["fuzz"]
+
+[[test]]
+name = "property_content_ord"
+path = "tests/property_content_ord.rs"
+required-features = ["fuzz"]
+
+[[test]]
+name = "property_ops"
+path = "tests/property_ops.rs"
+required-features = ["fuzz"]
+
+[[test]]
+name = "property_update_ops"
+path = "tests/property_update_ops.rs"
+required-features = ["fuzz"]

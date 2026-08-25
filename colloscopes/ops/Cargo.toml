@@ -21,7 +21,3 @@ non-empty-string = { workspace = true, features = ["serde"] }
 # Only the tests need it: they decode the frozen `tests/fixtures/hogwarts.collomatique`
 # copy to get a realistic base document. No cycle — storage does not depend on `ops`.
 collomatique-storage = { path = "../../colloscopes/storage" }
-# The property walk (`tests/property_update_ops.rs`) reuses testgen's document
-# bootstrap and entity synthesizers. No cycle either — testgen depends on
-# `state-colloscopes`, not on `ops`.
-collomatique-testgen-colloscopes = { path = "../../colloscopes/testgen-colloscopes" }
