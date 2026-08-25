@@ -348,6 +348,7 @@ dependencies = [
  "collomatique-storage",
  "collomatique-time",
  "ordered-float",
+ "thiserror 1.0.69",
 ]
 
 [[package]]

@@ -287,7 +287,8 @@ impl SolveConfig {
 
         let params = &data.params;
         let colloscope = &data.colloscope;
-        let complete = crate::convert::build_complete_config(params, colloscope);
+        let complete = crate::convert::build_complete_config(params, colloscope)
+            .expect("colloscope from the document is compatible with its parameters");
 
         log("");
         log("--- Configuring reduced model (2/3) ---");

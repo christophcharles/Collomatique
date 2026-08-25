@@ -7,7 +7,23 @@ use collomatique_state_colloscopes::colloscopes::Colloscope;
 use collomatique_state_colloscopes::ids::{GroupListId, SlotId, StudentId, WeekId};
 use std::collections::{BTreeMap, BTreeSet};
 
-pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
+/// The one way [`build_config`]/[`build_complete_config`] can fail: the colloscope
+/// names something the parameters do not hold (an unknown week or slot, a slot with
+/// no group list on that period, an out-of-range group number).
+///
+/// The callers that feed a colloscope straight out of a document `expect` this away —
+/// there the two halves come from the same state and the invariant genuinely holds —
+/// but a colloscope built outside gets an error instead of a panic.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
+pub enum ConvertError {
+    #[error("the colloscope is not compatible with the parameters")]
+    ColloscopeNotCompatibleWithParams,
+}
+
+pub fn build_config(
+    env: &Parameters,
+    colloscope: &Colloscope,
+) -> Result<ConfigData<Var>, ConvertError> {
     let mut config_data = ConfigData::new();
 
     // The colloscope only ever holds non-prefilled group lists (validated), so
@@ -15,7 +31,7 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
     for (group_list_id, placements) in colloscope.group_lists_iter() {
         for (student_id, group) in placements {
             let group = GroupNum::new(env, group_list_id, *group as usize)
-                .expect("group number from a live colloscope row is valid");
+                .ok_or(ConvertError::ColloscopeNotCompatibleWithParams)?;
             config_data = config_data.set(
                 Var::StudentInGroup {
                     student: *student_id,
@@ -31,20 +47,20 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
         let (period_id, _pos) = env
             .weeks
             .week_position(week_id)
-            .expect("week id from a live colloscope row is valid");
+            .ok_or(ConvertError::ColloscopeNotCompatibleWithParams)?;
         let week = env
             .weeks
             .global_week_position(&env.periods, week_id)
-            .expect("week id from a live colloscope row is valid");
+            .ok_or(ConvertError::ColloscopeNotCompatibleWithParams)?;
 
         for group_num in assigned_groups {
             let group = GroupNum::new(
                 env,
                 tools::group_list_for_slot(env, period_id, slot_id)
-                    .expect("slot should have a group list"),
+                    .ok_or(ConvertError::ColloscopeNotCompatibleWithParams)?,
                 *group_num as usize,
             )
-            .expect("group number should be valid");
+            .ok_or(ConvertError::ColloscopeNotCompatibleWithParams)?;
             config_data = config_data.set(
                 Var::GroupInInterrogation {
                     slot: slot_id,
@@ -56,11 +72,14 @@ pub fn build_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var
         }
     }
 
-    config_data
+    Ok(config_data)
 }
 
-pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> ConfigData<Var> {
-    let mut config_data = build_config(env, colloscope);
+pub fn build_complete_config(
+    env: &Parameters,
+    colloscope: &Colloscope,
+) -> Result<ConfigData<Var>, ConvertError> {
+    let mut config_data = build_config(env, colloscope)?;
 
     for (group_list_id, group_list) in env.group_lists.group_list_map.iter() {
         if group_list.is_prefilled() {
@@ -147,7 +166,7 @@ pub fn build_complete_config(env: &Parameters, colloscope: &Colloscope) -> Confi
         }
     }
 
-    config_data
+    Ok(config_data)
 }
 
 pub fn build_colloscope(env: &Parameters, config_data: &ConfigData<Var>) -> Option<Colloscope> {

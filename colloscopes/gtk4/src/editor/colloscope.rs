@@ -1124,7 +1124,8 @@ impl Colloscope {
             let config_data = collomatique_constraints_colloscopes::convert::build_complete_config(
                 &ilp_problem.env,
                 &colloscope,
-            );
+            )
+            .expect("colloscope from the document is compatible with its parameters");
             log(format!(
                 "Configuration de base construite ({:.2?})\n",
                 t_start.elapsed()
