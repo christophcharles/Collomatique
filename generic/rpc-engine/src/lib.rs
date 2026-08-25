@@ -66,24 +66,30 @@ fn solve_ilp<P: AppProtocol>(serialized: SerializedIlpProblem) -> Result<(), any
     use collomatique_ilp::{DefaultRepr, ProblemBuilder};
     use ordered_float::OrderedFloat;
 
+    let t_decode = std::time::Instant::now();
     let request = collomatique_rpc::IlpSolveRequest::from(serialized);
+    eprintln!("Request decoded ({:.2?})", t_decode.elapsed());
 
     eprintln!("Building problem from desc...");
+    let t_build = std::time::Instant::now();
     let problem = ProblemBuilder::<usize, (), DefaultRepr<usize>>::from_desc(request.problem_desc)
         .build()
         .map_err(|e| anyhow!("Failed to build problem from desc: {:?}", e))?;
+    eprintln!("Problem built ({:.2?})", t_build.elapsed());
 
     let solver = ColloCbcSolver::with_disable_logging(request.disable_logging);
 
     let num_vars = problem.get_variables().len();
     let var_indices: Vec<usize> = (0..num_vars).collect();
 
+    let t_model = std::time::Instant::now();
     let model = if let Some(ref warm_start) = request.warm_start {
         let hint = collomatique_ilp::solution_to_config_data(warm_start, &var_indices);
         solver.build_warm_model(&problem, &hint)
     } else {
         solver.build_model(&problem)
     };
+    eprintln!("Solver model built ({:.2?})", t_model.elapsed());
 
     let mut last_best_bound = 0.0f64;
     let mut last_node_count = 0u64;
@@ -94,6 +100,7 @@ fn solve_ilp<P: AppProtocol>(serialized: SerializedIlpProblem) -> Result<(), any
     let mut last_control = true;
 
     eprintln!("Solving...");
+    let t_solve = std::time::Instant::now();
     // Both time limits are enforced by the solver itself; the callback only reports
     // progress and relays the parent's stop request.
     let result = model.solve_with_time_limits(
@@ -132,6 +139,9 @@ fn solve_ilp<P: AppProtocol>(serialized: SerializedIlpProblem) -> Result<(), any
         },
     );
 
+    eprintln!("Solve finished ({:.2?})", t_solve.elapsed());
+
+    let t_encode = std::time::Instant::now();
     let status = match result.stopped {
         Some(reason) => SolverStatus::Stopped(reason),
         None if result.config.is_some() => SolverStatus::Optimal,
@@ -161,9 +171,13 @@ fn solve_ilp<P: AppProtocol>(serialized: SerializedIlpProblem) -> Result<(), any
         solution,
     };
 
+    eprintln!("Result encoded ({:.2?})", t_encode.elapsed());
+
     eprintln!("Sending result...");
+    let t_send = std::time::Instant::now();
     send_command(CmdMsg::<P>::Solver(SolverMsg::Result(result_data)))
         .map_err(|e| anyhow!("Error sending SolverResult: {}", e))?;
+    eprintln!("Result sent ({:.2?})", t_send.elapsed());
 
     Ok(())
 }
@@ -304,9 +318,13 @@ where
         .map_err(|e| anyhow!("Impossible de rejoindre le canal RPC : {e}"))?;
 
     eprintln!("Waiting for initial payload...");
+    // Covers the whole wait plus the decode: the parent may not have finished
+    // writing yet, so this is an upper bound on the channel's own cost, not a
+    // measurement of deserialization alone.
+    let t_payload = std::time::Instant::now();
     let init_msg = collomatique_rpc::receive_init::<P>()
         .map_err(|e| anyhow!("Unknown initial payload: {}", e))?;
-    eprintln!("Payload received!");
+    eprintln!("Payload received! ({:.2?})", t_payload.elapsed());
 
     match init_msg {
         InitMsg::SolveIlp(serialized) => {
