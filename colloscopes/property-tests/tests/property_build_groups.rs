@@ -246,6 +246,17 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
 
 /// Along random valid-op walks, the plan/model/conversion round trip must
 /// neither panic nor return `Err` for any reachable state.
+///
+/// **This walk keeps the bootstrap start alone**, where the six others in this
+/// package run from five documents (`support/start_points.rs`). Two reasons,
+/// both measured. A model build costs far more on a big document than a state
+/// op does: from hogwarts this walk goes from 0.17 s to 44.9 s, a factor of
+/// **264**, and it would become the largest line in the fuzz suite for a walk
+/// that is not what the start points were added for. And a big *real* document
+/// is already covered here by cheaper means —
+/// `constraints-groups/tests/examples_build.rs` builds this same model against
+/// every file in `examples/`, hogwarts included, at one build per example
+/// instead of thousands.
 #[test]
 fn model_builds_never_panic_along_random_walks() {
     harness::for_each_seed(

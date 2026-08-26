@@ -11,6 +11,10 @@
 //! valid** lists (one per spec, minimal group count, balanced sizes inside
 //! the spec's range, every student placed exactly once).
 //!
+//! The walk runs from five start points (`support/start_points.rs`), because
+//! from the small bootstrap document alone every single spec it ever planned
+//! was a one-group list, and a one-group list has no placement to decide.
+//!
 //! It is a sibling of `property_build_groups`, not a part of it: a greedy
 //! regression must fail a test named for the greedy, not the ILP-build net.
 //! The two share their request generator (`support/generation_request.rs`) so
@@ -19,6 +23,7 @@
 //! On failure the harness prints the seed and the full op log, so re-running
 //! the binary reproduces the exact walk.
 
+use std::cell::Cell;
 use std::collections::BTreeSet;
 
 use collomatique_testgen_colloscopes::rand::Rng;
@@ -38,10 +43,19 @@ use harness::RunConfig;
 mod generation_request;
 use generation_request::gen_generation_request;
 
+// The five documents the walk starts from. This walk is the reason they
+// exist: from the bootstrap alone it planned 1331 specs and not one of them
+// had a second group to place anybody in.
+#[path = "support/start_points.rs"]
+mod start_points;
+
 /// Same walk size as the model-build net, but the greedy on testgen-sized
 /// states costs microseconds where a model build costs milliseconds, so this
 /// walk probes after *every* successful op instead of every fifth. Tune
 /// against the measured runtime.
+///
+/// `seeds` is the budget for the bootstrap start; the four big starts share
+/// the same again between them (`start_points::seeds_for`).
 const CONFIG: RunConfig = RunConfig {
     seeds: 15,
     ops_per_run: 200,
@@ -69,8 +83,57 @@ fn memberships(
         .collect()
 }
 
+/// What shape of spec the walk actually reached, across every (start, seed)
+///
+/// A green run is not by itself evidence here, and this walk is the one file
+/// that already proved it: from the bootstrap start alone it planned 1331
+/// specs, **every one a single group**, and stayed green under a mutation that
+/// reverses the greedy's balanced targets. With one group there is nothing to
+/// place and nothing to balance, so the assertions above are all satisfied
+/// vacuously. The two guards below are what make the run mean something —
+/// they count the shapes the greedy is actually about, and they are why the
+/// start points exist.
+///
+/// `for_each_start_and_seed` takes a `Fn` closure, so these need interior
+/// mutability.
+#[derive(Default)]
+struct Coverage {
+    specs: Cell<usize>,       // specs planned in total
+    multi_group: Cell<usize>, // specs the greedy split into two groups or more
+    with_pair: Cell<usize>,   // specs where some group ended up holding two
+}
+
+impl Coverage {
+    fn bump(cell: &Cell<usize>) {
+        cell.set(cell.get() + 1);
+    }
+
+    fn assert_covered(&self) {
+        assert!(
+            self.multi_group.get() > 0,
+            "every spec the walk planned was a single group — the greedy never had \
+             a placement to decide, so a green run proves nothing about it",
+        );
+        assert!(
+            self.with_pair.get() > 0,
+            "no group the greedy emitted ever held two students — with every group \
+             a singleton there is no balancing to get wrong",
+        );
+    }
+
+    fn report(&self) {
+        eprintln!(
+            "greedy fuzz: {} specs planned, {} with several groups, {} with a group of two \
+             or more",
+            self.specs.get(),
+            self.multi_group.get(),
+            self.with_pair.get(),
+        );
+    }
+}
+
 /// One probe: synthesize a request, plan it, and run the greedy twice.
-fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
+fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData, coverage: &Coverage) {
     let request = gen_generation_request(rng, &inner.params);
     let plan = build_generation_plan(&inner.params, &request)
         .expect("a request drawn from valid state must produce a plan");
@@ -95,6 +158,14 @@ fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
         );
 
         let groups = groups_of(group_list);
+        Coverage::bump(&coverage.specs);
+        if groups.len() >= 2 {
+            Coverage::bump(&coverage.multi_group);
+        }
+        if groups.iter().any(|group| group.len() >= 2) {
+            Coverage::bump(&coverage.with_pair);
+        }
+
         let n = spec.students().len();
         let range = spec.students_per_group();
         let (min, max) = (range.start().get() as usize, range.end().get() as usize);
@@ -148,15 +219,19 @@ fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
 /// invalid or non-reproducible placement for any reachable state.
 #[test]
 fn greedy_group_lists_never_panic_along_random_walks() {
-    harness::for_each_seed(
+    let coverage = Coverage::default();
+
+    harness::for_each_start_and_seed(
         "greedy_group_lists_never_panic_along_random_walks",
         &CONFIG,
-        |rng, log, stats| {
-            let (mut state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (mut state, _) = start_points::open(start, rng);
             let mut snapshots: Vec<InnerData> = vec![state.get_data().get_inner_data().clone()];
 
-            // Probe the bootstrap state before any random op.
-            greedy_check(rng, state.get_data().get_inner_data());
+            // Probe the starting state before any random op.
+            greedy_check(rng, state.get_data().get_inner_data(), &coverage);
 
             for _ in 0..CONFIG.ops_per_run {
                 let (category, op) = generator::gen_op(
@@ -182,7 +257,7 @@ fn greedy_group_lists_never_panic_along_random_walks() {
                         if snapshots.len() < 8 && rng.random_bool(0.02) {
                             snapshots.push(inner.clone());
                         }
-                        greedy_check(rng, inner);
+                        greedy_check(rng, inner, &coverage);
                     }
                     Err(_) => {
                         stats.record(category, false);
@@ -191,7 +266,12 @@ fn greedy_group_lists_never_panic_along_random_walks() {
             }
 
             // Probe the final state.
-            greedy_check(rng, state.get_data().get_inner_data());
+            greedy_check(rng, state.get_data().get_inner_data(), &coverage);
         },
     );
+
+    // Reported before the guards are checked, so a run that fails one still
+    // prints the numbers that explain it.
+    coverage.report();
+    coverage.assert_covered();
 }

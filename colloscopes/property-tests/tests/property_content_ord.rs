@@ -49,11 +49,18 @@ use collomatique_state_colloscopes::{Data, Error, InnerData, Op};
 
 use harness::{OpLog, RunConfig};
 
+// The five documents the walk starts from.
+#[path = "support/start_points.rs"]
+mod start_points;
+
 /// The house configuration for the step-6-family harnesses: one hardcoded
 /// const, no environment variables, no `#[ignore]` tiers — the `fuzz`
 /// feature that decides *whether* this target is built is a separate
 /// matter, and does not vary what it does. Matches `property_cascade.rs`,
 /// whose walk this one mirrors.
+///
+/// `seeds` is the budget for the bootstrap start; the four big starts share
+/// the same again between them (`start_points::seeds_for`).
 const CONFIG: RunConfig = RunConfig {
     seeds: 50,
     ops_per_run: 500,
@@ -95,11 +102,13 @@ fn every_fix_lands_strictly_below() {
     let probed_fixes = Cell::new(0usize);
     let broken_landings = Cell::new(0usize);
 
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "every_fix_lands_strictly_below",
         &CONFIG,
-        |rng, log, stats| {
-            let (state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (state, _) = start_points::open(start, rng);
             let mut data: Data = state.get_data().clone();
             let mut snapshots: Vec<InnerData> = vec![];
 

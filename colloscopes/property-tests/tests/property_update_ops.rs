@@ -34,8 +34,15 @@
 //! *elementary* op categories — was attempted, and its `OpLog::push` is typed to
 //! the elementary [`collomatique_state_colloscopes::Op`]. Both are the wrong
 //! vocabulary here; the fifteen families get their own coverage guard below.
-//! Second, [`harness::bootstrap`] builds an `AppState<Data, String>`, so the
-//! document it grows is re-homed onto this crate's `Desc`.
+//! Second, `start_points::open` builds an `AppState<Data, String>`, so the
+//! document it opens is re-homed onto this crate's `Desc`.
+//!
+//! Writing its own loop is also why this walk repeats what
+//! [`harness::for_each_start_and_seed`] does for the others: the outer loop
+//! over `start_points::all()`, the per-start seed budget, and the per-start
+//! timing line. The five start points themselves are shared — see
+//! `support/start_points.rs` for why a walk needs more than the bootstrap
+//! document.
 //!
 //! **Coverage guards, because a green run is not by itself evidence.** A walk
 //! whose every op was rejected, or that never made the cascade repair anything,
@@ -75,6 +82,11 @@ use collomatique_testgen_colloscopes::{ChaCha8Rng, harness, synth};
 use harness::RunConfig;
 use synth::pick;
 
+// The five documents the walk starts from.
+#[path = "support/start_points.rs"]
+mod start_points;
+use start_points::Start;
+
 /// The same width as the two elementary walks (`property_ops.rs` and
 /// `property_apply_gate.rs` run 100 × 1000), and wider than the cascade
 /// harness's 50 × 500 — every [`UpdateOp`] here is a *composite*, so one
@@ -82,6 +94,9 @@ use synth::pick;
 /// buys more coverage per op than either of those. Shrinking this is a later
 /// decision, to be justified the way `property_ops.rs:32-34` justifies its own
 /// — not a knob to reach for the first time the suite feels slow.
+///
+/// `seeds` is the budget for the bootstrap start; the four big starts share
+/// the same again between them (`start_points::seeds_for`).
 const CONFIG: RunConfig = RunConfig {
     seeds: 100,
     ops_per_run: 500,
@@ -1371,11 +1386,11 @@ fn assert_clean(data: &Data) {
     );
 }
 
-/// A document grown through the elementary gated walk, re-homed onto this
-/// crate's `Desc`. [`harness::bootstrap`] hands back an `AppState<Data, String>`
-/// and its own history; only the document is kept.
-fn bootstrap(rng: &mut ChaCha8Rng) -> AppState<Data, Desc> {
-    let (state, _snapshots) = harness::bootstrap(rng);
+/// The document one start point opens on, re-homed onto this crate's `Desc`.
+/// [`start_points::open`] hands back an `AppState<Data, String>` and its own
+/// history; only the document is kept.
+fn open(start: &Start, rng: &mut ChaCha8Rng) -> AppState<Data, Desc> {
+    let (state, _snapshots) = start_points::open(start, rng);
 
     AppState::new(state.get_data().clone())
 }
@@ -1383,75 +1398,90 @@ fn bootstrap(rng: &mut ChaCha8Rng) -> AppState<Data, Desc> {
 #[test]
 fn update_ops_never_panic_and_land_valid() {
     let counters = Counters::default();
-    let start = std::time::Instant::now();
+    let overall = std::time::Instant::now();
+    // Per-start times, printed at the end, so a start that blows the walk's
+    // time budget is visible without instrumenting anything — the same line
+    // `harness::for_each_start_and_seed` prints for the walks that use it.
+    let mut timings = vec![];
 
-    for seed in 0..CONFIG.seeds {
-        let log: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    for start in start_points::all() {
+        let seeds = start_points::seeds_for(&start, &CONFIG);
+        let started = std::time::Instant::now();
 
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            let mut rng = ChaCha8Rng::seed_from_u64(seed);
-            let mut state = bootstrap(&mut rng);
-            assert_clean(state.get_data());
+        for seed in 0..seeds {
+            let log: RefCell<Vec<String>> = RefCell::new(Vec::new());
 
-            for _ in 0..CONFIG.ops_per_run {
-                let (family, op) =
-                    gen_update_op(&mut rng, state.get_data(), CONFIG.invalid_fraction);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let mut rng = ChaCha8Rng::seed_from_u64(seed);
+                let mut state = open(&start, &mut rng);
+                assert_clean(state.get_data());
 
-                let mut entry = format!("{op:?}");
-                if entry.len() > 400 {
-                    entry.truncate(400);
-                    entry.push('…');
-                }
-                let position = log.borrow().len();
-                log.borrow_mut()
-                    .push(format!("[{position}] {family}: {entry}"));
+                for _ in 0..CONFIG.ops_per_run {
+                    let (family, op) =
+                        gen_update_op(&mut rng, state.get_data(), CONFIG.invalid_fraction);
 
-                match op.dry_apply(&state) {
-                    Ok(result) => {
-                        assert_clean(result.new_state.get_data());
-                        Counters::bump(&counters.landed, 1);
-                        if !result.warnings.is_empty() {
-                            Counters::bump(&counters.warned, 1);
-                            Counters::bump(&counters.warnings, result.warnings.len());
-                        }
-                        // Rendered against `state`, which is still the
-                        // *pre*-state here: that is the document the dialog
-                        // appears over, and the one the texts are written
-                        // against (D7). An `Err` means a repair named material
-                        // the pre-state never held — the frame rule's
-                        // rendering corollary broken — and the seed replays it.
-                        for warning in &result.warnings {
-                            counters.record_fix(warning.fix());
-                            if let Err(missing) = warning.text(state.get_data()) {
-                                panic!(
-                                    "a warning could not be rendered against the pre-state: \
-                                     {missing} (fix: {:?})",
-                                    warning.fix(),
-                                );
+                    let mut entry = format!("{op:?}");
+                    if entry.len() > 400 {
+                        entry.truncate(400);
+                        entry.push('…');
+                    }
+                    let position = log.borrow().len();
+                    log.borrow_mut()
+                        .push(format!("[{position}] {family}: {entry}"));
+
+                    match op.dry_apply(&state) {
+                        Ok(result) => {
+                            assert_clean(result.new_state.get_data());
+                            Counters::bump(&counters.landed, 1);
+                            if !result.warnings.is_empty() {
+                                Counters::bump(&counters.warned, 1);
+                                Counters::bump(&counters.warnings, result.warnings.len());
                             }
+                            // Rendered against `state`, which is still the
+                            // *pre*-state here: that is the document the dialog
+                            // appears over, and the one the texts are written
+                            // against (D7). An `Err` means a repair named material
+                            // the pre-state never held — the frame rule's
+                            // rendering corollary broken — and the seed replays it.
+                            for warning in &result.warnings {
+                                counters.record_fix(warning.fix());
+                                if let Err(missing) = warning.text(state.get_data()) {
+                                    panic!(
+                                        "a warning could not be rendered against the pre-state: \
+                                     {missing} (fix: {:?})",
+                                        warning.fix(),
+                                    );
+                                }
+                            }
+                            counters.record(family, true);
+                            state = result.new_state;
                         }
-                        counters.record(family, true);
-                        state = result.new_state;
-                    }
-                    // A clean rejection is a legitimate outcome — the op named a
-                    // dead address, or the cascade convicted its target.
-                    Err(_) => {
-                        Counters::bump(&counters.errored, 1);
-                        counters.record(family, false);
+                        // A clean rejection is a legitimate outcome — the op named a
+                        // dead address, or the cascade convicted its target.
+                        Err(_) => {
+                            Counters::bump(&counters.errored, 1);
+                            counters.record(family, false);
+                        }
                     }
                 }
-            }
-        }));
+            }));
 
-        if let Err(payload) = result {
-            let log = log.borrow();
-            eprintln!(
-                "update-op fuzz: seed {seed} FAILED after {} generated ops. Op log:\n{}",
-                log.len(),
-                log.join("\n"),
-            );
-            std::panic::resume_unwind(payload);
+            if let Err(payload) = result {
+                let log = log.borrow();
+                eprintln!(
+                    "update-op fuzz: start {start}, seed {seed} FAILED after {} generated ops. \
+                 Op log:\n{}",
+                    log.len(),
+                    log.join("\n"),
+                );
+                std::panic::resume_unwind(payload);
+            }
         }
+
+        timings.push(format!(
+            "{start}: {seeds} seeds in {:.2?}",
+            started.elapsed()
+        ));
     }
 
     // Reported before the guards are checked, so a run that fails one still
@@ -1459,9 +1489,9 @@ fn update_ops_never_panic_and_land_valid() {
     counters.report();
     counters.assert_covered();
     eprintln!(
-        "update-op fuzz: {} seeds × {} ops in {:.2?}",
-        CONFIG.seeds,
+        "update-op fuzz: {} ops per seed — {} — total {:.2?}",
         CONFIG.ops_per_run,
-        start.elapsed(),
+        timings.join(", "),
+        overall.elapsed(),
     );
 }

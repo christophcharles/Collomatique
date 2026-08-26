@@ -27,6 +27,10 @@ use collomatique_state_colloscopes::{Data, InnerData};
 
 use harness::RunConfig;
 
+// The five documents the walks start from.
+#[path = "support/start_points.rs"]
+mod start_points;
+
 /// Single hardcoded configuration used by every property on every run
 /// (user decision: no env variables, no `#[ignore]` tiers — the `fuzz`
 /// feature that decides *whether* this target is built is a separate
@@ -34,6 +38,9 @@ use harness::RunConfig;
 /// still catch every bug found by the original 500-seed configuration;
 /// the 500-seed version is kept as the slow reference for occasional
 /// milestone checks.
+///
+/// `seeds` is the budget for the bootstrap start; the four big starts share
+/// the same again between them (`start_points::seeds_for`).
 const CONFIG: RunConfig = RunConfig {
     seeds: 100,
     ops_per_run: 1000,
@@ -75,11 +82,13 @@ macro_rules! gen_and_apply {
 /// atomicity).
 #[test]
 fn invariants_hold_and_errors_are_atomic() {
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "invariants_hold_and_errors_are_atomic",
         &CONFIG,
-        |rng, log, stats| {
-            let (mut state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (mut state, _) = start_points::open(start, rng);
             assert_clean(state.get_data().get_inner_data());
             let mut snapshots: Vec<InnerData> = vec![state.get_data().get_inner_data().clone()];
 
@@ -119,11 +128,13 @@ fn invariants_hold_and_errors_are_atomic() {
 /// through the exact same states (annotated ids make redo reproducible).
 #[test]
 fn undo_all_and_redo_all_round_trip() {
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "undo_all_and_redo_all_round_trip",
         &CONFIG,
-        |rng, log, stats| {
-            let (mut state, mut snapshots) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (mut state, mut snapshots) = start_points::open(start, rng);
             assert_clean(state.get_data().get_inner_data());
             let mut inner_snapshots: Vec<InnerData> = vec![];
 
@@ -164,42 +175,48 @@ fn undo_all_and_redo_all_round_trip() {
 /// including the truncation of the redo branch on a fresh apply.
 #[test]
 fn random_undo_redo_apply_walk() {
-    harness::for_each_seed("random_undo_redo_apply_walk", &CONFIG, |rng, log, stats| {
-        let (mut state, mut snapshots) = harness::bootstrap(rng);
-        assert_clean(state.get_data().get_inner_data());
-        let mut pos = snapshots.len() - 1;
-        let mut inner_snapshots: Vec<InnerData> = vec![];
+    harness::for_each_start_and_seed(
+        "random_undo_redo_apply_walk",
+        &CONFIG,
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (mut state, mut snapshots) = start_points::open(start, rng);
+            assert_clean(state.get_data().get_inner_data());
+            let mut pos = snapshots.len() - 1;
+            let mut inner_snapshots: Vec<InnerData> = vec![];
 
-        for _ in 0..CONFIG.ops_per_run {
-            match rng.random_range(0..3) {
-                0 if state.can_undo() => {
-                    state.undo().expect("can_undo was just checked");
-                    pos -= 1;
-                }
-                1 if state.can_redo() => {
-                    state.redo().expect("can_redo was just checked");
-                    pos += 1;
-                }
-                _ => {
-                    if gen_and_apply!(state, rng, log, stats, &inner_snapshots) {
-                        snapshots.truncate(pos + 1);
-                        snapshots.push(state.get_data().clone());
+            for _ in 0..CONFIG.ops_per_run {
+                match rng.random_range(0..3) {
+                    0 if state.can_undo() => {
+                        state.undo().expect("can_undo was just checked");
+                        pos -= 1;
+                    }
+                    1 if state.can_redo() => {
+                        state.redo().expect("can_redo was just checked");
                         pos += 1;
-                        if inner_snapshots.len() < 8 && rng.random_bool(0.02) {
-                            inner_snapshots.push(state.get_data().get_inner_data().clone());
+                    }
+                    _ => {
+                        if gen_and_apply!(state, rng, log, stats, &inner_snapshots) {
+                            snapshots.truncate(pos + 1);
+                            snapshots.push(state.get_data().clone());
+                            pos += 1;
+                            if inner_snapshots.len() < 8 && rng.random_bool(0.02) {
+                                inner_snapshots.push(state.get_data().get_inner_data().clone());
+                            }
                         }
                     }
                 }
-            }
 
-            assert!(
-                state.get_data() == &snapshots[pos],
-                "state diverged from the model at history position {pos}",
-            );
-            assert_eq!(state.can_undo(), pos > 0);
-            assert_eq!(state.can_redo(), pos < snapshots.len() - 1);
-        }
-    });
+                assert!(
+                    state.get_data() == &snapshots[pos],
+                    "state diverged from the model at history position {pos}",
+                );
+                assert_eq!(state.can_undo(), pos > 0);
+                assert_eq!(state.can_redo(), pos < snapshots.len() - 1);
+            }
+        },
+    );
 }
 
 /// Property 4: for every op that applies successfully, applying the
@@ -210,11 +227,13 @@ fn random_undo_redo_apply_walk() {
 fn apply_then_apply_rev_is_identity() {
     use collomatique_state::InMemoryData;
 
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "apply_then_apply_rev_is_identity",
         &CONFIG,
-        |rng, log, stats| {
-            let (state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (state, _) = start_points::open(start, rng);
             let mut data: Data = state.get_data().clone();
             assert_clean(data.get_inner_data());
             let mut inner_snapshots: Vec<InnerData> = vec![];
@@ -275,11 +294,13 @@ fn apply_then_apply_rev_is_identity() {
 /// Sessions occasionally nest.
 #[test]
 fn sessions_commit_and_cancel_randomly() {
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "sessions_commit_and_cancel_randomly",
         &CONFIG,
-        |rng, log, stats| {
-            let (mut state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (mut state, _) = start_points::open(start, rng);
             assert_clean(state.get_data().get_inner_data());
             let mut inner_snapshots: Vec<InnerData> = vec![];
             let mut ops_done = 0usize;
