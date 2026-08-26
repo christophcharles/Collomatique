@@ -47,7 +47,10 @@ entirely (those are ILP-era machinery, retired at roadmap point 3).
   containing s, plus kept lists containing s), and `N_s = |U_s|`.
 - **Group sizes are targets**, fixed before any placement (§3). For a group
   with target size `t`, each member has `m = t - 1` **partners** there. "Size"
-  always means the target, never the current fill.
+  always means the target, never the current fill. Kept lists are complete,
+  so their group sizes are the *actual* sizes: a kept group of 2 inside a
+  2..=4 list gives its members 1 partner there, whatever balanced targets
+  would say.
 
 ### 2.2 The partner distribution
 
@@ -155,10 +158,13 @@ is roadmap point 3, not this session.
 `GenerationPlan` gains a field describing the kept lists so they can enter the
 objective as real, immutable uses:
 
-- per kept list: its groups (student sets), its size range (for the target
-  sizes / partner counts), and its **use count** — the number of (period,
-  subject) pairs the document currently associates to it. A kept list
-  associated to zero pairs contributes zero uses and is naturally inert.
+- per kept list: its groups (student sets) and its **use count** — the number
+  of (period, subject) pairs the document currently associates to it (read
+  off `GroupLists::subjects_associations`). A kept list associated to zero
+  pairs contributes zero uses and is naturally inert. No size range: partner
+  counts come from the actual group sizes (§2.1) — prefilled lists are
+  user-made and may be unbalanced, so range-derived targets would misweight
+  them.
 - Populated by `build_generation_plan` from `Parameters`. The ILP path
   ignores the field for now; at roadmap point 3 it becomes the ILP's input
   too and `pinned_pairs` retires.
@@ -184,24 +190,32 @@ exceeding** `|C|` — place the maximum number of members in fully-tiled pure
 groups. This is not a subset-sum search: groups of equal target are
 interchangeable, so only the counts matter. With `a` empty groups of target
 `q + 1` and `b` of target `q` (a list's targets take at most these two
-values, §3), loop `x` from `min(a, |C| div (q + 1))` down to 0, set
+values, §3), loop `x` from 0 up to `min(a, |C| div (q + 1))`, set
 `y = min(b, (|C| − x·(q + 1)) div q)`, and keep `(x, y)` when
 `x·(q + 1) + y·q` strictly beats the best so far. At most `a + 1` iterations.
 
 Tie convention when several claim sets place the same number of members (e.g.
-6 members, `{3, 3}` vs `{2, 2, 2}` both available): prefer **larger targets**
-(`{3, 3}`). The descending loop with strict improvement implements this for
-free. Flagged as arbitrary — this is the choice the greedy is blind to;
-either convention is defensible, this one is simply pinned for determinism.
+6 members, `{3, 3}` vs `{2, 2, 2}` both available): prefer **smaller
+targets** (`{2, 2, 2}`). The ascending loop with strict improvement
+implements this for free. This tie is *not* objective-blind: the claiming
+lists give each member some fixed total mass, and putting it all on one
+constant partner scores twice what splitting it over two does (`p²` vs
+`2·(p/2)²`). The leftover students inherit the big groups, which is exactly
+where the `1/(t_size − 1)` weight makes a weak pairing cheapest — strong
+pairs where meetings weigh most, scraps where they weigh least, so both
+sides of the trade point the same way. (The by-hand instinct of reserving
+small groups for small cohorts is served by the processing order instead:
+small cohorts claim first, §7.1.)
 Note the "4 members: one 3-group + 1 leftover, or two 2-groups?" question is
 *not* a tie: two 2-groups place 4 > 3 members, so maximize-placed already
 chooses them.
 
 ### 6.3 Coverage: all-or-nothing per student — Proposed (explicitly not settled)
 
-*The user is unsure about this rule and its sub-choices; treat the whole
-subsection as a current best proposal, likely to be revisited, and keep its
-implementation easy to change.*
+*This rule is the one genuinely open question left in the design. The
+decision (Aug 2026) is to start with it exactly as written — all-or-nothing
+plus shrink-to-fixpoint as the first attempt — and keep the implementation
+easy to change if real documents show it eroding too much prefill.*
 
 A student is prefilled **only if the claims cover them in every claiming
 list**; otherwise they are entirely deferred to the greedy pass. The
@@ -227,9 +241,16 @@ Membership of claimed groups: take the cohort's members in canonical order
 same canonical order in every list makes the blocks prefix-align across
 lists, which is the whole cross-list consistency story.
 
-**Invariant**: after prefill, every student is either completely placed (in
-every list of their profile that holds claims, and *those* placements are
-frozen) or completely untouched. No half-placed students.
+**Invariant**: after prefill, every student is either placed in every
+*claiming* list of their profile (and those placements are frozen) or
+completely untouched. The invariant is scoped to claiming lists only: a
+prefilled student whose profile also holds non-claiming lists (a trio's
+12-seat tutorial) is still unplaced there, and the greedy pass seats them —
+partial placement *across* lists is normal, and is what the never-veto rule
+exists for. What the invariant forbids is partial coverage *within* the
+claiming set: an orphaned tail member would find its cohort-mates' pure
+groups frozen full, so deferring the tail entirely is what lets orphans
+travel together.
 
 Worked example (the case that killed two earlier designs): one list, targets
 `{3, 2}`, cohorts `{a, b}` and `{c, d, e}`. `{a, b}` cannot claim the 3-group
@@ -239,15 +260,15 @@ answer — the earlier "purity + lowest-index" design sent `{a, b}` into the
 
 ## 7. The greedy pass — Proposed
 
-### 7.1 Student order — Proposed (explicitly not settled)
+### 7.1 Student order — Settled
 
 Process cohorts rarest first: ascending cohort size, ties toward students
 with more list-uses, then ascending `StudentId`. Rationale: rare profiles
 have the fewest options for consistent partners and must commit while the
 space is empty; the "takes everything standard" students come last and are
 exactly the flexible ones. The same order drives prefill (§6.2) and the
-greedy pass. *The user wants to think more about this order; treat it as a
-parameter of the implementation, easy to swap.*
+greedy pass. Keep it a parameter of the implementation anyway — cheap
+insurance, not an invitation to revisit.
 
 ### 7.2 The loop
 
@@ -256,6 +277,11 @@ for each student s (global order), skipping fully-prefilled students:
     place_student(state, s)     # joint placement over all of s's unplaced lists
     s is frozen — never revisited
 ```
+
+"Fully-prefilled" means no unplaced list remains. A student the prefill
+placed in their claiming lists but whose profile also holds non-claiming
+lists still enters the loop: `place_student` then chooses only the missing
+groups, with the prefilled ones frozen.
 
 `place_student` is an isolated subroutine with the contract: "given the
 current state, choose s's group in every list of s's profile not already
@@ -302,15 +328,19 @@ information in the *non-claimable* lists (which tutorial group?), and a
 cohort can be split when arithmetic forces it (three pairs into `{3, 3}`).
 Both match what happens by hand.
 
-## 8. Arithmetic — Open
+## 8. Arithmetic — Settled
 
-Score deltas should compare exactly. Masses are rationals with small
-denominators (`N_s * m * ...`), so exact comparison is cheap; recommendation:
-rational arithmetic (`num-rational` if already in the tree, else a small
-hand-rolled fraction on `i128` or `BigInt`), decided at implementation time.
-The user considers this low-stakes; determinism of the *result* is what
-matters, and the fixed scan orders plus strict-improvement rules provide it
-even under `f64` — exact arithmetic just removes the near-tie fragility.
+Plain `f64`, now and probably forever. The magnitudes are benign (masses
+≤ 1, short sums, one squaring), determinism holds regardless (fixed scan
+orders, strict improvement, IEEE ops are reproducible), and a near-tie
+misordering only ever picks between two placements of nearly identical
+quality. No rational crate is in the tree and none is wanted.
+
+One implementation rule makes the sweep termination airtight under floats:
+compute every candidate score as a **pure function of the current
+configuration** — no running accumulator whose drift could make two states
+each look better than the other. A strict `>` on a pure function cannot
+cycle, so §7.3's fixpoint argument survives without exact arithmetic.
 
 ## 9. Tests — Agreed
 
@@ -335,11 +365,12 @@ judge the greedy *or* to judge the objective.
 
 ## 10. Open questions (recap)
 
-1. §7.1 student order — proposed, user explicitly still thinking.
-2. §6.3 all-or-nothing coverage and its sub-choices (never-veto lists,
-   shrink-to-fixpoint) — proposed, user explicitly unsure; keep the
-   implementation easy to change.
-3. §6.2 tie convention (larger targets first) — pinned but arbitrary.
-4. §7.3 sweep performance — acceptable until proven otherwise; the
+1. §6.3 all-or-nothing coverage — the one genuinely open question; start
+   with it as written, keep the implementation easy to change.
+2. §7.3 sweep performance — acceptable until proven otherwise; the
    `place_student` boundary is the insurance.
-5. §8 arithmetic — rationals recommended, decided at implementation time.
+
+Settled since the first draft of this document: §7.1 student order (rarest
+first stands), §6.2 tie convention (smaller targets, objective-backed), §8
+arithmetic (`f64`), §5 kept-list partner counts (actual group sizes, no
+range in the new field).

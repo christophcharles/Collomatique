@@ -57,16 +57,16 @@ Detailed in `docs/plans/greedy_algorithm.md`. Summary:
 - New module `colloscopes/constraints-groups/src/greedy.rs` (with submodules,
   tests in `greedy/tests.rs`).
 - Input: `GenerationPlan`, extended with a description of the kept lists
-  (groups, size range, use count). The greedy ignores `ghost`,
+  (groups, use count). The greedy ignores `ghost`,
   `canonical_range` and `pinned_pairs`.
 - Output: `Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)>` — the exact
   payload of `GroupListsUpdateOp::AddGeneratedGroupLists`, mirroring
   `build_group_lists`.
 
-Status: the objective and the prefill/greedy/ILP workflow are settled; the
-internals of the greedy pass (student order, placement subroutine) and parts
-of the prefill are proposed but not settled — see the status labels in the
-algorithm document.
+Status: the objective, the prefill/greedy/ILP workflow, the student order,
+the claim tie convention and the arithmetic (`f64`) are settled; the one
+genuinely open question is the prefill coverage rule (§6.3 of the algorithm
+document), implemented as written for now but kept easy to change.
 
 ## Point 2 — GUI integration
 
