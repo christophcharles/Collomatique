@@ -1,11 +1,17 @@
 use adw::prelude::{ActionRowExt, ExpanderRowExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
-use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
+use relm4::{
+    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
+    SimpleComponent,
+};
 use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::ObjectiveWeights;
 use collomatique_state_colloscopes::NonEmptyRangeInclusive;
+use collomatique_strategies::ConductorStrategy;
 use std::num::NonZeroU32;
+
+use crate::editor::run_solver::conductor_config;
 
 /// The group size the min/max spinners start on when the reference size has
 /// never been fixed by hand. Only a seed for the switch's first use: as long
@@ -14,6 +20,10 @@ use std::num::NonZeroU32;
 const SEED_CANONICAL_MIN: u32 = 2;
 const SEED_CANONICAL_MAX: u32 = 3;
 
+/// The door to the ILP polish: everything the optional optimization run needs that the greedy
+/// did not — the objective weights, the reference group size, and the solver configuration.
+/// Validating it starts the solve from the greedy result; cancelling leaves the naming dialog
+/// with that result untouched.
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
@@ -28,6 +38,27 @@ pub struct Dialog {
     /// switching the expander off and on again does not lose it.
     canonical_min: u32,
     canonical_max: u32,
+    /// The solver configuration this window carries, seeded on `Show` and edited through the
+    /// child `conductor_config` dialog.
+    strategy: ConductorStrategy,
+    /// That child dialog, opened by the frame's edit button.
+    conductor_config_dialog: Controller<conductor_config::Dialog>,
+}
+
+impl Dialog {
+    /// Whether the carried configuration is still the preset this flow defaults to. Drives the
+    /// frame's status label — the configuration itself is never rendered in detail here.
+    fn is_default_strategy(&self) -> bool {
+        self.strategy == ConductorStrategy::with_parallelism_optimize_only()
+    }
+
+    fn strategy_status(&self) -> &'static str {
+        if self.is_default_strategy() {
+            "par défaut"
+        } else {
+            "personnalisée"
+        }
+    }
 }
 
 impl Dialog {
@@ -49,8 +80,12 @@ impl Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    /// Open with the generate dialog's current weights and canonical size.
-    Show(ObjectiveWeights, Option<NonEmptyRangeInclusive<NonZeroU32>>),
+    /// Open with the page's current weights, canonical size and solver configuration.
+    Show(
+        ObjectiveWeights,
+        Option<NonEmptyRangeInclusive<NonZeroU32>>,
+        ConductorStrategy,
+    ),
     Cancel,
     Accept,
     UpdatePairsWeight(f64),
@@ -58,13 +93,27 @@ pub enum DialogInput {
     SetCanonicalEnabled(bool),
     UpdateCanonicalMin(u32),
     UpdateCanonicalMax(u32),
+    /// The frame's edit button: open the solver-configuration dialog.
+    OpenSolverConfig,
+    UpdateStrategy(ConductorStrategy),
+    /// The frame's reset button: back to the preset of this flow.
+    ResetStrategy,
+    /// The child dialog closed without a new configuration: nothing to change, but this window
+    /// goes back to the front.
+    IgnoreOrRefresh,
+    /// The child dialog just closed: bring this window back to the front.
+    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    /// The assembled weights and canonical-size override.
-    Accepted(ObjectiveWeights, Option<NonEmptyRangeInclusive<NonZeroU32>>),
+    /// The assembled weights, canonical-size override and solver configuration.
+    Accepted(
+        ObjectiveWeights,
+        Option<NonEmptyRangeInclusive<NonZeroU32>>,
+        ConductorStrategy,
+    ),
     /// The dialog just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
     PresentParent,
@@ -84,8 +133,8 @@ impl SimpleComponent for Dialog {
             set_resizable: true,
             #[watch]
             set_visible: !model.hidden,
-            set_title: Some("Paramètres avancés"),
-            set_default_size: (500, 450),
+            set_title: Some("Optimiser les listes de groupes"),
+            set_default_size: (500, 500),
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -95,7 +144,7 @@ impl SimpleComponent for Dialog {
                         connect_clicked => DialogInput::Cancel,
                     },
                     pack_end = &gtk::Button {
-                        set_label: "Valider",
+                        set_label: "Optimiser",
                         add_css_class: "suggested-action",
                         connect_clicked => DialogInput::Accept,
                     },
@@ -226,6 +275,42 @@ impl SimpleComponent for Dialog {
                             },
                         },
                     },
+                    gtk::Frame {
+                        set_hexpand: true,
+                        set_margin_all: 5,
+                        gtk::Box {
+                            set_orientation: gtk::Orientation::Horizontal,
+                            set_spacing: 5,
+                            gtk::Label {
+                                set_margin_start: 10,
+                                set_margin_all: 5,
+                                set_label: "<b>Configuration du résolveur :</b>",
+                                set_use_markup: true,
+                            },
+                            gtk::Label {
+                                set_margin_all: 5,
+                                #[watch]
+                                set_label: model.strategy_status(),
+                            },
+                            gtk::Box {
+                                set_hexpand: true,
+                            },
+                            gtk::Button {
+                                add_css_class: "flat",
+                                set_margin_all: 5,
+                                set_icon_name: "document-edit-symbolic",
+                                set_tooltip: "Paramètres du résolveur personnalisés",
+                                connect_clicked => DialogInput::OpenSolverConfig,
+                            },
+                            gtk::Button {
+                                add_css_class: "flat",
+                                set_margin_all: 5,
+                                set_icon_name: "view-refresh-symbolic",
+                                set_tooltip: "Réinitialiser la configuration du résolveur par défaut",
+                                connect_clicked => DialogInput::ResetStrategy,
+                            },
+                        },
+                    },
                 },
             }
         }
@@ -236,6 +321,17 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let conductor_config_dialog = conductor_config::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                conductor_config::DialogOutput::Accepted(strategy) => {
+                    DialogInput::UpdateStrategy(strategy)
+                }
+                conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
+                conductor_config::DialogOutput::PresentParent => DialogInput::Present,
+            });
+
         let defaults = ObjectiveWeights::default();
         let model = Dialog {
             hidden: true,
@@ -246,6 +342,8 @@ impl SimpleComponent for Dialog {
             canonical_enabled: false,
             canonical_min: SEED_CANONICAL_MIN,
             canonical_max: SEED_CANONICAL_MAX,
+            strategy: ConductorStrategy::with_parallelism_optimize_only(),
+            conductor_config_dialog,
         };
 
         let widgets = view_output!();
@@ -257,7 +355,7 @@ impl SimpleComponent for Dialog {
         self.should_redraw = false;
         self.move_front = false;
         match msg {
-            DialogInput::Show(weights, canonical_range) => {
+            DialogInput::Show(weights, canonical_range, strategy) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.should_redraw = true;
@@ -268,6 +366,7 @@ impl SimpleComponent for Dialog {
                     self.canonical_min = range.start().get();
                     self.canonical_max = range.end().get();
                 }
+                self.strategy = strategy;
             }
             DialogInput::Cancel => {
                 if !self.hidden {
@@ -287,6 +386,7 @@ impl SimpleComponent for Dialog {
                                 w_template: self.w_template,
                             },
                             self.canonical_range(),
+                            self.strategy.clone(),
                         ))
                         .unwrap();
                 }
@@ -320,6 +420,28 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.canonical_max = value;
+            }
+            DialogInput::OpenSolverConfig => {
+                self.conductor_config_dialog
+                    .sender()
+                    .send(conductor_config::DialogInput::Show {
+                        strategy: self.strategy.clone(),
+                        // This flow always hands the solve the greedy result as warm start, so
+                        // the seeding warnings and the "Solution initiale fournie" row are read
+                        // against a supplied solution.
+                        external_warm_start: true,
+                    })
+                    .unwrap();
+            }
+            DialogInput::UpdateStrategy(strategy) => {
+                self.strategy = strategy;
+            }
+            DialogInput::ResetStrategy => {
+                self.strategy = ConductorStrategy::with_parallelism_optimize_only();
+            }
+            DialogInput::IgnoreOrRefresh => {}
+            DialogInput::Present => {
+                self.move_front = true;
             }
         }
     }
