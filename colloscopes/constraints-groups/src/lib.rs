@@ -38,12 +38,20 @@
 //! A student count the size range cannot split at all is rejected upfront
 //! by [`GroupListSpec::new`], so callers must build their specs through it
 //! — the config dialog does, before offering a subject for rebuild.
+//!
+//! The crate also hosts the *greedy* generator ([`greedy_group_lists`]),
+//! which is the primary path: it reads the same [`GenerationPlan`] and
+//! returns the same output as [`build_group_lists`], in negligible time,
+//! maximizing a partner-concentration objective the ILP's per-pair step term
+//! cannot express. The ILP above is the optional polish. See
+//! `docs/plans/greedy_roadmap.md` and `docs/plans/greedy_algorithm.md`.
 
 mod builder;
 mod constraints;
 mod convert;
 mod extras;
 pub mod ghost;
+mod greedy;
 mod incremental;
 mod objective;
 mod specs;
@@ -53,6 +61,7 @@ pub mod vars;
 pub use builder::{build_model, build_model_with_log};
 pub use convert::build_group_lists;
 pub use ghost::GhostGrouping;
+pub use greedy::greedy_group_lists;
 pub use incremental::build_incremental_epochs;
 pub use objective::ObjectiveWeights;
 pub use specs::{
