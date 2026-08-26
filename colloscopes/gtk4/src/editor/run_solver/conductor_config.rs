@@ -1,4 +1,4 @@
-use adw::prelude::{PreferencesGroupExt, PreferencesRowExt};
+use adw::prelude::{ActionRowExt, PreferencesGroupExt, PreferencesRowExt};
 use gtk::prelude::{AdjustmentExt, BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
 use relm4::prelude::{DynamicIndex, FactoryComponent};
@@ -17,6 +17,11 @@ pub struct Dialog {
     should_redraw: bool,
 
     worker_count: u32,
+    /// Whether the run this strategy is configured for will be handed a ready-made solution as
+    /// warm start. Not a setting — what the caller told us about the run, kept because the same
+    /// strategy warns differently with and without one.
+    external_warm_start: bool,
+    use_external_warm_start: bool,
     enable_warm_start: bool,
     warm_start_time_limit_enabled: bool,
     warm_start_time_limit_secs: u32,
@@ -51,11 +56,18 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(ConductorStrategy),
+    /// Open the dialog on `strategy`. `external_warm_start` says whether the run being configured
+    /// will be handed a ready-made solution as warm start — it decides both what the
+    /// "Solution initiale fournie" row means and which seeding warnings apply.
+    Show {
+        strategy: ConductorStrategy,
+        external_warm_start: bool,
+    },
     Cancel,
     Accept,
 
     UpdateWorkerCount(u32),
+    UpdateUseExternalWarmStart(bool),
     UpdateWarmStart(bool),
     UpdateWarmStartTimeLimitEnabled(bool),
     UpdateWarmStartTimeLimit(u32),
@@ -180,6 +192,18 @@ impl SimpleComponent for Dialog {
                                 set_title: "Stratégies",
                                 set_margin_all: 5,
                                 set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_use_markup: false,
+                                    set_title: "Solution initiale fournie",
+                                    set_subtitle: "Vérifier la solution transmise par l'application et démarrer le calcul avec elle. Sans effet si le calcul n'en reçoit aucune.",
+                                    #[track(self.should_redraw)]
+                                    set_active: model.use_external_warm_start,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::UpdateUseExternalWarmStart(value));
+                                    },
+                                },
                                 adw::SwitchRow {
                                     set_hexpand: true,
                                     set_use_markup: false,
@@ -616,6 +640,8 @@ impl SimpleComponent for Dialog {
             move_front: false,
             should_redraw: false,
             worker_count: strategy.worker_count.get(),
+            external_warm_start: false,
+            use_external_warm_start: strategy.warm_start_incumbent,
             enable_warm_start: strategy.warm_start_config.is_some(),
             warm_start_time_limit_enabled: strategy
                 .warm_start_config
@@ -676,10 +702,14 @@ impl SimpleComponent for Dialog {
         self.should_redraw = false;
         self.move_front = false;
         match msg {
-            DialogInput::Show(strategy) => {
+            DialogInput::Show {
+                strategy,
+                external_warm_start,
+            } => {
                 self.hidden = false;
                 self.move_front = true;
                 self.should_redraw = true;
+                self.external_warm_start = external_warm_start;
                 self.update_state_from_strategy(strategy);
             }
             DialogInput::Cancel => {
@@ -703,6 +733,12 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.worker_count = value;
+            }
+            DialogInput::UpdateUseExternalWarmStart(value) => {
+                if self.use_external_warm_start == value {
+                    return;
+                }
+                self.use_external_warm_start = value;
             }
             DialogInput::UpdateWarmStart(value) => {
                 if self.enable_warm_start == value {
@@ -861,6 +897,7 @@ impl Dialog {
 
     fn update_state_from_strategy(&mut self, strategy: ConductorStrategy) {
         self.worker_count = strategy.worker_count.get();
+        self.use_external_warm_start = strategy.warm_start_incumbent;
         match &strategy.warm_start_config {
             Some(cfg) => {
                 self.enable_warm_start = true;
@@ -981,13 +1018,14 @@ impl Dialog {
                     self.fuzzy_incumbent_time_limit_secs,
                 ),
             }),
+            warm_start_incumbent: self.use_external_warm_start,
         }
     }
 
     fn update_warnings(&mut self) {
         let mut guard = self.warnings.guard();
         guard.clear();
-        for warning in self.strategy.warnings() {
+        for warning in self.strategy.warnings(self.external_warm_start) {
             guard.push_back(
                 collomatique_ui_text::solver::conductor_warning_text(warning).to_string(),
             );

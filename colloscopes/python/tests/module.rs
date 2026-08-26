@@ -14064,6 +14064,9 @@ fn the_conductor_strategy_crosses_the_boundary() {
             warm_start_config: Some(WarmStartConfig::default()),
             incremental_config: Some(IncrementalConfig::default()),
             fuzzy_config: Some(FuzzyConfig::default()),
+            // Not a field of the dataclass — a script's solve is handed no ready-made solution,
+            // so what the conductor would do with one stays at the model's default.
+            warm_start_incumbent: RawConductorStrategy::default().warm_start_incumbent,
         }
     );
 
@@ -14102,6 +14105,7 @@ fn the_conductor_strategy_crosses_the_boundary() {
             time_limit: TimeLimit::none(),
             incumbent_time_limit: seconds(7),
         }),
+        warm_start_incumbent: RawConductorStrategy::default().warm_start_incumbent,
     };
     assert_eq!(strategy(&globals, "spelled_out"), spelled_out);
 
@@ -14259,7 +14263,8 @@ fn the_conductor_warnings_are_preflight() {
     assert_eq!(
         global::<Vec<String>>(&globals, "optimize_names"),
         optimize
-            .warnings()
+            // As the script sees them: no solution is handed to a scripted solve.
+            .warnings(false)
             .into_iter()
             .map(named)
             .collect::<Vec<_>>(),

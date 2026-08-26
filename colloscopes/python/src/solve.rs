@@ -161,7 +161,10 @@ fn _conductor_warnings<'py>(
     PyTuple::new(
         py,
         strategy
-            .warnings()
+            // A script's solve never hands the conductor a ready-made solution to start from
+            // (`StrategySubprocess::spawn` below passes no warm start), so the warnings are the
+            // ones of a strategy running on its own.
+            .warnings(false)
             .into_iter()
             .map(ConductorWarning::from_model),
     )

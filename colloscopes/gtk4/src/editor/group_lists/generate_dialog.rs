@@ -644,7 +644,12 @@ impl SimpleComponent for Dialog {
             DialogInput::OpenAdvanced => {
                 self.conductor_config_dialog
                     .sender()
-                    .send(conductor_config::DialogInput::Show(self.strategy.clone()))
+                    .send(conductor_config::DialogInput::Show {
+                        strategy: self.strategy.clone(),
+                        // Group-list generation runs the solver on a bare model today; the greedy
+                        // solution only becomes its warm start with point 2 of the roadmap.
+                        external_warm_start: false,
+                    })
                     .unwrap();
             }
             DialogInput::UpdateStrategy(strategy) => {

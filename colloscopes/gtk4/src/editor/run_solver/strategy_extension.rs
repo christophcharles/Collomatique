@@ -164,7 +164,12 @@ impl SimpleComponent for Extension {
             ExtensionInput::OpenAdvanced => {
                 self.conductor_config_dialog
                     .sender()
-                    .send(conductor_config::DialogInput::Show(self.strategy.clone()))
+                    .send(conductor_config::DialogInput::Show {
+                        strategy: self.strategy.clone(),
+                        // A colloscope solve starts from nothing: the model goes to the engine
+                        // without a solution to begin with.
+                        external_warm_start: false,
+                    })
                     .unwrap();
             }
             ExtensionInput::IgnoreOrRefresh => {}

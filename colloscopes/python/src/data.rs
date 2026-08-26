@@ -3278,6 +3278,10 @@ impl ConductorStrategy {
             warm_start_config: sub_config(site, "warm_start_config", obj, warm_start_config)?,
             incremental_config: sub_config(site, "incremental_config", obj, incremental_config)?,
             fuzzy_config: sub_config(site, "fuzzy_config", obj, fuzzy_config)?,
+            // Not a field of the dataclass: it decides what the conductor does with a solution
+            // handed to the run as warm start, and a script's solve hands none over. Left at the
+            // model's own default, where it is inert.
+            warm_start_incumbent: RawConductorStrategy::default().warm_start_incumbent,
         })
     }
 
