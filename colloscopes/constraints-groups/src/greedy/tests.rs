@@ -291,6 +291,60 @@ fn kept_lists_steer() {
 }
 
 #[test]
+fn the_log_reaches_the_callback() {
+    // Six students in groups of 2 to 3 → targets {3, 3}, and a second list
+    // holding only 1 and 2. The pair cannot tile a 3-group, so prefill only
+    // seats it in the small list and it stays the pass's business; the other
+    // cohort claims one 3-group and defers its fourth member. Three students
+    // seated, three left — a pass with something to do, and a prefill that
+    // did not do everything.
+    let plan = plan(
+        &[(&[1, 2, 3, 4, 5, 6], (2, 3), 1), (&[1, 2], (2, 2), 1)],
+        &[],
+    );
+    let names: Vec<String> = (0..plan.specs.len())
+        .map(|i| format!("Liste {i}"))
+        .collect();
+
+    let mut lines: Vec<String> = Vec::new();
+    let lists =
+        greedy_group_lists_with_log(&plan, &names, &mut |line| lines.push(line.to_string()));
+
+    assert_valid(&plan, &lists);
+    assert_eq!(
+        memberships(&lists),
+        memberships(&run(&plan)),
+        "logging must not change what the greedy produces",
+    );
+
+    assert!(
+        lines.iter().all(|line| line.starts_with("[greedy] ")),
+        "every line carries the prefix: {lines:?}",
+    );
+    assert_eq!(
+        lines[0],
+        "[greedy] 6 student(s) over 2 list(s), in 2 cohort(s)"
+    );
+    // The elapsed time closes each of the remaining lines, so they are
+    // matched on their head only.
+    let assert_line = |head: &str| {
+        assert!(
+            lines.iter().any(|line| line.starts_with(head)),
+            "no line starting with {head:?}: {lines:?}",
+        );
+    };
+    assert_line("[greedy] Prefill: 3 student(s) seated, 3 left to the pass (");
+    assert_line("[greedy] Pass: 3 student(s) placed (");
+    assert!(
+        lines
+            .last()
+            .expect("the log is not empty")
+            .starts_with("[greedy] Done ("),
+        "the total closes the log: {lines:?}",
+    );
+}
+
+#[test]
 fn size_one_corner() {
     // Three students in groups of 1 to 2 → targets {2, 1}: somebody sits
     // alone in every list. Two such lists, so a repeated meeting is possible.

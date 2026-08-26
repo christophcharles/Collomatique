@@ -24,8 +24,9 @@ mod tests;
 
 use crate::specs::GenerationPlan;
 use collomatique_state_colloscopes::group_lists::GroupList;
-use collomatique_state_colloscopes::{PeriodId, SubjectId};
+use collomatique_state_colloscopes::{PeriodId, StudentId, SubjectId};
 use std::collections::BTreeSet;
+use std::time::Instant;
 
 /// Builds one prefilled `GroupList` per spec of the plan, in plan order,
 /// paired with the (period, subject) pairs it must be associated to — exactly
@@ -41,27 +42,79 @@ pub fn greedy_group_lists(
     plan: &GenerationPlan,
     names: &[String],
 ) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
+    greedy_group_lists_with_log(plan, names, &mut |_: &str| {})
+}
+
+/// [`greedy_group_lists`], reporting on `log` as it goes.
+///
+/// The two phases are told apart and timed separately: they answer different
+/// questions when a result is surprising — how much of the class prefill froze
+/// as whole groups, and what the joint placement then had left to decide. The
+/// pass reports coarse progress, at most ten lines whatever the class size,
+/// since it is the only part whose cost grows with the student count.
+pub fn greedy_group_lists_with_log(
+    plan: &GenerationPlan,
+    names: &[String],
+    log: &mut (dyn FnMut(&str) + Send),
+) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
     assert_eq!(
         names.len(),
         plan.specs.len(),
         "one name per spec is required"
     );
 
+    let total = Instant::now();
     let mut state = state::State::new(plan);
     let cohorts = cohorts::ordered_cohorts(&state);
+    let students: usize = cohorts.iter().map(|cohort| cohort.members.len()).sum();
+    log(&format!(
+        "[greedy] {} student(s) over {} list(s), in {} cohort(s)",
+        students,
+        plan.specs.len(),
+        cohorts.len(),
+    ));
+
+    let t = Instant::now();
     prefill::prefill(&mut state, &cohorts);
     // The cohorts are rarest first and their members ascending: the same
     // global order that drove prefill (§7.1). A student prefill placed in
     // every list of their profile is done; one whose profile also holds
     // non-claiming lists still enters, and only the missing groups are
-    // chosen.
-    for student in cohorts
+    // chosen. Placing one student never places another, so who is left can
+    // be read once, here, instead of at every turn of the pass.
+    let remaining: Vec<StudentId> = cohorts
         .iter()
         .flat_map(|cohort| cohort.members.iter().copied())
-    {
-        if !state.fully_placed(student) {
-            pass::place_student(&mut state, student);
+        .filter(|&student| !state.fully_placed(student))
+        .collect();
+    log(&format!(
+        "[greedy] Prefill: {} student(s) seated, {} left to the pass ({:.2?})",
+        students - remaining.len(),
+        remaining.len(),
+        t.elapsed(),
+    ));
+
+    let t = Instant::now();
+    let step = remaining.len().div_ceil(10).max(1);
+    for (done, &student) in remaining.iter().enumerate() {
+        pass::place_student(&mut state, student);
+        // The last one is the summary line below, not a progress line.
+        if (done + 1) % step == 0 && done + 1 != remaining.len() {
+            log(&format!(
+                "[greedy] Pass: {}/{} student(s) placed ({:.2?})",
+                done + 1,
+                remaining.len(),
+                t.elapsed(),
+            ));
         }
     }
-    state.into_group_lists(names)
+    log(&format!(
+        "[greedy] Pass: {} student(s) placed ({:.2?})",
+        remaining.len(),
+        t.elapsed(),
+    ));
+
+    let lists = state.into_group_lists(names);
+    log(&format!("[greedy] Done ({:.2?})", total.elapsed()));
+    lists
 }

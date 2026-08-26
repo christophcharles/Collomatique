@@ -61,7 +61,7 @@ pub mod vars;
 pub use builder::{build_model, build_model_with_log};
 pub use convert::build_group_lists;
 pub use ghost::GhostGrouping;
-pub use greedy::greedy_group_lists;
+pub use greedy::{greedy_group_lists, greedy_group_lists_with_log};
 pub use incremental::build_incremental_epochs;
 pub use objective::ObjectiveWeights;
 pub use specs::{
