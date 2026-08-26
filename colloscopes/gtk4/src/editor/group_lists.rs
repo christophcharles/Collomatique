@@ -364,6 +364,10 @@ impl Component for GroupLists {
                         self.strategy.clone(),
                         model,
                         payload,
+                        // No warm start yet: this path still solves from
+                        // nothing. Seeding it with the greedy result is the
+                        // point of the rework to come.
+                        None,
                     ))
                     .unwrap();
             }

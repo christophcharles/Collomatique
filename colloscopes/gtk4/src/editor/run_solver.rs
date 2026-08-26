@@ -73,7 +73,16 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
 
 #[derive(Debug)]
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
-    Run(ConductorStrategy, Model<B, E, C>, ConductorPayload<B>),
+    /// Start a solve. The last field is an optional warm start: a complete
+    /// configuration of the model — base variables and extras — the caller
+    /// already has a solution for. The conductor checks it and, if it is
+    /// feasible, starts from it instead of from nothing.
+    Run(
+        ConductorStrategy,
+        Model<B, E, C>,
+        ConductorPayload<B>,
+        Option<ConfigData<InternalVar<B, E>>>,
+    ),
     CancelRequest,
     AcceptRequest,
     Accept,
@@ -556,7 +565,7 @@ where
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Run(strategy, model, payload) => {
+            DialogInput::Run(strategy, model, payload, warm_start) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.is_running = true;
@@ -658,7 +667,7 @@ where
                         &EngineExe::Current,
                         &model,
                         &strategy,
-                        None,
+                        warm_start,
                         payload,
                         result_cb,
                         progress_cb,
