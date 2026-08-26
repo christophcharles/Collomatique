@@ -16,17 +16,13 @@
 //! shape constraints of piece 8 (one group per student, min and max size), the
 //! two-term stability objective of piece 9 (minimize the shared student pairs
 //! *and* the shattering of the template, with configurable weights —
-//! [`ObjectiveWeights`], piece 11), and the incremental epochs
-//! ([`build_incremental_epochs`]), which callers feed to the solver.
+//! [`ObjectiveWeights`], piece 11).
 //!
-//! The epochs stagger the solve. Strict inclusion of the specs' student sets
-//! (piece 10) orders them into *levels*, so the inclusion-minimal lists are
-//! built first and every larger list aligns with the ones already fixed. A
-//! level is not solved in one go, though: every spec gets an epoch of its own,
-//! and inside a level the least entangled lists — those sharing the fewest
-//! students with the rest of the level — run before the more entangled ones,
-//! smaller before larger on a tie (pieces 12 and 12bis). See
-//! [`build_incremental_epochs`] for the two passes that build them.
+//! The crate used to number *incremental epochs* over the specs (pieces 10, 12
+//! and 12bis), so the solve could be staggered along strict inclusion of the
+//! specs' student sets. Nothing seeds this model that way any more — the
+//! greedy below supplies the initial solution — so the epochs are gone; the
+//! pinned roadmap still describes them.
 //!
 //! The *template* ([`GenerationPlan::ghost`]) is a grouping of every student
 //! at the canonical group size, which the objective asks the real lists to
@@ -52,7 +48,6 @@ mod convert;
 mod extras;
 pub mod ghost;
 mod greedy;
-mod incremental;
 mod objective;
 mod specs;
 mod types;
@@ -62,7 +57,6 @@ pub use builder::{build_model, build_model_with_log};
 pub use convert::{build_group_lists, group_lists_to_warm_start};
 pub use ghost::GhostGrouping;
 pub use greedy::{greedy_group_lists, greedy_group_lists_with_log};
-pub use incremental::build_incremental_epochs;
 pub use objective::ObjectiveWeights;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,

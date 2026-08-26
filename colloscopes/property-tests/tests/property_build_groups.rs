@@ -14,7 +14,7 @@
 //! On failure the harness prints the seed and the full op log, so re-running
 //! the binary reproduces the exact walk.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use collomatique_testgen_colloscopes::rand::Rng;
 use collomatique_testgen_colloscopes::{ChaCha8Rng, generator, harness};
@@ -23,8 +23,8 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::InnerData;
 
 use collomatique_constraints_groups::{
-    GroupListIdx, ObjectiveWeights, Var, build_generation_plan, build_group_lists,
-    build_incremental_epochs, build_model, vars::VarEnv,
+    GroupListIdx, ObjectiveWeights, Var, build_generation_plan, build_group_lists, build_model,
+    vars::VarEnv,
 };
 use collomatique_ilp::ConfigData;
 
@@ -74,131 +74,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     let model = build_model(&plan, ObjectiveWeights::default());
     let _ = model.stats();
 
-    // The epoch map (pieces 10 + 12bis) must name exactly one entry per
-    // base variable and give every variable of a spec the same epoch.
-    // Piece 12bis gives every spec an epoch of its own, so the probe
-    // checks the properties that define the numbering, against inclusion
-    // heights recomputed here by naive fixpoint iteration (well-founded
-    // on strict inclusion, hence a unique solution — and an
-    // implementation independent of the production ascending-size pass):
-    //   (a) heights ascend with the epochs: a strictly lower height
-    //       means a strictly smaller epoch (this subsumes "a strictly
-    //       included spec solves strictly earlier");
-    //   (b) the map is a bijection: every spec its own epoch, numbers
-    //       contiguous from 0 — with (a), each level occupies a
-    //       contiguous run of epochs;
-    //   (c) inside a height, the epochs ascend by (students shared with
-    //       the rest of the level, then student count) — the
-    //       least-entangled, then smallest, lists solve first.
-    let epochs = build_incremental_epochs(&plan);
     let env = VarEnv::new(&plan);
-    let var_count: usize = plan
-        .specs
-        .iter()
-        .enumerate()
-        .map(|(i, (s, _))| s.students().len() * env.group_count(GroupListIdx(i)) as usize)
-        .sum();
-    assert_eq!(epochs.len(), var_count, "one epoch entry per base variable");
-    let spec_epoch = |i: usize| {
-        let spec = &plan.specs[i].0;
-        let student = *spec
-            .students()
-            .first()
-            .expect("a spec always has registered students");
-        epochs[&Var::StudentInGroup {
-            list: GroupListIdx(i),
-            student,
-            group: 0,
-        }]
-    };
-    for (i, (spec, _covered)) in plan.specs.iter().enumerate() {
-        let list = GroupListIdx(i);
-        for &student in spec.students() {
-            for group in 0..env.group_count(list) {
-                assert_eq!(
-                    epochs[&Var::StudentInGroup {
-                        list,
-                        student,
-                        group,
-                    }],
-                    spec_epoch(i),
-                    "all variables of a spec share its epoch",
-                );
-            }
-        }
-    }
-
-    let n = plan.specs.len();
-    let strict_subset = |j: usize, i: usize| {
-        let (s, t) = (plan.specs[j].0.students(), plan.specs[i].0.students());
-        s.len() < t.len() && s.is_subset(t)
-    };
-    let mut heights = vec![0u32; n];
-    loop {
-        let mut changed = false;
-        for i in 0..n {
-            let h = (0..n)
-                .filter(|&j| strict_subset(j, i))
-                .map(|j| heights[j] + 1)
-                .max()
-                .unwrap_or(0);
-            if heights[i] != h {
-                heights[i] = h;
-                changed = true;
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    for i in 0..n {
-        for j in 0..n {
-            if heights[i] < heights[j] {
-                assert!(
-                    spec_epoch(i) < spec_epoch(j),
-                    "heights ascend with the epochs",
-                );
-            }
-        }
-    }
-
-    let epoch_values: BTreeSet<u32> = (0..n).map(spec_epoch).collect();
-    assert_eq!(epoch_values.len(), n, "every spec gets its own epoch");
-    let contiguous: BTreeSet<u32> = (0..n as u32).collect();
-    assert_eq!(
-        epoch_values, contiguous,
-        "epoch numbers are contiguous from 0",
-    );
-
-    let mut levels: BTreeMap<u32, Vec<usize>> = BTreeMap::new();
-    for i in 0..n {
-        levels.entry(heights[i]).or_default().push(i);
-    }
-    for members in levels.values() {
-        let shared = |i: usize| {
-            plan.specs[i]
-                .0
-                .students()
-                .iter()
-                .filter(|student| {
-                    members
-                        .iter()
-                        .any(|&j| j != i && plan.specs[j].0.students().contains(student))
-                })
-                .count()
-        };
-        let mut by_epoch = members.clone();
-        by_epoch.sort_by_key(|&i| spec_epoch(i));
-        let keys: Vec<(usize, usize)> = by_epoch
-            .iter()
-            .map(|&i| (shared(i), plan.specs[i].0.students().len()))
-            .collect();
-        assert!(
-            keys.windows(2).all(|w| w[0] <= w[1]),
-            "least-shared, then smallest, specs solve first inside a height",
-        );
-    }
 
     // A random placement must convert into structurally valid lists
     // (`GroupList::new` inside `build_group_lists` panics otherwise), with
