@@ -481,6 +481,7 @@ dependencies = [
  "collomatique-ops",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-storage",
  "collomatique-testgen-colloscopes",
  "collomatique-time",
  "non-empty-string",

@@ -12,7 +12,8 @@ use std::ops::RangeInclusive;
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    Data, NewId, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp, WeekOp, ids::WeekId,
+    AssignmentOp, Data, NewId, Op, PeriodOp, StudentOp, SubjectOp, TeacherOp, WeekOp,
+    ids::{StudentId, WeekId},
 };
 
 use crate::generator::CATEGORIES;
@@ -217,6 +218,16 @@ pub struct BootstrapScale {
     pub students: RangeInclusive<u32>,
     pub subjects: RangeInclusive<u32>,
     pub teachers: RangeInclusive<u32>,
+    /// Chance that a given student joins a given (period, subject) row, or
+    /// [None] to create no assignment rows at all
+    ///
+    /// [bootstrap] asks for none, which is why the walks' documents have never
+    /// had a row worth splitting into groups. A row cannot be *grown* into one
+    /// either: the generator adds one student at a time while a single period
+    /// or subject removal wipes a whole row, and it removes far more often than
+    /// 259 assignment ops can refill. So a fixture-grade document has to arrive
+    /// with its rows already full, exactly as a real one does.
+    pub assigned_fraction: Option<f64>,
 }
 
 impl Default for BootstrapScale {
@@ -226,6 +237,7 @@ impl Default for BootstrapScale {
             students: 3..=8,
             subjects: 2..=4,
             teachers: 2..=3,
+            assigned_fraction: None,
         }
     }
 }
@@ -340,6 +352,54 @@ pub fn bootstrap_with(
             Op::Teacher(TeacherOp::Add(teacher)),
             "teacher",
         );
+    }
+
+    // Assignment rows, only if the scale asks for them. At
+    // [BootstrapScale::default] this whole block is skipped, RNG draws
+    // included, so [bootstrap] consumes the stream exactly as it always has.
+    if let Some(fraction) = scale.assigned_fraction {
+        // Rows are wanted on every subject, not only the ones that drew
+        // interrogations, so the two lists are concatenated.
+        let mut subject_ids = interrogation_subject_ids.clone();
+        subject_ids.extend(
+            state
+                .get_data()
+                .get_inner_data()
+                .params
+                .subjects
+                .ordered_subject_list
+                .iter()
+                .map(|(id, _)| id)
+                .filter(|id| !interrogation_subject_ids.contains(id)),
+        );
+        let student_ids: Vec<StudentId> = state
+            .get_data()
+            .get_inner_data()
+            .params
+            .students
+            .student_map
+            .iter()
+            .map(|(id, _)| id)
+            .collect();
+
+        for &period in &period_ids {
+            for &subject in &subject_ids {
+                let row: BTreeSet<StudentId> = student_ids
+                    .iter()
+                    .copied()
+                    .filter(|_| rng.random_bool(fraction))
+                    .collect();
+                if row.is_empty() {
+                    continue;
+                }
+                apply(
+                    &mut state,
+                    &mut snapshots,
+                    Op::Assignment(AssignmentOp::SetRow(period, subject, row)),
+                    "assignment",
+                );
+            }
+        }
     }
 
     (state, snapshots)
