@@ -266,6 +266,18 @@ impl StrategyContext {
         }
     }
 
+    /// Write a line on the ambient echo sink, or drop it when the caller installed none — the
+    /// same fallback the solve methods make for a backend's output.
+    ///
+    /// For a strategy's *own* console output: what it decided before, between or around its
+    /// solves, which no solver and no worker would ever say. Lines carry their own terminator,
+    /// like the ones coming back from a subprocess.
+    pub fn echo(&self, line: String) {
+        if let Some(on_echo) = &self.on_echo {
+            on_echo(line);
+        }
+    }
+
     pub async fn solve(
         &self,
         desc: &ProblemDesc,
@@ -2499,14 +2511,27 @@ mod tests {
         collomatique_ilp::solution_to_config_data(&raw, &var_order)
     }
 
-    /// Run the conductor on `strategy` with `warm_start`, and report its outcome together with
-    /// every conductor-level objective it announced along the way.
+    /// What one `run_warm_start_check` saw: the conductor's outcome, the objective of every
+    /// conductor-level update it announced, and every line it echoed.
+    struct WarmStartCheck {
+        outcome: StrategyOutcome<InternalVar<usize, ()>>,
+        announced: Vec<f64>,
+        echoed: Vec<String>,
+    }
+
+    /// Run the conductor on `strategy` with `warm_start`, listening on both its channels.
     async fn run_warm_start_check(
         strategy: &ConductorStrategy,
         warm_start: Option<ConfigData<InternalVar<usize, ()>>>,
-    ) -> (StrategyOutcome<InternalVar<usize, ()>>, Vec<f64>) {
+    ) -> WarmStartCheck {
         let model = make_capped_model();
-        let ctx = StrategyContext::new(Arc::new(UnusedBackend));
+
+        let echoed: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let echoed_cb = echoed.clone();
+        let ctx = StrategyContext::with_echo(
+            Arc::new(UnusedBackend),
+            Arc::new(move |line: String| echoed_cb.lock().unwrap().push(line)),
+        );
 
         let announced: Arc<Mutex<Vec<f64>>> = Arc::new(Mutex::new(Vec::new()));
         let announced_cb = announced.clone();
@@ -2529,8 +2554,11 @@ mod tests {
             )
             .await
             .unwrap();
-        let announced = announced.lock().unwrap().clone();
-        (outcome, announced)
+        WarmStartCheck {
+            outcome,
+            announced: announced.lock().unwrap().clone(),
+            echoed: echoed.lock().unwrap().clone(),
+        }
     }
 
     /// A conductor with nothing enabled: whatever incumbent comes out can only be the warm start.
@@ -2551,14 +2579,19 @@ mod tests {
         // x1 alone: feasible, worth 2.
         let hint = complete_config(&model, [0.0, 1.0]);
 
-        let (outcome, announced) =
-            run_warm_start_check(&checking_conductor(true), Some(hint.clone())).await;
+        let check = run_warm_start_check(&checking_conductor(true), Some(hint.clone())).await;
 
-        assert_eq!(outcome.status, SolveStatus::Optimal);
-        assert_eq!(outcome.objective, Some(2.0));
-        assert_eq!(outcome.solution, Some(hint));
+        assert_eq!(check.outcome.status, SolveStatus::Optimal);
+        assert_eq!(check.outcome.objective, Some(2.0));
+        assert_eq!(check.outcome.solution, Some(hint));
         // And it was announced right away, so a UI shows an incumbent before any worker runs.
-        assert_eq!(announced, vec![2.0]);
+        assert_eq!(check.announced, vec![2.0]);
+        assert_eq!(
+            check.echoed,
+            vec![
+                "supplied warm start is feasible (objective=2.0000): adopted as initial incumbent\n"
+            ]
+        );
     }
 
     #[tokio::test]
@@ -2567,12 +2600,19 @@ mod tests {
         // Both variables at 1 breaks `x0 + x1 <= 1`.
         let hint = complete_config(&model, [1.0, 1.0]);
 
-        let (outcome, announced) =
-            run_warm_start_check(&checking_conductor(true), Some(hint)).await;
+        let check = run_warm_start_check(&checking_conductor(true), Some(hint)).await;
 
-        assert_eq!(outcome.status, SolveStatus::Stopped(StopReason::Callback));
-        assert_eq!(outcome.solution, None);
-        assert!(announced.is_empty());
+        assert_eq!(
+            check.outcome.status,
+            SolveStatus::Stopped(StopReason::Callback)
+        );
+        assert_eq!(check.outcome.solution, None);
+        assert!(check.announced.is_empty());
+        // Refused out loud: the caller hears why, instead of guessing from a missing incumbent.
+        assert_eq!(
+            check.echoed,
+            vec!["supplied warm start breaks a constraint: not adopted as incumbent\n"]
+        );
     }
 
     #[tokio::test]
@@ -2581,12 +2621,21 @@ mod tests {
         // just like an infeasible one — never half-adopted.
         let hint = ConfigData::from([(InternalVar::Base(0usize), 1.0)]);
 
-        let (outcome, announced) =
-            run_warm_start_check(&checking_conductor(true), Some(hint)).await;
+        let check = run_warm_start_check(&checking_conductor(true), Some(hint)).await;
 
-        assert_eq!(outcome.status, SolveStatus::Stopped(StopReason::Callback));
-        assert_eq!(outcome.solution, None);
-        assert!(announced.is_empty());
+        assert_eq!(
+            check.outcome.status,
+            SolveStatus::Stopped(StopReason::Callback)
+        );
+        assert_eq!(check.outcome.solution, None);
+        assert!(check.announced.is_empty());
+        // And said as the distinct mistake it is, not lumped in with an infeasible one.
+        assert_eq!(
+            check.echoed,
+            vec![
+                "supplied warm start does not value every variable of the model: not adopted as incumbent\n"
+            ]
+        );
     }
 
     #[tokio::test]
@@ -2595,11 +2644,15 @@ mod tests {
         let hint = complete_config(&model, [0.0, 1.0]);
 
         // The very hint the first test adopts, with the option off: it stays a plain hint.
-        let (outcome, announced) =
-            run_warm_start_check(&checking_conductor(false), Some(hint)).await;
+        let check = run_warm_start_check(&checking_conductor(false), Some(hint)).await;
 
-        assert_eq!(outcome.status, SolveStatus::Stopped(StopReason::Callback));
-        assert_eq!(outcome.solution, None);
-        assert!(announced.is_empty());
+        assert_eq!(
+            check.outcome.status,
+            SolveStatus::Stopped(StopReason::Callback)
+        );
+        assert_eq!(check.outcome.solution, None);
+        assert!(check.announced.is_empty());
+        // Nothing was checked, so there is nothing to report either.
+        assert!(check.echoed.is_empty());
     }
 }

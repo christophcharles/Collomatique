@@ -1169,17 +1169,32 @@ impl Strategy for ConductorStrategy {
         // `is_feasible`/`eval` are plain evaluations, so this costs one pass over the constraints —
         // no worker, no solver, no subprocess. A hint that misses a variable, breaks a bound or
         // violates a constraint is not adopted, and stays the MIP-start fallback it always was.
+        //
+        // Each of the three outcomes says so on the context's echo sink: a refused hint is a
+        // caller-side mistake, and it would otherwise show up only as a missing incumbent.
         if self.warm_start_incumbent
             && let Some(hint) = &warm_start
-            && let Some(solution) = model.solution_from_complete_data(hint.clone())
-            && solution.is_feasible()
         {
-            let objective = solution.eval();
-            let snapshot = emit_if_changed(&status, |st| {
-                update_best_solution(st, hint.clone(), objective, sense);
-            });
-            if let Some(s) = snapshot {
-                on_progress(ConductorProgress::Conductor(s));
+            match model.solution_from_complete_data(hint.clone()) {
+                Some(solution) if solution.is_feasible() => {
+                    let objective = solution.eval();
+                    ctx.echo(format!(
+                        "supplied warm start is feasible (objective={objective:.4}): adopted as initial incumbent\n"
+                    ));
+                    let snapshot = emit_if_changed(&status, |st| {
+                        update_best_solution(st, hint.clone(), objective, sense);
+                    });
+                    if let Some(s) = snapshot {
+                        on_progress(ConductorProgress::Conductor(s));
+                    }
+                }
+                Some(_) => ctx.echo(
+                    "supplied warm start breaks a constraint: not adopted as incumbent\n".to_owned(),
+                ),
+                None => ctx.echo(
+                    "supplied warm start does not value every variable of the model: not adopted as incumbent\n"
+                        .to_owned(),
+                ),
             }
         }
 
