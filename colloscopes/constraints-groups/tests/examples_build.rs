@@ -1,15 +1,17 @@
-//! Smoke test: the generation model must build for every file under the
-//! repo-root `examples/` directory, for the *maximal* request (rebuild every
-//! assigned pair, keep every prefilled list).
+//! Smoke test: the generation model must build — and the greedy must run —
+//! for every file under the repo-root `examples/` directory, for the
+//! *maximal* request (rebuild every assigned pair, keep every prefilled
+//! list).
 //!
 //! `build_generation_plan` and `build_model` panic — or, for the former,
 //! return `Err` — on internal inconsistency, so getting through without one
-//! is the assertion; no solver or solution is needed. The directory is
-//! walked at runtime, so a new `.collomatique` example is covered
-//! automatically.
+//! is the assertion; no solver or solution is needed. The greedy needs no
+//! solution either: it produces the lists itself, so this test also checks
+//! that they are structurally sound. The directory is walked at runtime, so
+//! a new `.collomatique` example is covered automatically.
 
 use collomatique_constraints_groups::{
-    GenerationRequest, ObjectiveWeights, build_generation_plan, build_model,
+    GenerationRequest, ObjectiveWeights, build_generation_plan, build_model, greedy_group_lists,
 };
 use collomatique_storage::deserialize_data;
 use std::collections::BTreeSet;
@@ -76,5 +78,23 @@ fn all_examples_build() {
             .unwrap_or_else(|e| panic!("plan build failed for {name}: {e}"));
         // Panics on internal inconsistency; building without a panic is the check.
         let _ = build_model(&plan, ObjectiveWeights::default());
+
+        // The greedy must produce structurally valid lists on every example.
+        let names: Vec<String> = (0..plan.specs.len())
+            .map(|i| format!("Liste {i}"))
+            .collect();
+        let lists = greedy_group_lists(&plan, &names);
+        assert_eq!(
+            lists.len(),
+            plan.specs.len(),
+            "one list per spec for {name}"
+        );
+        for ((list, _covered), (spec, _)) in lists.iter().zip(plan.specs.iter()) {
+            assert_eq!(
+                list.filling().iter_students().count(),
+                spec.students().len(),
+                "every student placed exactly once in {name}",
+            );
+        }
     }
 }

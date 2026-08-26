@@ -47,6 +47,11 @@ path = "tests/property_build_groups.rs"
 required-features = ["fuzz"]
 
 [[test]]
+name = "property_greedy_groups"
+path = "tests/property_greedy_groups.rs"
+required-features = ["fuzz"]
+
+[[test]]
 name = "property_cascade"
 path = "tests/property_cascade.rs"
 required-features = ["fuzz"]

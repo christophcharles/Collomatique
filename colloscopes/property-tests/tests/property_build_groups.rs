@@ -21,15 +21,20 @@ use collomatique_testgen_colloscopes::{ChaCha8Rng, generator, harness};
 
 use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::InnerData;
-use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use collomatique_constraints_groups::{
-    GenerationRequest, GroupListIdx, GroupListSpec, ObjectiveWeights, Var, build_generation_plan,
-    build_group_lists, build_incremental_epochs, build_model, vars::VarEnv,
+    GroupListIdx, ObjectiveWeights, Var, build_generation_plan, build_group_lists,
+    build_incremental_epochs, build_model, vars::VarEnv,
 };
 use collomatique_ilp::ConfigData;
 
 use harness::RunConfig;
+
+// Shared with `property_greedy_groups`: both walks must draw their requests
+// the same way (see the module for why it lives outside this file).
+#[path = "support/generation_request.rs"]
+mod generation_request;
+use generation_request::gen_generation_request;
 
 /// Much smaller than the state suite: every probe is a full model build, so we
 /// trade seeds/ops for a handful of hundred builds. `invalid_fraction: 0.0`
@@ -44,62 +49,6 @@ const CONFIG: RunConfig = RunConfig {
 /// Build a model every `BUILD_STRIDE` successful ops (plus on the bootstrap and
 /// final states).
 const BUILD_STRIDE: usize = 5;
-
-/// Random valid request drawn from the current state: any assigned
-/// (period, subject) pair whose subject has interrogations *and* whose group
-/// sizes can be satisfied may be rebuilt, any prefilled list may be kept.
-///
-/// The feasibility filter mirrors the config dialog, which gates on the very
-/// same constructor before offering a subject: a valid document may perfectly
-/// well ask for groups of 5 to 6 students out of a class of 4, and neither
-/// the dialog nor this generator may hand such a pair to the planner.
-fn gen_generation_request(rng: &mut ChaCha8Rng, params: &Parameters) -> GenerationRequest {
-    let mut rebuild = BTreeSet::new();
-    // Every size range seen along the way, so the canonical-range override
-    // can be drawn from a plausible one.
-    let mut ranges = Vec::new();
-    for (period, subject, students) in params.assignments.iter() {
-        let Some(interrogations) = params
-            .subjects
-            .find_subject(subject)
-            .and_then(|s| s.parameters.interrogation_parameters.clone())
-        else {
-            continue;
-        };
-        // An empty student set is legitimately `skipped` by the planner, so
-        // it stays in the request; only unsatisfiable sizes are filtered.
-        let usable = students.is_empty()
-            || GroupListSpec::new(students.clone(), interrogations.students_per_group.clone())
-                .is_ok();
-        if usable && rng.random_bool(0.5) {
-            rebuild.insert((period, subject));
-            ranges.push(interrogations.students_per_group);
-        }
-    }
-
-    let mut kept_lists = BTreeSet::new();
-    for (id, list) in params.group_lists.group_list_map.iter() {
-        if list.is_prefilled() && rng.random_bool(0.5) {
-            kept_lists.insert(id);
-        }
-    }
-
-    // Mostly automatic, as the dialog leaves it: the manual path is rarer
-    // but must survive the same round trip. The override is not required to
-    // be a range any spec uses, but drawing it from one keeps the walk
-    // exercising realistic elections.
-    let canonical_range = if ranges.is_empty() || !rng.random_bool(0.1) {
-        None
-    } else {
-        Some(ranges[rng.random_range(0..ranges.len())].clone())
-    };
-
-    GenerationRequest {
-        rebuild,
-        kept_lists,
-        canonical_range,
-    }
-}
 
 /// One probe: synthesize a request, plan it, build the model, and convert a
 /// random in-domain assignment back into group lists.
