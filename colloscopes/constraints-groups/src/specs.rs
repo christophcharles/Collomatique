@@ -104,6 +104,20 @@ pub enum RangeSource {
     Manual,
 }
 
+/// One kept prefilled list, as the greedy objective sees it: its actual
+/// groups and how many (period, subject) pairs currently use it. Partner
+/// counts come from the actual group sizes, never from the list's size
+/// range — prefilled lists are user-made and may be unbalanced. A list
+/// associated to zero pairs has `use_count == 0` and is naturally inert.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeptList {
+    /// The groups, as student sets, in the list's own group order.
+    pub groups: Vec<BTreeSet<StudentId>>,
+    /// Number of (period, subject) pairs associated to this list, read off
+    /// `GroupLists::subjects_associations` when the plan was built.
+    pub use_count: usize,
+}
+
 /// The deduplicated, model-ready form of a request.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GenerationPlan {
@@ -141,6 +155,11 @@ pub struct GenerationPlan {
     /// split the whole student body at all: the template term is then simply
     /// absent.
     pub ghost: Option<GhostGrouping>,
+    /// The kept prefilled lists, in ascending `GroupListId` order (the
+    /// request's `kept_lists` is a `BTreeSet`). They enter the greedy
+    /// objective as real, immutable list-uses; the ILP path ignores this
+    /// field for now (it still reads `pinned_pairs`).
+    pub kept_lists: Vec<KeptList>,
 }
 
 /// A malformed request. These are caller bugs (the config dialog only
@@ -308,6 +327,14 @@ pub fn build_generation_plan(
         Some(range) => Some((range.clone(), RangeSource::Manual)),
         None => elect_canonical_range(&specs).map(|range| (range, RangeSource::Automatic)),
     };
+    // One reverse pass: how many (period, subject) pairs each kept list
+    // currently serves. `subjects_associations` has no reverse index.
+    let mut use_counts: BTreeMap<GroupListId, usize> = BTreeMap::new();
+    for (_pair, list_id) in params.group_lists.subjects_associations.iter() {
+        *use_counts.entry(*list_id).or_default() += 1;
+    }
+
+    let mut kept_lists = Vec::new();
     let mut pinned_pairs: BTreeMap<_, BTreeSet<(StudentId, StudentId)>> = BTreeMap::new();
     for list_id in &request.kept_lists {
         let list = params
@@ -321,6 +348,12 @@ pub fn build_generation_plan(
         let GroupListFilling::Prefilled { groups } = list.filling() else {
             unreachable!("kept lists were validated to be prefilled above");
         };
+        // Recorded faithfully, zero uses included: dropping the inert ones
+        // is the greedy's business, not the plan builder's.
+        kept_lists.push(KeptList {
+            groups: groups.iter().map(|group| group.students.clone()).collect(),
+            use_count: use_counts.get(list_id).copied().unwrap_or(0),
+        });
         for group in groups {
             // BTreeSet iteration is sorted, so i < j guarantees a < b.
             let members: Vec<StudentId> = group.students.iter().copied().collect();
@@ -352,6 +385,7 @@ pub fn build_generation_plan(
         pinned_pairs,
         canonical_range,
         ghost,
+        kept_lists,
     })
 }
 
@@ -688,6 +722,54 @@ pub(crate) mod tests {
         let plan =
             build_generation_plan(&params, &request(&[(1, 3)], &[8])).expect("well-formed request");
         assert!(plan.pinned_pairs.is_empty());
+    }
+
+    #[test]
+    fn kept_lists_carry_their_groups_and_use_counts() {
+        let mut params = base_params();
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(7), prefilled_list(&[&[1, 2], &[3, 4]]));
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(8), prefilled_list(&[&[1, 3], &[2, 4]]));
+        // List 7 serves two pairs; list 8 is stored but associated to none.
+        params
+            .group_lists
+            .subjects_associations
+            .insert((period_id(1), subject_id(1)), group_list_id(7));
+        params
+            .group_lists
+            .subjects_associations
+            .insert((period_id(1), subject_id(2)), group_list_id(7));
+
+        let plan = build_generation_plan(&params, &request(&[(1, 1)], &[7, 8]))
+            .expect("well-formed request");
+
+        // Ascending id order, actual groups, honest use counts.
+        assert_eq!(
+            plan.kept_lists,
+            vec![
+                KeptList {
+                    groups: vec![set(&[1, 2]), set(&[3, 4])],
+                    use_count: 2,
+                },
+                KeptList {
+                    groups: vec![set(&[1, 3]), set(&[2, 4])],
+                    use_count: 0,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn no_kept_lists_means_no_kept_list_descriptions() {
+        let params = base_params();
+        let plan =
+            build_generation_plan(&params, &request(&[(1, 1)], &[])).expect("well-formed request");
+        assert!(plan.kept_lists.is_empty());
     }
 
     #[test]

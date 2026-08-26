@@ -46,6 +46,7 @@ fn model_solves_and_converts() {
                 (4..=6).map(student).collect(),
             ],
         )),
+        kept_lists: Vec::new(),
     };
 
     let model = build_model(&plan, ObjectiveWeights::default());

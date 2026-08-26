@@ -57,7 +57,7 @@ pub use incremental::build_incremental_epochs;
 pub use objective::ObjectiveWeights;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
-    RangeSource, build_generation_plan,
+    KeptList, RangeSource, build_generation_plan,
 };
 pub use types::{ConstraintDesc, ExtraVarName};
 pub use vars::{GroupListIdx, RefGroupIdx, SizeClassIdx, Var};

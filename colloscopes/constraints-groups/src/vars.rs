@@ -266,6 +266,7 @@ pub(crate) mod tests {
             pinned_pairs: BTreeMap::new(),
             canonical_range,
             ghost,
+            kept_lists: Vec::new(),
         }
     }
 
