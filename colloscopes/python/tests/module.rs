@@ -7911,8 +7911,9 @@ fn a_removed_group_list_stales_the_values_that_name_it() {
 /// The group lists are added, rewritten, associated and removed from python
 ///
 /// The twelfth family of the ops mirror: `doc.group_lists` gains `add`,
-/// `update` and `remove` for the lists themselves, and `set_association` and
-/// `duplicate_previous_period` for the table beside them. An `update` carries
+/// `update`, `remove` and `remove_all` for the lists themselves, and
+/// `set_association`, `duplicate_previous_period` and `clear_associations` for
+/// the table beside them. An `update` carries
 /// the whole list, parameters and filling together, because that is what the op
 /// carries — so a filling that changes shape is an ordinary rewrite here.
 ///
@@ -8048,7 +8049,7 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
         .find(|period| **period != cell_period)
         .expect("the example has more than one period");
 
-    // The french labels the six operations carry, so that the script's undo
+    // The french labels the eight operations carry, so that the script's undo
     // assertions pin the operations' own names and not merely some strings.
     // Only the variant — and, for the association, whether it names a list — is
     // read, so the payloads below are the nearest ones to hand.
@@ -8073,6 +8074,8 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
         None,
     ));
     let duplicate_label = label(GroupListsUpdateOp::DuplicatePreviousPeriod(cell_period));
+    let remove_all_label = label(GroupListsUpdateOp::DeleteAllGroupLists);
+    let clear_label = label(GroupListsUpdateOp::ClearPeriodAssociations(cell_period));
 
     // The list the second stage reads: the served one, automatic and otherwise
     // untouched, so that it can hold a placement row at all.
@@ -8105,6 +8108,8 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
             globals.set_item("assign_label", &assign_label)?;
             globals.set_item("unassign_label", &unassign_label)?;
             globals.set_item("duplicate_label", &duplicate_label)?;
+            globals.set_item("remove_all_label", &remove_all_label)?;
+            globals.set_item("clear_label", &clear_label)?;
             Ok(())
         },
         |py, globals| {

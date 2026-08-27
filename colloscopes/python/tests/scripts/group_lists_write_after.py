@@ -216,3 +216,91 @@ assert all(
 )
 assert doc.colloscope.interrogation(slot, week) == frozenset({0, 2})
 assert dict(doc.colloscope.group_list(served)) == {placed_low: 0, placed_high: 2}
+
+# Clearing a period drops every association it holds and nothing beyond them:
+# the lists themselves stay, since a list nobody uses is an ordinary document,
+# and the other periods keep their own rows.
+all_rows = list(group_lists.associations())
+cleared_rows = [
+    (period, subject)
+    for period, subject, _group_list in all_rows
+    if period == cell_period
+]
+kept_rows = [row for row in all_rows if row[0] != cell_period]
+assert cleared_rows
+assert kept_rows
+count_before = len(group_lists)
+
+result = group_lists.clear_associations(cell_period)
+assert isinstance(result, collomatique.OpResult)
+assert not hasattr(result, "created")
+
+# The one colle the document holds sits on the cleared period, and losing its
+# association takes its group bound to zero — the very repair the single
+# `set_association(…, None)` above draws, once per cleared coordinate that held
+# a colle. The unassignments are what the call asked for rather than repairs,
+# so the trim hangs off nothing.
+assert [w.kind for w in result.warnings] == ["RemoveGroupsFromInterrogationCell"]
+assert result.warnings[0].details == {
+    "slot": slot.id,
+    "week": week.id,
+    "groups": [0, 2],
+}
+assert result.warnings[0].parent is None
+
+assert all(
+    group_lists.association_for(period, subject) is None
+    for period, subject in cleared_rows
+)
+assert list(group_lists.associations()) == kept_rows
+assert len(group_lists) == count_before
+assert doc.colloscope.interrogation(slot, week) is None
+# The placement row is the list's own and no association ever held it up, so it
+# is untouched.
+assert dict(doc.colloscope.group_list(served)) == {placed_low: 0, placed_high: 2}
+
+# A period with nothing left to clear is no refusal: the call has nothing to
+# address and repairs nothing.
+again = group_lists.clear_associations(cell_period.id)
+assert again.warnings == []
+assert list(group_lists.associations()) == kept_rows
+
+assert doc.undo_name == clear_label
+doc.undo()
+doc.undo()
+assert list(group_lists.associations()) == all_rows
+assert doc.colloscope.interrogation(slot, week) == frozenset({0, 2})
+
+# Removing every list at once is the single removal run over the whole
+# collection, so each list drags along the same material: the associations that
+# named it, the colles those associations bounded, and — for the automatic one
+# — its placement row.
+result = group_lists.remove_all()
+assert isinstance(result, collomatique.OpResult)
+assert not hasattr(result, "created")
+
+kinds = [w.kind for w in result.warnings]
+assert kinds.count("UnassignGroupList") == len(all_rows)
+assert kinds.count("ClearColloscopeGroupListRow") == 1
+assert kinds.count("RemoveGroupsFromInterrogationCell") == 1
+
+assert len(group_lists) == 0
+assert list(group_lists.associations()) == []
+assert doc.colloscope.interrogation(slot, week) is None
+assert list(doc.colloscope.group_lists()) == []
+
+# Every handle naming a list went stale with the list.
+try:
+    served.name
+except collomatique.StaleHandleError:
+    pass
+else:
+    raise AssertionError("reading a removed group list must raise")
+
+# One operation, and so one undo slot, however many lists it removed.
+assert doc.undo_name == remove_all_label
+doc.undo()
+assert len(group_lists) == count_before
+assert list(group_lists.associations()) == all_rows
+assert doc.colloscope.interrogation(slot, week) == frozenset({0, 2})
+assert dict(doc.colloscope.group_list(served)) == {placed_low: 0, placed_high: 2}

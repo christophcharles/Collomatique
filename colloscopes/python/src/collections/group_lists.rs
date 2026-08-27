@@ -11,8 +11,9 @@
 //! associations keyed by `(period, subject)` — the hop every script makes
 //! between a colloscope cell and the names it should print.
 //!
-//! Written through `add`, `update` and `remove` for the lists themselves, and
-//! through `set_association` and `duplicate_previous_period` for the table
+//! Written through `add`, `update`, `remove` and `remove_all` for the lists
+//! themselves, and through `set_association`, `duplicate_previous_period` and
+//! `clear_associations` for the table
 //! beside them. An `update` carries the whole list — the parameters *and* the
 //! filling — because that is what the op carries: the model seals the two
 //! together, so there is no writing one without the other.
@@ -36,7 +37,7 @@
 //! ([crate::handles::argument]), and a filling naming a student the document
 //! does not hold is the value boundary's.
 //!
-//! The family's sixth op, `add_generated`, is the landing door of group-list
+//! The family's eighth op, `add_generated`, is the landing door of group-list
 //! generation and is not published here: that feature is not settled yet, so
 //! the API fronts nothing for it — neither the generation call nor this door
 //! (`docs/python/new_api_design.md` §10).
@@ -277,6 +278,26 @@ impl GroupLists {
         )
     }
 
+    /// Removes every group list at once
+    ///
+    /// [GroupLists::remove] run over the whole collection, and it drags along
+    /// exactly what one removal does, once per list: every association that
+    /// gave a list to a subject on a period, the colles those associations
+    /// bounded, and the placement row of every automatic list. What is left is
+    /// a document whose periods and subjects simply use no list at all.
+    ///
+    /// One operation, and so one undo slot, however many lists it removed.
+    /// Every handle naming a list goes stale.
+    ///
+    /// A document holding no list is not a refusal — there is nothing to
+    /// remove, and the answer's `warnings` is empty.
+    fn remove_all(&self, py: Python<'_>) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::DeleteAllGroupLists),
+        )
+    }
+
     /// Gives a subject a group list on a period, or takes it away
     ///
     /// The write half of `association_for`: one row of the `(period, subject) →
@@ -356,6 +377,31 @@ impl GroupLists {
         )
     }
 
+    /// Drops every association a period holds
+    ///
+    /// [GroupLists::set_association] with `None` run over the whole period, and
+    /// nothing beyond it: the lists themselves stay — a list nobody uses is an
+    /// ordinary document — and the other periods keep their own rows.
+    ///
+    /// Taking an association away takes the group bound of its coordinate to
+    /// zero, so the colles written there are out of range and the cascade
+    /// empties their cells, one repair per cleared coordinate that held any.
+    ///
+    /// One operation, and so one undo slot, however many rows it cleared.
+    /// Neither refusal `set_association` keeps arises here: a subject that runs
+    /// no interrogations and a subject that does not run on the period both
+    /// hold no association there to begin with, so neither is ever addressed.
+    /// A period a script clears twice running is likewise no refusal — the
+    /// second call has nothing to clear and repairs nothing.
+    fn clear_associations(&self, py: Python<'_>, period: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::ClearPeriodAssociations(period_id)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.GroupLists count={}>", self.__len__(py))
     }
@@ -364,7 +410,7 @@ impl GroupLists {
 impl GroupLists {
     /// Writes through the document the view came from
     ///
-    /// The four mutators that create nothing end here. The creating one ends in
+    /// The six mutators that create nothing end here. The creating one ends in
     /// [crate::results::created], which takes the same borrow and keeps the id
     /// the op issued as well.
     fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {
