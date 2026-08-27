@@ -326,6 +326,11 @@ colloscope, export config).
 | Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (`InstallColloscope`, §11.1) |
 | ExportConfig (11) | `doc.export_config.set_global(...)`, `.set_colloscope_enabled(bool)` / `_config(...)`, `.set_all_groups_enabled/_config`, `.set_prefilled_groups_enabled/_config`, `.set_automatic_groups_enabled/_config`, `.set_per_group_list_enabled/_config` |
 
+> **Added since**, on the `greedy_group_lists` branch (`e99f861b`, `42fd5a74`):
+> `group_lists.remove_all()` and `group_lists.clear_associations(period)`,
+> mirroring the two new ops `DeleteAllGroupLists` and `ClearPeriodAssociations`.
+> The GroupLists row counts neither, and neither does the total above it.
+
 No elementary `Op` is exposed. The cascade architecture makes raw elementary access
 unsafe to hand out (`force_apply` fixes nothing by design), and ops + the coarse
 door (§8) already cover everything.
