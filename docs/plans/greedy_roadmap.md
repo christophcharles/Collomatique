@@ -1,7 +1,7 @@
 # Roadmap: greedy group-list generation
 
 *Companion document: `greedy_algorithm.md` details point 1. This roadmap stays
-general; points 2, 3 and 4 will be detailed in future sessions.*
+general; points 2 and 4 will be detailed in future sessions.*
 
 ## Why this change
 
@@ -57,8 +57,8 @@ Detailed in `docs/plans/greedy_algorithm.md`. Summary:
 - New module `colloscopes/constraints-groups/src/greedy.rs` (with submodules,
   tests in `greedy/tests.rs`).
 - Input: `GenerationPlan`, extended with a description of the kept lists
-  (groups, use count). The greedy ignores `ghost`,
-  `canonical_range` and `pinned_pairs`.
+  (groups, use count). The ILP-era fields the greedy ignored — `ghost`,
+  `canonical_range`, `pinned_pairs` — retired with point 3.
 - Output: `Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)>` — the exact
   payload of `GroupListsUpdateOp::AddGeneratedGroupLists`, mirroring
   `build_group_lists`.
@@ -80,32 +80,85 @@ kept-list selection; the strategy/weights/canonical-range controls belong to
 the ILP path and their fate is tied to point 3. To be detailed in a future
 session.
 
-## Point 3 (optional) — ILP redesign
+## Point 3 (optional) — ILP redesign — **done**
 
-Redesign the ILP model around the same objective, so "send it to the ILP" is a
-strict refinement of the greedy, not a different taste:
+Landed in `56124cef..19951a7d` on `greedy_group_lists`. "Send it to the ILP" is
+now a strict refinement of the greedy rather than a different taste: at any
+placement, the model's objective equals the greedy's score of that placement to
+the last digit.
 
-- Same collision objective, linearized with per-pair level binaries and
-  ordering rows. This costs more pair machinery than today's `SharedPair`; the
+- Same collision objective, linearized by **expanding the square exactly**
+  instead of with per-pair level binaries and ordering rows — the first
+  deviation below. Two extra families: `Together { a, b, list, group }`, the
+  "these two share this group" site binary, and `Coincide`, its pairwise
+  product across two lists. Both are one-sided from above and pulled tight by
+  the maximize. This costs more pair machinery than the old `SharedPair`; the
   cost is accepted because the ILP is now the optional path.
-- The three hard constraint families are unchanged.
+- One enumeration (`src/pairs.rs`) is the single source of truth for three
+  readings — what is declared, what the objective weighs it at, and what the
+  warm start values it as. Nothing else keeps them in lockstep, so nothing
+  else may enumerate.
+- Built with `with_maximize`, the constant term carried inside the objective's
+  `LinExpr` rather than dropped as an offset: the model reports the greedy's
+  number, not merely its argmax.
 - **Retired**: the ghost (`ghost.rs`, `GenerationPlan::ghost`),
-  `canonical_range`, `pinned_pairs` (kept lists enter the objective directly),
-  the incremental epochs for this model, and the generate dialog's
-  canonical-range control.
-- **Two solve modes.** Fast mode: the prefilled assignments are fixed in the
-  model, the greedy's placements seed the rest as warm start, and the ILP
-  only optimizes the adjustment layer — a massive dimension reduction, better
-  than the epoch heuristic it replaces, but inheriting any contrived
-  placement the frozen pure groups force. Full mode: nothing fixed, the
-  complete prefill + greedy solution as warm start — the only mode that can
-  also revisit the pure groups themselves.
-- The greedy's full solution can seed the solver through the existing
-  `warm_start` plumbing (`StrategySubprocess::spawn` →
-  `set_mip_start`).
+  `canonical_range` and its election, `pinned_pairs` (kept lists enter the
+  objective directly, as constant mass), the size classes and the
+  `class_weight` decay that priced meetings by size class, `ObjectiveWeights`,
+  `SharedPair`/`co_occurrences`, the incremental epochs for this model, and the
+  generate dialog's canonical-range and weight controls. `build_model(plan,
+  frozen)` is the final signature.
+- **Two solve modes**, as planned and already wired: fast mode fixes the
+  prefilled assignments in the model and lets the ILP optimize the adjustment
+  layer alone — a massive dimension reduction, but inheriting any contrived
+  placement the frozen pure groups force; full mode fixes nothing and takes the
+  complete prefill + greedy solution as warm start, the only mode that can
+  revisit the pure groups themselves.
+- The greedy's full solution seeds the solver through the existing `warm_start`
+  plumbing (`StrategySubprocess::spawn` → `set_mip_start`).
 
-The irony is welcome: the redesigned model is *simpler* than today's even
-though the objective is heavier. To be detailed in a future session.
+The irony held: the redesigned model is *simpler* than the one it replaces even
+though the objective is heavier — the retirement commit alone removed about ten
+times the code it added.
+
+### Two deviations from the sketch above
+
+**Exact quadratic expansion, not level binaries with ordering rows.** Level
+binaries compute the per-pair contribution exactly only when all of a pair's
+shared sites carry the *same* mass. The license case (`greedy_algorithm.md`
+§2.4 — a colle trio and a size-12 tutorial in one student's profile) is
+precisely the unequal-mass case, and it is the case the objective exists to get
+right. So the square is expanded outright: for binaries `(c + Σ mᵢzᵢ)² = c² +
+Σ (2c·mᵢ + mᵢ²) zᵢ + 2 Σ_{i<j} mᵢmⱼ zᵢzⱼ`, and pairwise products suffice.
+
+There are also **no symmetry-breaking ordering rows**, for a separate reason:
+the greedy numbers its groups in claim order, not lexicographically, so such
+rows would reject the warm start — and they can conflict with the frozen pins
+of fast mode.
+
+**Group sizes are equality rows, so "the three hard constraint families are
+unchanged" is no longer true.** The `students_per_group` min/max pair is
+replaced by one equality per group, `Σ_s x[l,s,g] == τ[l,g]`, at the balanced
+targets. This is deliberate: constant τ is what makes every mass a constant
+coefficient, and without it the objective is not linearizable at all. It costs
+nothing elsewhere — the balanced sizes are part of the settled foundation
+above, always feasible, and the greedy satisfies them by construction, so the
+warm start stays valid.
+
+### The anti-drift net
+
+The two objectives are written independently — a running expansion of squares
+in the model, a direct sum of squared partner distributions in the greedy — and
+share only the mass formula. What guarantees they never drift is an equality
+asserted at three scales. In the small,
+`objective::tests::objective_matches_the_greedy_ground_truth` runs a battery of
+hand plans — multi-tier lists, overlapping lists, kept lists, a kept-only
+student, a multiplicity-0 spec. At document scale, the same equality holds on a
+frozen copy of a real document (`tests/examples_build.rs`, which is a *copy* on
+purpose: the subject is the code, so its context must not move with
+`examples/`). And under a real CBC solve, the optimal value itself is checked
+in `the_optimum_is_reached_at_a_tight_configuration`. `placement_objective` is
+the ground truth all three compare against.
 
 ## Point 4 — Python API
 
