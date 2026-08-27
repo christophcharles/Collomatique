@@ -5,16 +5,14 @@ use relm4::{
 };
 
 use collomatique_constraints_groups::{
-    FrozenPlacements, GenerationPlan, GenerationRequest, GroupListsModel, ObjectiveWeights,
-    build_generation_plan, build_model_with_log,
+    FrozenPlacements, GenerationPlan, GroupListsModel, ObjectiveWeights, build_model_with_log,
 };
-use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
 /// Modal dialog shown while the group-list ILP model is built off-thread, on the way to the
 /// optional polish of a greedy result. Cousin of `build_model::loading_dialog`, with no error
-/// state: neither the plan nor the model can fail here (see `Show`).
+/// state: the model build cannot fail.
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
@@ -25,15 +23,9 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    /// Build the plan and the model for this request — canonical range included — against
-    /// these parameters, with these objective weights, holding these seats fixed. An empty
-    /// set pins nothing, which is what leaves the polish free to redo the whole assignment.
-    Show(
-        GenerationRequest,
-        ObjectiveWeights,
-        FrozenPlacements,
-        Parameters,
-    ),
+    /// Build the model for this plan, holding these seats fixed. An empty set pins nothing,
+    /// which is what leaves the polish free to redo the whole assignment.
+    Show(GenerationPlan, FrozenPlacements),
     /// One build-log line, streamed from the off-thread build that carries this sequence number.
     Echo(u64, String),
     Cancel,
@@ -41,9 +33,9 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    /// The plan the model was built from, and the model. The plan travels along because the
-    /// solve's result is converted back against exactly it.
-    ModelReady(GenerationPlan, GroupListsModel),
+    /// The built model. The plan does not travel back: it came from the page, which still
+    /// holds the copy the solution will be converted against.
+    ModelReady(GroupListsModel),
     /// The build was abandoned through "Annuler": nothing will be handed back.
     Cancelled,
     /// The dialog just closed: whoever owns the window underneath should bring
@@ -53,7 +45,7 @@ pub enum DialogOutput {
 
 #[derive(Debug)]
 pub enum DialogCommandOutput {
-    Built(u64, GenerationPlan, GroupListsModel),
+    Built(u64, GroupListsModel),
 }
 
 #[relm4::component(pub)]
@@ -142,39 +134,27 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(request, weights, frozen, params) => {
+            DialogInput::Show(plan, frozen) => {
                 self.hidden = false;
                 self.move_front = true;
                 // Any build still running from a previous opening is now stale.
                 self.build_seq += 1;
                 self.debug_view.emit(DebugViewInput::Clear);
 
-                // The plan is rebuilt rather than carried over, because the optimize window may
-                // have set a canonical range the naming dialog's plan did not have. Rebuilding
-                // keeps spec identity and order (the range is elected or overridden *after* the
-                // specs are assembled), so the names stay aligned with the specs.
-                //
-                // Both steps run off the UI thread: the model build is the heavy one, and the
-                // plan build does the template clustering. Each log line comes back as `Echo`
-                // and streams live into the DebugView; both the lines and the result carry
-                // `seq`, so an abandoned build cannot write into a later one.
+                // The plan is the naming dialog's own — the one the greedy ran on, and the one
+                // the frozen seats were read off — so seats and specs cannot drift apart. The
+                // build is the heavy step and runs off the UI thread: each log line comes back
+                // as `Echo` and streams live into the DebugView, and both the lines and the
+                // result carry `seq`, so an abandoned build cannot write into a later one.
                 let seq = self.build_seq;
                 let input = sender.input_sender().clone();
                 sender.spawn_oneshot_command(move || {
                     let mut log = move |line: &str| {
                         input.emit(DialogInput::Echo(seq, format!("{}\n", line)));
                     };
-                    // The naming dialog already built this very plan from this very request
-                    // against these parameters, and no plan error depends on the canonical
-                    // range: a failure here is a caller bug, like it is there.
-                    let plan = build_generation_plan(&params, &request)
-                        .expect("the naming dialog already built a plan from this request");
-                    // The seats were read off the plan the naming dialog built, and this one
-                    // is rebuilt from the same request and parameters — the very assumption the
-                    // `expect` above states. `build_model_with_log` asserts on a seat this plan
-                    // does not have, so a drift here is loud rather than silent.
-                    let model = build_model_with_log(&plan, weights, &frozen, &mut log);
-                    DialogCommandOutput::Built(seq, plan, model)
+                    let model =
+                        build_model_with_log(&plan, ObjectiveWeights::default(), &frozen, &mut log);
+                    DialogCommandOutput::Built(seq, model)
                 });
             }
             DialogInput::Echo(seq, line) => {
@@ -203,7 +183,7 @@ impl Component for Dialog {
         _root: &Self::Root,
     ) {
         self.move_front = false;
-        let DialogCommandOutput::Built(seq, plan, model) = msg;
+        let DialogCommandOutput::Built(seq, model) = msg;
         // A stale result: the build was cancelled, or superseded by a later `Show`, while it was
         // running. Drop it.
         if seq != self.build_seq {
@@ -213,9 +193,7 @@ impl Component for Dialog {
             self.hidden = true;
             sender.output(DialogOutput::PresentParent).unwrap();
         }
-        sender
-            .output(DialogOutput::ModelReady(plan, model))
-            .unwrap();
+        sender.output(DialogOutput::ModelReady(model)).unwrap();
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {

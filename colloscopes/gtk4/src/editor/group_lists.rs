@@ -44,8 +44,7 @@ mod naming_dialog;
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(collomatique_state_colloscopes::colloscope_params::Parameters),
-    /// A new document was loaded: forget the last-used solver strategy, objective weights and
-    /// canonical group size.
+    /// A new document was loaded: forget the last-used solver strategy and prefill choice.
     ResetGenerationConfig,
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
@@ -67,22 +66,16 @@ pub enum GroupListsInput {
     /// The optimize path was taken from the naming dialog: build the model, then solve from the
     /// greedy answer.
     GenerationOptimizeRequested {
-        request: collomatique_constraints_groups::GenerationRequest,
+        plan: collomatique_constraints_groups::GenerationPlan,
         names: Vec<String>,
         generated: Vec<GeneratedList>,
-        weights: collomatique_constraints_groups::ObjectiveWeights,
-        canonical_range:
-            Option<collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>>,
         strategy: collomatique_strategies::ConductorStrategy,
         fix_prefill: bool,
         frozen: collomatique_constraints_groups::FrozenPlacements,
     },
     GenerationNamingCancelled,
     /// The model for the optimize path is built: start the solve from the greedy answer.
-    GenerationModelReady(
-        collomatique_constraints_groups::GenerationPlan,
-        collomatique_constraints_groups::GroupListsModel,
-    ),
+    GenerationModelReady(collomatique_constraints_groups::GroupListsModel),
     GenerationModelCancelled,
     /// The solver dialog was validated with a solution.
     GenerationSolveResult(collomatique_ilp::ConfigData<GroupsInternalVar>),
@@ -124,37 +117,26 @@ pub struct GroupLists {
     /// flow's solve is always seeded by the greedy answer.
     strategy: collomatique_strategies::ConductorStrategy,
 
-    /// The last-validated objective weights, reopened-on like the strategy.
-    /// Reset to the group-dominant default on a new document.
-    weights: collomatique_constraints_groups::ObjectiveWeights,
-
-    /// The last-validated canonical group-size override, travelling with the
-    /// weights: `None` (the default, and the reset value) elects the size
-    /// from the document instead.
-    canonical_range:
-        Option<collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>>,
-
     /// Whether the last-validated optimize run held the greedy's prefill fixed, reopened-on
-    /// like the weights. `false` (the default, and the reset value) leaves the polish free to
+    /// like the strategy. `false` (the default, and the reset value) leaves the polish free to
     /// re-decide the whole assignment.
     fix_prefill: bool,
 
     /// The optimize path's state, held from the moment it is taken until the solver returns:
-    /// the user-chosen list names, the greedy answer the solve starts from, and — once the
-    /// model is built — the plan the solution is converted back against. A leftover value
-    /// after a cancelled build or solve is harmless: the next optimize request overwrites it,
-    /// and nothing else reads it.
+    /// the user-chosen list names, the greedy answer the solve starts from, and the plan all
+    /// three are read against. A leftover value after a cancelled build or solve is harmless:
+    /// the next optimize request overwrites it, and nothing else reads it.
     pending_generation: Option<PendingGeneration>,
 
     selection_reason: GroupListSelectionReason,
 }
 
-/// The optimize path in flight. `plan` is filled in when the model build finishes, because the
-/// build is what produces it.
+/// The optimize path in flight. The plan is the naming dialog's own — the one the greedy ran
+/// on, the one the model is built from, and the one the solution is converted back against.
 struct PendingGeneration {
     names: Vec<String>,
     generated: Vec<GeneratedList>,
-    plan: Option<collomatique_constraints_groups::GenerationPlan>,
+    plan: collomatique_constraints_groups::GenerationPlan,
 }
 
 #[relm4::component(pub)]
@@ -324,20 +306,16 @@ impl Component for GroupLists {
                     GroupListsInput::GenerationNamingAccepted(entries)
                 }
                 naming_dialog::DialogOutput::OptimizeRequested {
-                    request,
+                    plan,
                     names,
                     generated,
-                    weights,
-                    canonical_range,
                     strategy,
                     fix_prefill,
                     frozen,
                 } => GroupListsInput::GenerationOptimizeRequested {
-                    request,
+                    plan,
                     names,
                     generated,
-                    weights,
-                    canonical_range,
                     strategy,
                     fix_prefill,
                     frozen,
@@ -352,8 +330,8 @@ impl Component for GroupLists {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                loading_dialog::DialogOutput::ModelReady(plan, model) => {
-                    GroupListsInput::GenerationModelReady(plan, model)
+                loading_dialog::DialogOutput::ModelReady(model) => {
+                    GroupListsInput::GenerationModelReady(model)
                 }
                 loading_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationModelCancelled
@@ -384,8 +362,6 @@ impl Component for GroupLists {
             loading_dialog,
             run_solver_dialog,
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_optimize_only(),
-            weights: collomatique_constraints_groups::ObjectiveWeights::default(),
-            canonical_range: None,
             fix_prefill: false,
             pending_generation: None,
             selection_reason: GroupListSelectionReason::New,
@@ -409,8 +385,6 @@ impl Component for GroupLists {
             GroupListsInput::ResetGenerationConfig => {
                 self.strategy =
                     collomatique_strategies::ConductorStrategy::with_parallelism_optimize_only();
-                self.weights = collomatique_constraints_groups::ObjectiveWeights::default();
-                self.canonical_range = None;
                 self.fix_prefill = false;
             }
             GroupListsInput::GenerateClicked => {
@@ -424,15 +398,13 @@ impl Component for GroupLists {
             GroupListsInput::GenerationConfigAccepted(request, params) => {
                 // Hand the request to the naming dialog against the parameters the config dialog
                 // echoed back, so the plan and the greedy run from exactly what the user
-                // configured against. The three model-side settings travel along, unused by the
+                // configured against. The two solve-side settings travel along, unused by the
                 // greedy: they are what the optimize window opens on.
                 self.naming_dialog
                     .sender()
                     .send(naming_dialog::DialogInput::Show(
                         request,
                         params,
-                        self.weights,
-                        self.canonical_range.clone(),
                         self.strategy.clone(),
                         self.fix_prefill,
                     ))
@@ -450,56 +422,42 @@ impl Component for GroupLists {
                     .unwrap();
             }
             GroupListsInput::GenerationOptimizeRequested {
-                mut request,
+                plan,
                 names,
                 generated,
-                weights,
-                canonical_range,
                 strategy,
                 fix_prefill,
                 frozen,
             } => {
-                // Persist the four settings so the optimize window reopens on the last choice.
-                self.weights = weights;
-                self.canonical_range = canonical_range.clone();
+                // Persist the two settings so the optimize window reopens on the last choice.
                 self.strategy = strategy;
                 self.fix_prefill = fix_prefill;
-                // The canonical range is the optimize window's to set, and the generate dialog
-                // no longer puts one in the request: inject it here, on the way to the plan.
-                request.canonical_range = canonical_range;
 
-                // The names and the greedy answer wait for the solve; the plan joins them when
-                // the build finishes.
+                // The names, the greedy answer and the plan all three wait for the solve.
                 self.pending_generation = Some(PendingGeneration {
                     names,
                     generated,
-                    plan: None,
+                    plan: plan.clone(),
                 });
                 self.loading_dialog
                     .sender()
-                    .send(loading_dialog::DialogInput::Show(
-                        request,
-                        self.weights,
-                        frozen,
-                        self.params.clone(),
-                    ))
+                    .send(loading_dialog::DialogInput::Show(plan, frozen))
                     .unwrap();
             }
             GroupListsInput::GenerationNamingCancelled => {
                 // The generation was abandoned at the naming step; nothing to undo.
             }
-            GroupListsInput::GenerationModelReady(plan, model) => {
+            GroupListsInput::GenerationModelReady(model) => {
                 let pending = self
                     .pending_generation
-                    .as_mut()
+                    .as_ref()
                     .expect("a built model implies a pending generation");
                 // The greedy answer, read as one complete configuration of this very model:
                 // the solve checks it and starts from it instead of from nothing.
                 let warm_start = collomatique_constraints_groups::group_lists_to_warm_start(
-                    &plan,
+                    &pending.plan,
                     &pending.generated,
                 );
-                pending.plan = Some(plan);
 
                 self.run_solver_dialog
                     .sender()
@@ -523,9 +481,7 @@ impl Component for GroupLists {
                     .pending_generation
                     .take()
                     .expect("a solve result implies a pending generation");
-                let plan = pending
-                    .plan
-                    .expect("a solve result implies a built model, hence a plan");
+                let plan = pending.plan;
                 let names = pending.names;
                 // The solved config is over the flattened model's variables; strip it down
                 // to base variables, which is all the conversion needs (the colloscope page

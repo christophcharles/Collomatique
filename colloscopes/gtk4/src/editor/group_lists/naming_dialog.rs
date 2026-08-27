@@ -13,14 +13,13 @@ use relm4::{
 use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::{
-    FrozenPlacements, GenerationRequest, GreedyOutcome, ObjectiveWeights, build_generation_plan,
+    FrozenPlacements, GenerationPlan, GenerationRequest, GreedyOutcome, build_generation_plan,
     greedy_group_lists_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::group_lists::GroupList;
-use collomatique_state_colloscopes::{NonEmptyRangeInclusive, PeriodId, SubjectId};
+use collomatique_state_colloscopes::{PeriodId, SubjectId};
 use collomatique_strategies::ConductorStrategy;
-use std::num::NonZeroU32;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -49,13 +48,11 @@ pub struct Dialog {
     /// The parameters the plan was built against: the student names of the result display come
     /// from them, and the optimize path echoes them nowhere — the page holds its own copy.
     params: Parameters,
-    /// The request the plan was built from, echoed back when the optimize path is taken: the
-    /// page rebuilds the plan there, with the canonical range the optimize window chose.
-    request: GenerationRequest,
-    /// The model-side settings this dialog only carries: they mean nothing to the greedy, and
-    /// seed the optimize window when it opens.
-    weights: ObjectiveWeights,
-    canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
+    /// The plan the greedy ran on, handed over when the optimize path is taken: the model is
+    /// built from exactly it, and the solution converted back against exactly it.
+    plan: Option<GenerationPlan>,
+    /// The solver settings this dialog only carries: they mean nothing to the greedy, and seed
+    /// the optimize window when it opens.
     strategy: ConductorStrategy,
     /// Whether the optimize path holds the greedy's prefill fixed in the model.
     fix_prefill: bool,
@@ -95,15 +92,8 @@ impl Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     /// Open the dialog for this request, against the parameters the config dialog echoed back.
-    /// The last four only seed the optimize window; the greedy uses none of them.
-    Show(
-        GenerationRequest,
-        Parameters,
-        ObjectiveWeights,
-        Option<NonEmptyRangeInclusive<NonZeroU32>>,
-        ConductorStrategy,
-        bool,
-    ),
+    /// The last two only seed the optimize window; the greedy uses neither.
+    Show(GenerationRequest, Parameters, ConductorStrategy, bool),
     Cancel,
     Accept,
     /// One log line, streamed from the off-thread greedy.
@@ -114,12 +104,7 @@ pub enum DialogInput {
     /// "Optimiser les listes de groupes" was clicked.
     OpenOptimize,
     /// The optimize window was validated: hand everything the solve needs up to the page.
-    OptimizeAccepted(
-        ObjectiveWeights,
-        Option<NonEmptyRangeInclusive<NonZeroU32>>,
-        ConductorStrategy,
-        bool,
-    ),
+    OptimizeAccepted(ConductorStrategy, bool),
     /// The optimize window closed without validating: the greedy result still stands.
     IgnoreOrRefresh,
     /// The optimize window just closed: bring this window back to the front.
@@ -130,15 +115,13 @@ pub enum DialogInput {
 pub enum DialogOutput {
     /// The generated lists, named as the user left them: the op payload itself.
     Accepted(Vec<GeneratedList>),
-    /// The optimize path was taken. Carries what the page needs to run it: the request (the
-    /// plan is rebuilt there, with this canonical range), the names, the raw greedy result the
-    /// solve starts from, and the settings the optimize window assembled.
+    /// The optimize path was taken. Carries what the page needs to run it: the plan the greedy
+    /// ran on, the names, the raw greedy result the solve starts from, and the settings the
+    /// optimize window assembled.
     OptimizeRequested {
-        request: GenerationRequest,
+        plan: GenerationPlan,
         names: Vec<String>,
         generated: Vec<GeneratedList>,
-        weights: ObjectiveWeights,
-        canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
         strategy: ConductorStrategy,
         /// What the user asked for, kept so the window reopens on it. An empty `frozen` cannot
         /// say whether the box was unticked or the prefill simply claimed nobody.
@@ -491,12 +474,9 @@ impl Component for Dialog {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                optimize_dialog::DialogOutput::Accepted(
-                    weights,
-                    canonical_range,
-                    strategy,
-                    fix_prefill,
-                ) => DialogInput::OptimizeAccepted(weights, canonical_range, strategy, fix_prefill),
+                optimize_dialog::DialogOutput::Accepted(strategy, fix_prefill) => {
+                    DialogInput::OptimizeAccepted(strategy, fix_prefill)
+                }
                 optimize_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
                 optimize_dialog::DialogOutput::PresentParent => DialogInput::Present,
             });
@@ -508,9 +488,7 @@ impl Component for Dialog {
             done: false,
             build_seq: 0,
             params: Parameters::default(),
-            request: GenerationRequest::default(),
-            weights: ObjectiveWeights::default(),
-            canonical_range: None,
+            plan: None,
             strategy: ConductorStrategy::with_parallelism_optimize_only(),
             fix_prefill: false,
             outcome: None,
@@ -535,7 +513,7 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(request, params, weights, canonical_range, strategy, fix_prefill) => {
+            DialogInput::Show(request, params, strategy, fix_prefill) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.show_debug = false;
@@ -546,17 +524,17 @@ impl Component for Dialog {
                 self.debug_view.emit(DebugViewInput::Clear);
 
                 self.params = params;
-                self.request = request;
-                self.weights = weights;
-                self.canonical_range = canonical_range;
                 self.strategy = strategy;
                 self.fix_prefill = fix_prefill;
 
                 // The config dialog only offers valid choices, and both dialogs are modal, so
                 // the document cannot have changed in between: a plan error here is a caller
                 // bug (that is exactly what `GenerationPlanError` documents).
-                let plan = build_generation_plan(&self.params, &self.request)
+                let plan = build_generation_plan(&self.params, &request)
                     .expect("the config dialog assembled the request against these parameters");
+                // The optimize path hands this very plan over rather than a recipe for
+                // rebuilding one: the greedy answer is read against it, seat by seat.
+                self.plan = Some(plan.clone());
 
                 self.skipped_text = skipped_label(&self.params, &plan.skipped);
                 self.coverages = plan
@@ -638,16 +616,12 @@ impl Component for Dialog {
                 self.optimize_dialog
                     .sender()
                     .send(optimize_dialog::DialogInput::Show(
-                        self.weights,
-                        self.canonical_range.clone(),
                         self.strategy.clone(),
                         self.fix_prefill,
                     ))
                     .unwrap();
             }
-            DialogInput::OptimizeAccepted(weights, canonical_range, strategy, fix_prefill) => {
-                self.weights = weights;
-                self.canonical_range = canonical_range.clone();
+            DialogInput::OptimizeAccepted(strategy, fix_prefill) => {
                 self.strategy = strategy.clone();
                 self.fix_prefill = fix_prefill;
 
@@ -655,6 +629,10 @@ impl Component for Dialog {
                 let Some(outcome) = self.outcome.take() else {
                     return;
                 };
+                let plan = self
+                    .plan
+                    .clone()
+                    .expect("a greedy result implies the plan it was run on");
                 let names = self.names();
 
                 // Both windows step aside: from here on the page drives, through the model
@@ -665,11 +643,9 @@ impl Component for Dialog {
                 }
                 sender
                     .output(DialogOutput::OptimizeRequested {
-                        request: self.request.clone(),
+                        plan,
                         names,
                         generated: outcome.lists,
-                        weights,
-                        canonical_range,
                         strategy,
                         fix_prefill,
                         // Off means an empty set, which is what "pin nothing" is: the page
