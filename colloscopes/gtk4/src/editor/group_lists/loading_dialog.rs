@@ -163,7 +163,9 @@ impl Component for Dialog {
                     // range: a failure here is a caller bug, like it is there.
                     let plan = build_generation_plan(&params, &request)
                         .expect("the naming dialog already built a plan from this request");
-                    let model = build_model_with_log(&plan, weights, &mut log);
+                    // Pinning the greedy's prefill is the next commit's business; nothing
+                    // is held fixed yet.
+                    let model = build_model_with_log(&plan, weights, &Default::default(), &mut log);
                     DialogCommandOutput::Built(seq, plan, model)
                 });
             }

@@ -11,7 +11,8 @@
 //! a new `.collomatique` example is covered automatically.
 
 use collomatique_constraints_groups::{
-    GenerationRequest, ObjectiveWeights, build_generation_plan, build_model, greedy_group_lists,
+    FrozenPlacements, GenerationRequest, ObjectiveWeights, build_generation_plan, build_model,
+    greedy_group_lists,
 };
 use collomatique_storage::deserialize_data;
 use std::collections::BTreeSet;
@@ -77,7 +78,11 @@ fn all_examples_build() {
         let plan = build_generation_plan(params, &request)
             .unwrap_or_else(|e| panic!("plan build failed for {name}: {e}"));
         // Panics on internal inconsistency; building without a panic is the check.
-        let _ = build_model(&plan, ObjectiveWeights::default());
+        let _ = build_model(
+            &plan,
+            ObjectiveWeights::default(),
+            &FrozenPlacements::default(),
+        );
 
         // The greedy must produce structurally valid lists on every example.
         let names: Vec<String> = (0..plan.specs.len())

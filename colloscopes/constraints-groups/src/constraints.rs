@@ -2,15 +2,19 @@
 //! merged here and applied by `builder.rs` **after** the extras bundle: the
 //! constraints reference `StudentInGroup`, which must be declared first.
 
+mod frozen_placements;
 mod student_in_one_group;
 mod students_per_group;
 
 use crate::extras::MyBundle;
+use crate::frozen::FrozenPlacements;
 use crate::vars::VarEnv;
 
-pub(crate) fn build(env: &VarEnv) -> MyBundle {
+pub(crate) fn build(env: &VarEnv, frozen: &FrozenPlacements) -> MyBundle {
     student_in_one_group::build(env)
         .merge(students_per_group::build(env))
+        .expect("no duplicate extras")
+        .merge(frozen_placements::build(env, frozen))
         .expect("no duplicate extras")
 }
 
@@ -45,9 +49,19 @@ mod tests {
     /// Same trap as in `extras.rs`: an extra that only an assertion mentions
     /// is never expanded, so every asserted extra must also carry an
     /// objective weight. Base variables are always present.
-    fn solve_with_objective(
+    pub(super) fn solve_with_objective(
         plan: &GenerationPlan,
         terms: &[(f64, V)],
+    ) -> ConfigData<InternalVar<Var, ExtraVarName>> {
+        solve_with_objective_pinned(plan, terms, &FrozenPlacements::default())
+    }
+
+    /// [`solve_with_objective`], with seats held fixed as well — so a push
+    /// and a pin can be made to fight over the same student.
+    pub(super) fn solve_with_objective_pinned(
+        plan: &GenerationPlan,
+        terms: &[(f64, V)],
+        frozen: &FrozenPlacements,
     ) -> ConfigData<InternalVar<Var, ExtraVarName>> {
         let env = VarEnv::new(plan);
         let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
@@ -55,7 +69,7 @@ mod tests {
             .apply_bundle(crate::extras::build_extras(&env).into_general())
             .expect("no duplicate extras");
         modeler
-            .apply_bundle(build(&env).into_general())
+            .apply_bundle(build(&env, frozen).into_general())
             .expect("no duplicate extras");
         for (weight, var) in terms {
             // The weight goes into the `LinExpr`, before the sense is
@@ -76,7 +90,7 @@ mod tests {
     /// A weight-100 term placing `student` in `group` of `list` — far above
     /// the ±1 adversarial weights, but not above the constraints, which is
     /// the point: here the pushes fight the constraint and must lose.
-    fn place(list: usize, s: u64, group: u32) -> (f64, V) {
+    pub(super) fn place(list: usize, s: u64, group: u32) -> (f64, V) {
         (
             100.0,
             base_var(Var::StudentInGroup {
@@ -87,7 +101,7 @@ mod tests {
         )
     }
 
-    fn value(cfg: &ConfigData<InternalVar<Var, ExtraVarName>>, var: V) -> f64 {
+    pub(super) fn value(cfg: &ConfigData<InternalVar<Var, ExtraVarName>>, var: V) -> f64 {
         cfg.get(var.clone())
             .unwrap_or_else(|| panic!("{:?} should be part of the solved problem", var))
     }
@@ -96,7 +110,7 @@ mod tests {
     /// error (a 1 came back as `0.9999999999999999` here), so every value
     /// comparison of this module goes through [`f64_equals`] — the crate's
     /// own `TOLERANCE` — rather than `assert_eq!`.
-    fn assert_close(got: f64, expected: f64) {
+    pub(super) fn assert_close(got: f64, expected: f64) {
         assert!(f64_equals(got, expected), "expected {expected}, got {got}");
     }
 

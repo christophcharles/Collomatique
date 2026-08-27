@@ -71,4 +71,14 @@ pub enum ConstraintDesc {
         group: u32,
         min_students: u32,
     },
+    /// `StudentInGroup(list, student, group) == 1` — a seat the caller asked
+    /// to hold fixed, in practice one the greedy's prefill phase froze.
+    ///
+    /// One row, not a whole column: `StudentInOneGroup` already forces the
+    /// student's other groups to 0 once this one is 1.
+    FrozenPlacement {
+        list: GroupListIdx,
+        student: StudentId,
+        group: u32,
+    },
 }

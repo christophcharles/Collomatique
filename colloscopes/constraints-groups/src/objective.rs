@@ -160,7 +160,9 @@ mod tests {
             .apply_bundle(crate::extras::build_extras(&env).into_general())
             .expect("no duplicate extras");
         modeler
-            .apply_bundle(crate::constraints::build(&env).into_general())
+            .apply_bundle(
+                crate::constraints::build(&env, &crate::FrozenPlacements::default()).into_general(),
+            )
             .expect("no duplicate extras");
         modeler
             .apply_bundle(build(&env, weights).into_general())
@@ -471,7 +473,11 @@ mod tests {
         // electing the tighter one as canonical — so the check also covers
         // the class weights entering the reported objective.
         let plan = plan_of(&[(&[1, 2, 3, 4], (2, 2)), (&[1, 2, 3, 4], (2, 3))]);
-        let model = crate::build_model(&plan, ObjectiveWeights::default());
+        let model = crate::build_model(
+            &plan,
+            ObjectiveWeights::default(),
+            &crate::FrozenPlacements::default(),
+        );
         let solver = ColloCbcSolver::with_disable_logging(true);
 
         let base = model

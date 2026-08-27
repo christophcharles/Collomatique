@@ -116,7 +116,7 @@ fn the_warm_start_is_a_tight_solution_of_the_model() {
         (&[1, 2, 3, 4, 5, 6], (2, 2)),
     ]);
     let weights = ObjectiveWeights::default();
-    let model = crate::build_model(&plan, weights);
+    let model = crate::build_model(&plan, weights, &crate::FrozenPlacements::default());
     let warm = group_lists_to_warm_start(&plan, &greedy(&plan));
 
     let solution = model
@@ -182,7 +182,11 @@ fn a_pinned_pair_is_valued_by_the_pin() {
     let free = if seat(1) == seat(2) { (1, 4) } else { (1, 2) };
     assert_eq!(value(&warm, shared(free.0, free.1)), 0.0);
 
-    let model = crate::build_model(&plan, ObjectiveWeights::default());
+    let model = crate::build_model(
+        &plan,
+        ObjectiveWeights::default(),
+        &crate::FrozenPlacements::default(),
+    );
     let solution = model
         .solution_from_complete_data(warm)
         .expect("the warm start must value exactly the model's variables");

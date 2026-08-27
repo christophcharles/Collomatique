@@ -1,6 +1,7 @@
 //! Build the ILP model from a generation plan.
 
 use crate::GroupListsModel;
+use crate::frozen::FrozenPlacements;
 use crate::objective::ObjectiveWeights;
 use crate::specs::{GenerationPlan, RangeSource};
 use crate::types::{ConstraintDesc, ExtraVarName};
@@ -17,7 +18,7 @@ pub(crate) type MyModeler<'m> =
 /// class then weighs, and whether there is a template grouping at all. Two of
 /// them the user can steer from the advanced dialog, so a log that does not
 /// name them cannot be acted on.
-fn plan_report(plan: &GenerationPlan, env: &VarEnv) -> Vec<String> {
+fn plan_report(plan: &GenerationPlan, env: &VarEnv, frozen: &FrozenPlacements) -> Vec<String> {
     let mut lines = Vec::new();
 
     match &plan.canonical_range {
@@ -78,21 +79,36 @@ fn plan_report(plan: &GenerationPlan, env: &VarEnv) -> Vec<String> {
         })),
     }
 
+    lines.push(match frozen.len() {
+        0 => {
+            String::from("[build_model] Frozen placements: none (the polish may undo the prefill)")
+        }
+        n => format!("[build_model] Frozen placements: {n} seat(s) pinned"),
+    });
+
     lines
 }
 
-pub fn build_model(plan: &GenerationPlan, weights: ObjectiveWeights) -> GroupListsModel {
-    build_model_with_log(plan, weights, &mut |_: &str| {})
+/// An empty `frozen` is how a caller says "pin nothing" — there is no
+/// `Option`, because "the user did not ask" and "the user asked, and prefill
+/// froze nobody" build exactly the same model.
+pub fn build_model(
+    plan: &GenerationPlan,
+    weights: ObjectiveWeights,
+    frozen: &FrozenPlacements,
+) -> GroupListsModel {
+    build_model_with_log(plan, weights, frozen, &mut |_: &str| {})
 }
 
 pub fn build_model_with_log(
     plan: &GenerationPlan,
     weights: ObjectiveWeights,
+    frozen: &FrozenPlacements,
     log: &mut (dyn FnMut(&str) + Send),
 ) -> GroupListsModel {
     let env = VarEnv::new(plan);
 
-    for line in plan_report(plan, &env) {
+    for line in plan_report(plan, &env, frozen) {
         log(&line);
     }
 
@@ -115,7 +131,7 @@ pub fn build_model_with_log(
     // The extras must be declared before the constraints and the objective
     // reference them.
     apply!("extras", crate::extras::build_extras(&env));
-    apply!("constraints", crate::constraints::build(&env));
+    apply!("constraints", crate::constraints::build(&env, frozen));
     apply!("objective", crate::objective::build(&env, weights));
 
     modeler
@@ -133,7 +149,11 @@ mod tests {
         // List 0: 4 students, sizes 2..=3 → ceil(4/3) = 2 groups. List 1:
         // 3 students, sizes 1..=2 → ceil(3/2) = 2 groups.
         let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 3)), (&[5, 6, 7], (1, 2))]);
-        let model = build_model(&plan, crate::ObjectiveWeights::default());
+        let model = build_model(
+            &plan,
+            crate::ObjectiveWeights::default(),
+            &FrozenPlacements::default(),
+        );
 
         // The `match` is exhaustive on purpose: a new constraint family
         // must not slip in without this test growing to count it.
@@ -146,6 +166,8 @@ mod tests {
                     ConstraintDesc::StudentInOneGroup { .. } => one_group += 1,
                     ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
                     ConstraintDesc::StudentsPerGroupMin { .. } => min += 1,
+                    // This plan pins nothing.
+                    ConstraintDesc::FrozenPlacement { .. } => unreachable!(),
                 }
             }
         }
@@ -204,7 +226,7 @@ mod tests {
             (&[3, 4, 5, 6], (2, 3)),
             (&[1, 2, 3, 4, 5, 6], (6, 6)),
         ]);
-        let lines = plan_report(&plan, &VarEnv::new(&plan));
+        let lines = plan_report(&plan, &VarEnv::new(&plan), &FrozenPlacements::default());
 
         assert_eq!(
             lines,
@@ -213,7 +235,45 @@ mod tests {
                 "[build_model] Size class 2-3: 2 list(s), pair weight 1.000",
                 "[build_model] Size class 6-6: 1 list(s), pair weight 0.400",
                 "[build_model] Template grouping: 6 students in 2 groups of 2-3",
+                "[build_model] Frozen placements: none (the polish may undo the prefill)",
             ]
+        );
+    }
+
+    #[test]
+    fn the_log_counts_the_pinned_seats() {
+        // The last line of the report tells the two silences apart: a
+        // generation that was not asked to keep the prefill, and one whose
+        // prefill claimed nobody, build the same model.
+        let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 3))]);
+        let env = VarEnv::new(&plan);
+
+        let none = plan_report(&plan, &env, &FrozenPlacements::default());
+        assert_eq!(
+            none.last().expect("the report is never empty"),
+            "[build_model] Frozen placements: none (the polish may undo the prefill)",
+        );
+
+        let frozen = FrozenPlacements::new(std::collections::BTreeMap::from([
+            (
+                (
+                    crate::vars::GroupListIdx(0),
+                    crate::specs::tests::student(1),
+                ),
+                0,
+            ),
+            (
+                (
+                    crate::vars::GroupListIdx(0),
+                    crate::specs::tests::student(2),
+                ),
+                0,
+            ),
+        ]));
+        let some = plan_report(&plan, &env, &frozen);
+        assert_eq!(
+            some.last().expect("the report is never empty"),
+            "[build_model] Frozen placements: 2 seat(s) pinned",
         );
     }
 
@@ -228,7 +288,7 @@ mod tests {
         ));
         plan.ghost = None;
 
-        let lines = plan_report(&plan, &VarEnv::new(&plan));
+        let lines = plan_report(&plan, &VarEnv::new(&plan), &FrozenPlacements::default());
         assert_eq!(
             lines[0],
             "[build_model] Canonical group size: 3-3 (manual, set in the advanced settings)"
@@ -244,9 +304,12 @@ mod tests {
     fn the_report_reaches_the_build_log() {
         let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 2))]);
         let mut lines: Vec<String> = Vec::new();
-        build_model_with_log(&plan, crate::ObjectiveWeights::default(), &mut |line| {
-            lines.push(line.to_string())
-        });
+        build_model_with_log(
+            &plan,
+            crate::ObjectiveWeights::default(),
+            &FrozenPlacements::default(),
+            &mut |line| lines.push(line.to_string()),
+        );
 
         // The report is the head of the log, before any bundle is applied.
         assert_eq!(
