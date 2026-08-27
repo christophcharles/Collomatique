@@ -387,13 +387,13 @@ impl SimpleComponent for Dialog {
                                         set_hexpand: true,
                                     },
                                     gtk::Button {
-                                        set_icon_name: "edit-select-all-symbolic",
+                                        set_icon_name: "object-select-symbolic",
                                         add_css_class: "flat",
                                         set_tooltip_text: Some("Activer toutes les listes"),
                                         connect_clicked => DialogInput::SetAllRebuild(true),
                                     },
                                     gtk::Button {
-                                        set_icon_name: "edit-clear-symbolic",
+                                        set_icon_name: "edit-delete-symbolic",
                                         add_css_class: "flat",
                                         set_tooltip_text: Some("Désactiver toutes les listes"),
                                         connect_clicked => DialogInput::SetAllRebuild(false),
@@ -451,13 +451,13 @@ impl SimpleComponent for Dialog {
                                     // This pane's switches mean *keep*, not *rebuild*, so its
                                     // wording follows the pane rather than the other side.
                                     gtk::Button {
-                                        set_icon_name: "edit-select-all-symbolic",
+                                        set_icon_name: "object-select-symbolic",
                                         add_css_class: "flat",
                                         set_tooltip_text: Some("Conserver toutes les listes"),
                                         connect_clicked => DialogInput::SetAllKept(true),
                                     },
                                     gtk::Button {
-                                        set_icon_name: "edit-clear-symbolic",
+                                        set_icon_name: "edit-delete-symbolic",
                                         add_css_class: "flat",
                                         set_tooltip_text: Some("Ne conserver aucune liste"),
                                         connect_clicked => DialogInput::SetAllKept(false),

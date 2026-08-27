@@ -83,13 +83,13 @@ impl FactoryComponent for PeriodGroup {
                     set_hexpand: true,
                 },
                 gtk::Button {
-                    set_icon_name: "edit-select-all-symbolic",
+                    set_icon_name: "object-select-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Activer toutes les listes de la période"),
                     connect_clicked => PeriodGroupInput::SetAll(true),
                 },
                 gtk::Button {
-                    set_icon_name: "edit-clear-symbolic",
+                    set_icon_name: "edit-delete-symbolic",
                     add_css_class: "flat",
                     set_tooltip_text: Some("Désactiver toutes les listes de la période"),
                     connect_clicked => PeriodGroupInput::SetAll(false),
