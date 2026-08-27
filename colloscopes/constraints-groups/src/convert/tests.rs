@@ -1,7 +1,7 @@
 use super::*;
 use crate::ObjectiveWeights;
-use crate::specs::tests::{range, student};
-use crate::vars::tests::plan_of;
+use crate::specs::tests::student;
+use crate::vars::tests::{plan_of, plan_with_uses};
 use collomatique_ilp::f64_equals;
 use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 
@@ -69,14 +69,17 @@ fn compaction_remaps_group_indices() {
 
 #[test]
 fn the_warm_start_carries_the_placement_back_unchanged() {
-    // Three overlapping lists of two size classes, so the round trip covers
-    // several group counts at once: ceil(6 / 3) = 2 groups, ceil(4 / 2) = 2
-    // and ceil(6 / 2) = 3.
-    let plan = plan_of(&[
-        (&[1, 2, 3, 4, 5, 6], (2, 3)),
-        (&[1, 2, 3, 4], (2, 2)),
-        (&[1, 2, 3, 4, 5, 6], (2, 2)),
-    ]);
+    // Three overlapping lists of two shapes, so the round trip covers several
+    // group counts at once: ceil(6 / 3) = 2 groups, ceil(4 / 2) = 2 and
+    // ceil(6 / 2) = 3.
+    let plan = plan_with_uses(
+        &[
+            (&[1, 2, 3, 4, 5, 6], (2, 3), 2),
+            (&[1, 2, 3, 4], (2, 2), 1),
+            (&[1, 2, 3, 4, 5, 6], (2, 2), 1),
+        ],
+        &[],
+    );
     let lists = greedy(&plan);
 
     let warm = group_lists_to_warm_start(&plan, &lists);
@@ -108,13 +111,16 @@ fn the_warm_start_is_a_tight_solution_of_the_model() {
     // does not have, which is also what would catch an extra family growing a
     // helper column behind the crate's back.
     //
-    // Two size classes over nested student sets, with a template: every extra
-    // family of the model is populated.
-    let plan = plan_of(&[
-        (&[1, 2, 3, 4, 5, 6], (2, 3)),
-        (&[1, 2, 3, 4], (2, 2)),
-        (&[1, 2, 3, 4, 5, 6], (2, 2)),
-    ]);
+    // Overlapping lists of two shapes, one of them two-tiered, plus a kept
+    // list: every extra family of the model is populated, products included.
+    let plan = plan_with_uses(
+        &[
+            (&[1, 2, 3, 4, 5, 6, 7], (2, 3), 2),
+            (&[1, 2, 3, 4], (2, 2), 1),
+            (&[1, 2, 3, 4, 5, 6], (2, 2), 1),
+        ],
+        &[(&[&[1, 2]], 1)],
+    );
     let weights = ObjectiveWeights::default();
     let model = crate::build_model(&plan, weights, &crate::FrozenPlacements::default());
     let warm = group_lists_to_warm_start(&plan, &greedy(&plan));
@@ -128,10 +134,11 @@ fn the_warm_start_is_a_tight_solution_of_the_model() {
         solution.blame().len(),
     );
 
-    // Feasible is not enough: every extra of this model is one-sided, so a
-    // configuration setting them all to 1 would be feasible too and would
-    // report a wildly inflated objective as the incumbent. The tight values
-    // are the ones a minimizing solve settles on with the placement fixed,
+    // Feasible is not enough: every extra of this model is one-sided from
+    // above, so a configuration setting them all to 0 would be feasible too
+    // and would report a badly deflated objective as the incumbent — a warm
+    // start the solver would then "improve" on for nothing. The tight values
+    // are the ones a maximizing solve settles on with the placement fixed,
     // which is exactly what the reconstruction problem computes.
     let solver = ColloCbcSolver::with_disable_logging(true);
     let base = model.base_data_from_complete_data(&warm);
@@ -147,52 +154,73 @@ fn the_warm_start_is_a_tight_solution_of_the_model() {
 }
 
 #[test]
-fn a_pinned_pair_is_valued_by_the_pin() {
-    // A pair pinned by a kept list has no defining row — its variable is
-    // fixed to 1 — so reading it off the placement alone would value it 0
-    // whenever the greedy separates the pair, and the model would refuse the
-    // whole warm start.
-    let mut plan = plan_of(&[(&[1, 2, 3, 4], (2, 2))]);
-    plan.pinned_pairs = [(
-        range(2, 2),
-        [(student(1), student(3))].into_iter().collect(),
-    )]
-    .into_iter()
-    .collect();
-
-    let lists = greedy(&plan);
-    let seat = |s: u64| lists[0].0.filling().find_student_group(student(s));
-    assert_ne!(
-        seat(1),
-        seat(3),
-        "the pin only means something on a pair the greedy separates",
+fn the_extras_are_read_off_the_placement() {
+    // The valuation itself, spelled out on one instance. Four students, split
+    // two by two in list 0 and held together in list 1's single group of four:
+    // every pair has two sites in list 0, one in list 1, and one product
+    // across the two. The shapes differ on purpose — with two lists of the
+    // same shape the greedy would repeat its grouping, every pair would be
+    // together in both lists or in neither, and the product could not be told
+    // from "together in *either*".
+    let plan = plan_with_uses(
+        &[(&[1, 2, 3, 4], (2, 2), 1), (&[1, 2, 3, 4], (4, 4), 1)],
+        &[],
     );
-
+    let lists = greedy(&plan);
     let warm = group_lists_to_warm_start(&plan, &lists);
-    let shared = |a: u64, b: u64| {
-        InternalVar::Extra(ExtraVarName::SharedPair {
+
+    let groups = [2, 1];
+    let seat = |list: usize, s: u64| {
+        lists[list]
+            .0
+            .filling()
+            .find_student_group(student(s))
+            .expect("every student sits in a group") as u32
+    };
+    let together = |a: u64, b: u64, list: usize, group: u32| {
+        InternalVar::Extra(ExtraVarName::Together {
             a: student(a),
             b: student(b),
-            class: crate::vars::SizeClassIdx(0),
+            list: GroupListIdx(list),
+            group,
         })
     };
-    assert_eq!(value(&warm, shared(1, 3)), 1.0);
-    // A pair of the same class that the placement did not group either stays
-    // at 0: the pin is a property of the pair, not of the family.
-    let free = if seat(1) == seat(2) { (1, 4) } else { (1, 2) };
-    assert_eq!(value(&warm, shared(free.0, free.1)), 0.0);
+    let coincide = |a: u64, b: u64| {
+        InternalVar::Extra(ExtraVarName::Coincide {
+            a: student(a),
+            b: student(b),
+            list1: GroupListIdx(0),
+            target1: 2,
+            list2: GroupListIdx(1),
+            target2: 4,
+        })
+    };
 
-    let model = crate::build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &crate::FrozenPlacements::default(),
-    );
-    let solution = model
-        .solution_from_complete_data(warm)
-        .expect("the warm start must value exactly the model's variables");
-    assert!(
-        solution.is_feasible(),
-        "the warm start breaks {} constraint(s)",
-        solution.blame().len(),
-    );
+    let mut split_somewhere = false;
+    for (a, b) in [(1, 2), (1, 3), (1, 4), (2, 3), (2, 4), (3, 4)] {
+        let mut tiers = [false; 2];
+        for (list, &count) in groups.iter().enumerate() {
+            for group in 0..count {
+                let shared = seat(list, a) == group && seat(list, b) == group;
+                assert_eq!(
+                    value(&warm, together(a, b, list, group)),
+                    if shared { 1.0 } else { 0.0 },
+                    "site ({a}, {b}) in group {group} of list {list}",
+                );
+                tiers[list] |= shared;
+            }
+        }
+        // And the product is exactly "in both tiers" — the two sums the
+        // defining rows bound it by.
+        assert_eq!(
+            value(&warm, coincide(a, b)),
+            if tiers[0] && tiers[1] { 1.0 } else { 0.0 },
+            "product ({a}, {b})",
+        );
+        split_somewhere |= tiers[0] != tiers[1];
+    }
+    // The instance really does tell the two sides apart: list 1 groups
+    // everybody, so the four pairs list 0 splits are together in one tier and
+    // not the other.
+    assert!(split_somewhere, "no pair distinguishes the two tiers");
 }

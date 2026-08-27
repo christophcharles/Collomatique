@@ -102,6 +102,11 @@ impl VarEnv {
 
     /// The largest allowed group size of a list's spec. Panics on a stale
     /// index, like [`VarEnv::group_count`].
+    ///
+    /// Nothing reads it since the objective swap — the group sizes are pinned
+    /// at their targets, which is a finer question than the range — and it
+    /// goes with the rest of the ILP-era env in the retirement commit.
+    #[allow(dead_code)]
     pub(crate) fn max_size(&self, list: GroupListIdx) -> u32 {
         self.specs[list.0].students_per_group().end().get()
     }
@@ -128,17 +133,21 @@ impl VarEnv {
         &self.classes[class.0]
     }
 
-    /// Weight of a size class in the stability objective, by class index:
-    /// [`crate::specs::class_weight`] applied to this env's canonical range.
-    /// A class of maximum size 1 never meets at all and is skipped upstream
-    /// ([`co_occurrences`](crate::extras::co_occurrences)), so the divisor of
-    /// that formula is never 0 here.
+    /// Weight of a size class in the retired stability objective, by class
+    /// index: [`crate::specs::class_weight`] applied to this env's canonical
+    /// range. Only the build log still reports it.
     pub(crate) fn class_weight(&self, class: SizeClassIdx) -> f64 {
         crate::specs::class_weight(self.canonical_range.as_ref(), self.class_range(class))
     }
 
     /// The pairs fixed to "already shared" *in this class* by the kept lists
     /// (`a < b`). Panics on a stale class index.
+    ///
+    /// Dead since the objective swap: the kept lists enter the collision
+    /// objective as constant mass, not as a discount on a pair variable. It
+    /// goes with the rest of the ILP-era env in the retirement commit, as do
+    /// [`VarEnv::ref_groups`] and [`VarEnv::ref_group`] just below.
+    #[allow(dead_code)]
     pub(crate) fn pinned_pairs(&self, class: SizeClassIdx) -> &BTreeSet<(StudentId, StudentId)> {
         &self.pinned_pairs[class.0]
     }
@@ -146,6 +155,7 @@ impl VarEnv {
     /// The reference groups of the template, in build order. Empty without a
     /// template, so every family that loops over them self-gates on the
     /// plan having one.
+    #[allow(dead_code)]
     pub(crate) fn ref_groups(&self) -> impl Iterator<Item = RefGroupIdx> {
         (0..self.ghost_group_count() as usize).map(RefGroupIdx)
     }
@@ -153,6 +163,7 @@ impl VarEnv {
     /// The students of one reference group. Panics without a template, or on
     /// a stale index — like [`VarEnv::group_count`], and for the same reason:
     /// the index can only have come from [`VarEnv::ref_groups`].
+    #[allow(dead_code)]
     pub(crate) fn ref_group(&self, ref_group: RefGroupIdx) -> &BTreeSet<StudentId> {
         &self
             .ghost

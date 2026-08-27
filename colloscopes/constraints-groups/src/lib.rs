@@ -10,14 +10,17 @@
 //! way out).
 //!
 //! The model holds the base `StudentInGroup` binaries — the assignment matrix
-//! itself, one variable per (list, student, group), and the only variable of
-//! the model — the `SharedPair` extras of piece 7 and the `RefGroupInGroup`
-//! extras that count how many pieces a list breaks a reference group into, the
-//! shape constraints of piece 8 (one group per student, and each group at its
-//! balanced target size), the
-//! two-term stability objective of piece 9 (minimize the shared student pairs
-//! *and* the shattering of the template, with configurable weights —
-//! [`ObjectiveWeights`], piece 11).
+//! itself, one variable per (list, student, group), and the only variable the
+//! solver truly decides — the shape constraints of piece 8 (one group per
+//! student, and each group at its balanced target size), and the **collision
+//! objective**: maximize the total partner collision probability, which is the
+//! greedy's own score (`docs/plans/greedy_algorithm.md` §2).
+//! Squaring a partner distribution makes the objective quadratic, so two
+//! families of extras linearize it — [`ExtraVarName::Together`], the "these
+//! two share this group" site binary, and [`ExtraVarName::Coincide`], its
+//! pairwise product across two lists. All three sides of that — declaration,
+//! objective coefficients, warm-start valuation — read one enumeration
+//! (`pairs`), which is what keeps them in lockstep.
 //!
 //! The crate used to number *incremental epochs* over the specs (pieces 10, 12
 //! and 12bis), so the solve could be staggered along strict inclusion of the
@@ -38,10 +41,12 @@
 //!
 //! The crate also hosts the *greedy* generator ([`greedy_group_lists`]),
 //! which is the primary path: it reads the same [`GenerationPlan`] and
-//! returns the same output as [`build_group_lists`], in negligible time,
-//! maximizing a partner-concentration objective the ILP's per-pair step term
-//! cannot express. The ILP above is the optional polish. See
-//! `docs/plans/greedy_roadmap.md` and `docs/plans/greedy_algorithm.md`.
+//! returns the same output as [`build_group_lists`], in negligible time. The
+//! ILP above is the optional polish — a strict refinement rather than a second
+//! taste, since the two now maximize the same quantity: the model's objective
+//! at a placement is [`placement_objective`] of that placement, to the last
+//! digit. See `docs/plans/greedy_roadmap.md` and
+//! `docs/plans/greedy_algorithm.md`.
 
 mod builder;
 mod constraints;

@@ -1,46 +1,50 @@
 //! Problem-description types.
 
-use crate::vars::{GroupListIdx, RefGroupIdx, SizeClassIdx};
+use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::StudentId;
 
-/// Names of the extra variables (piece 7). The live families are
-/// objective-only, and both are defined by one-sided rows rather than a full
-/// equivalence — see `crate::extras` for why that is sound here.
+/// Names of the extra variables. Both families exist to linearize the
+/// *collision objective* — the square of a partner distribution — and both are
+/// defined by one-sided rows rather than a full equivalence; see
+/// `crate::extras` for why that is sound under a maximize.
+///
+/// The whole enumeration comes from one table, `crate::pairs::PairData`: what
+/// is declared here, what the objective weighs and what a warm start valuates
+/// are three readings of it.
 #[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub enum ExtraVarName {
-    /// 1 if the pair (with `a < b`) shares some group in some list *of this
-    /// size class*, and what the minimizing objective drives to 0 otherwise.
-    /// Declared only for pairs that co-occur in at least one spec of the
-    /// class; pinned to 1 when a kept list of the same size range already
-    /// groups the pair.
+    /// 1 ⟺ the pair (with `a < b`) sits in group `group` of `list` — a
+    /// *site*, in the vocabulary of `crate::pairs`. This is the `z_site` of
+    /// the expansion, and the linear part of the square is one term per
+    /// declared site.
     ///
-    /// Split per class so that a cheap meeting in a tutorial group of twenty
-    /// — where everyone meets everyone whatever the model does — cannot
-    /// pre-pay, and thereby free, a colle pair.
-    SharedPair {
+    /// Declared only for a group both students belong to the list of, of
+    /// target size at least 2, in a list that serves at least one (period,
+    /// subject) pair. Anything else carries mass 0 in both directions and is
+    /// filtered out of the enumeration (F1).
+    Together {
         a: StudentId,
         b: StudentId,
-        class: SizeClassIdx,
-    },
-    /// 1 ⟺ some student of reference group `ref_group` sits in group `group`
-    /// of `list`. Summed over the list's groups, this is the number of pieces
-    /// the list breaks that reference group into — 1 when the list keeps it
-    /// whole. That sum is the template term of the objective.
-    ///
-    /// This is what [`ExtraVarName::SharedPair`] cannot say. `SharedPair` is
-    /// a step: once a pair has met anywhere in its size class, every further
-    /// meeting is free, so nine lists agreeing on one grouping and one list
-    /// differing cost exactly as much as five and five. A piece count is paid
-    /// per list instead, so the cheapest plan is the one where every list
-    /// reuses the same reference grouping.
-    ///
-    /// Declared only when the plan has a template, and only for (list,
-    /// reference group) pairs that actually intersect — elsewhere it would be
-    /// a vacuous 0.
-    RefGroupInGroup {
         list: GroupListIdx,
-        ref_group: RefGroupIdx,
         group: u32,
+    },
+    /// 1 ⟺ the pair meets in a group of target `target1` of `list1` **and**
+    /// in a group of target `target2` of `list2` (`list1 < list2`). This is
+    /// the quadratic part of the expansion: `(c + Σ m_i z_i)²` needs the
+    /// products `z_i z_j`, and one variable per couple of *tiers* covers them
+    /// all — the mass of a site depends on its group only through the target
+    /// size, and the sites of one tier are mutually exclusive, so the sum of a
+    /// tier's site binaries is itself 0/1.
+    ///
+    /// Never declared for two tiers of the same list: one group per student
+    /// per list makes their product identically zero.
+    Coincide {
+        a: StudentId,
+        b: StudentId,
+        list1: GroupListIdx,
+        target1: u32,
+        list2: GroupListIdx,
+        target2: u32,
     },
 }
 

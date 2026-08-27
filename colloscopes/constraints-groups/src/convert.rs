@@ -3,7 +3,7 @@
 //! from prefilled lists to a complete configuration a solve can start from
 //! ([`group_lists_to_warm_start`]).
 
-use crate::extras::{co_occurrences, scatter_sites};
+use crate::pairs::{PairData, cross_tiers};
 use crate::specs::GenerationPlan;
 use crate::types::ExtraVarName;
 use crate::vars::{GroupListIdx, Var, VarEnv};
@@ -102,19 +102,20 @@ pub fn build_group_lists(
 /// `⌈n / max⌉` groups of [`VarEnv::group_count`].
 ///
 /// The extras are given their **tight** values, read off the same placement:
-/// a `SharedPair` is 1 exactly when the pair shares a group in a list of its
-/// size class (or is pinned by a kept list), a `RefGroupInGroup` is 1 exactly
-/// when the reference group has a member in that group of that list. Both
-/// families are one-sided and only ever pushed up (`crate::extras`), so the
-/// tight values are feasible, and they are the ones a minimizing solve would
-/// settle on — the configuration therefore evaluates to exactly what the
-/// model charges for this placement, not to an inflated bound.
+/// a `Together` is 1 exactly when the pair sits in that group of that list, a
+/// `Coincide` exactly when the pair meets in both of its tiers. Both families
+/// are one-sided and only ever pulled *down* (`crate::extras`), so the tight
+/// values are feasible, and they are the ones the maximizing solve settles on
+/// — the configuration therefore evaluates to exactly the collision score of
+/// this placement, which is to say to
+/// [`placement_objective`](crate::placement_objective) of the same lists, and
+/// not to some inflated bound.
 ///
-/// The variable set is the model's own: the declared extras are read from
-/// [`co_occurrences`] and [`scatter_sites`], the very functions that declare
-/// them, so valuation and declaration cannot drift apart. A configuration
-/// missing a variable — or carrying one the model does not have — is refused
-/// wholesale by `Model::solution_from_complete_data`.
+/// The variable set is the model's own: both families are enumerated from
+/// [`PairData`], the very table that declares them, so valuation and
+/// declaration cannot drift apart. A configuration missing a variable — or
+/// carrying one the model does not have — is refused wholesale by
+/// `Model::solution_from_complete_data`.
 ///
 /// Panics on internal inconsistency, like [`build_group_lists`]: a list whose
 /// count differs from the plan's, a student of a spec sitting in no group of
@@ -172,39 +173,57 @@ pub fn group_lists_to_warm_start(
         }
     }
 
-    for ((a, b, class), class_lists) in co_occurrences(&env) {
-        // A pinned pair has no defining row at all — its variable is fixed to
-        // 1 — so the pin is read first, whatever the placement did with the
-        // pair. Both students belong to every list of the entry, so the two
-        // lookups below are always `Some`.
-        let shared = env.pinned_pairs(class).contains(&(a, b))
-            || class_lists.iter().any(|list| {
-                let seats = &placement[list.0];
-                seats.get(&a) == seats.get(&b)
-            });
-        config = config.set(
-            InternalVar::Extra(ExtraVarName::SharedPair { a, b, class }),
-            if shared { 1.0 } else { 0.0 },
-        );
-    }
+    let pairs = PairData::new(plan, &env);
+    for ((a, b), table) in pairs.pairs() {
+        // The group the two share in a list, if any. Both students belong to
+        // every list of their tier table, so the two lookups are `Some`
+        // whenever the pair is asked about at all.
+        let shared_seat = |list: GroupListIdx| -> Option<u32> {
+            let seats = &placement[list.0];
+            match (seats.get(&a), seats.get(&b)) {
+                (Some(&ga), Some(&gb)) if ga == gb => Some(ga),
+                _ => None,
+            }
+        };
+        // Whether they meet in one *tier* — the sum a `Coincide` is bounded
+        // by, which the one group per list makes 0/1.
+        let in_tier = |tier: &crate::pairs::Tier| {
+            shared_seat(tier.list).is_some_and(|group| tier.groups.contains(&group))
+        };
 
-    for (list, ref_group) in scatter_sites(&env) {
-        for group in 0..env.group_count(list) {
-            // Members of the reference group the list does not hold are
-            // absent from its placement, so they never occupy anything —
-            // matching the defining rows, which are written over the members
-            // the list holds.
-            let occupied = env
-                .ref_group(ref_group)
-                .iter()
-                .any(|student| placement[list.0].get(student) == Some(&group));
+        for tier in table {
+            for &group in &tier.groups {
+                config = config.set(
+                    InternalVar::Extra(ExtraVarName::Together {
+                        a,
+                        b,
+                        list: tier.list,
+                        group,
+                    }),
+                    if shared_seat(tier.list) == Some(group) {
+                        1.0
+                    } else {
+                        0.0
+                    },
+                );
+            }
+        }
+
+        for (first, second) in cross_tiers(table) {
             config = config.set(
-                InternalVar::Extra(ExtraVarName::RefGroupInGroup {
-                    list,
-                    ref_group,
-                    group,
+                InternalVar::Extra(ExtraVarName::Coincide {
+                    a,
+                    b,
+                    list1: first.list,
+                    target1: first.target,
+                    list2: second.list,
+                    target2: second.target,
                 }),
-                if occupied { 1.0 } else { 0.0 },
+                if in_tier(first) && in_tier(second) {
+                    1.0
+                } else {
+                    0.0
+                },
             );
         }
     }

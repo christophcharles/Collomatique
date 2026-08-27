@@ -106,10 +106,10 @@ pub(crate) struct Tier {
 /// Everything the objective needs about the plan's student pairs: where they
 /// can meet, at what mass, and what the kept lists already gave them.
 ///
-/// Nothing in the model reads this yet — the extras, the objective and the
-/// warm start all pick it up in the swap commit — hence the allows below.
+/// The single source of truth of the three sides that must agree: what
+/// [`crate::extras`] declares, what [`crate::objective`] weighs, and what
+/// [`group_lists_to_warm_start`](crate::group_lists_to_warm_start) valuates.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub(crate) struct PairData {
     /// `N_s`, by student ([`plan_n_uses`]).
     n_uses: BTreeMap<StudentId, usize>,
@@ -124,7 +124,6 @@ pub(crate) struct PairData {
     kept: BTreeMap<(StudentId, StudentId), (f64, f64)>,
 }
 
-#[allow(dead_code)]
 impl PairData {
     pub(crate) fn new(plan: &GenerationPlan, env: &VarEnv) -> PairData {
         let n_uses = plan_n_uses(plan);
@@ -225,6 +224,9 @@ impl PairData {
     }
 
     /// The tier table of one pair — empty for a pair that can never meet.
+    /// Test-only: the three production readings all sweep the whole table
+    /// through [`PairData::pairs`].
+    #[cfg(test)]
     pub(crate) fn tiers(&self, a: StudentId, b: StudentId) -> &[Tier] {
         self.tiers.get(&(a, b)).map_or(&[], Vec::as_slice)
     }
@@ -283,7 +285,6 @@ impl PairData {
 ///
 /// Same-list couples are left out because one group per list means their
 /// product is identically zero — the sites of a list are mutually exclusive.
-#[allow(dead_code)]
 pub(crate) fn cross_tiers(tiers: &[Tier]) -> impl Iterator<Item = (&Tier, &Tier)> {
     tiers.iter().enumerate().flat_map(move |(i, first)| {
         tiers[i + 1..]

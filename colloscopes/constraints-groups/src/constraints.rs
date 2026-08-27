@@ -64,9 +64,10 @@ mod tests {
         frozen: &FrozenPlacements,
     ) -> ConfigData<InternalVar<Var, ExtraVarName>> {
         let env = VarEnv::new(plan);
+        let pairs = crate::pairs::PairData::new(plan, &env);
         let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
         modeler
-            .apply_bundle(crate::extras::build_extras(&env).into_general())
+            .apply_bundle(crate::extras::build_extras(&pairs).into_general())
             .expect("no duplicate extras");
         modeler
             .apply_bundle(build(&env, frozen).into_general())

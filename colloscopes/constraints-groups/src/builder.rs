@@ -100,9 +100,13 @@ pub fn build_model(
     build_model_with_log(plan, weights, frozen, &mut |_: &str| {})
 }
 
+/// `_weights` is already dead: the collision objective has nothing to weigh.
+/// The parameter survives one commit so that gtk4, which names
+/// [`ObjectiveWeights`] in four files, can be simplified on its own before the
+/// type is retired.
 pub fn build_model_with_log(
     plan: &GenerationPlan,
-    weights: ObjectiveWeights,
+    _weights: ObjectiveWeights,
     frozen: &FrozenPlacements,
     log: &mut (dyn FnMut(&str) + Send),
 ) -> GroupListsModel {
@@ -128,11 +132,16 @@ pub fn build_model_with_log(
         }};
     }
 
+    // One enumeration, three readings: it declares the extras, weighs them in
+    // the objective, and is what a warm start valuates them from
+    // (`group_lists_to_warm_start`).
+    let pairs = crate::pairs::PairData::new(plan, &env);
+
     // The extras must be declared before the constraints and the objective
     // reference them.
-    apply!("extras", crate::extras::build_extras(&env));
+    apply!("extras", crate::extras::build_extras(&pairs));
     apply!("constraints", crate::constraints::build(&env, frozen));
-    apply!("objective", crate::objective::build(&env, weights));
+    apply!("objective", crate::objective::build(&pairs));
 
     modeler
         .build_with_log(&env, log)
@@ -146,9 +155,14 @@ mod tests {
 
     #[test]
     fn shape_constraints_are_emitted() {
-        // List 0: 4 students, sizes 2..=3 → ceil(4/3) = 2 groups. List 1:
-        // 3 students, sizes 1..=2 → ceil(3/2) = 2 groups.
-        let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 3)), (&[5, 6, 7], (1, 2))]);
+        // List 0: 4 students, sizes 2..=3 → ceil(4/3) = 2 groups, targets
+        // 2 / 2. List 1: 3 students, sizes 1..=2 → ceil(3/2) = 2 groups,
+        // targets 2 / 1. Both lists serve one (period, subject) pair, so
+        // neither is filtered out of the pair enumeration.
+        let plan = crate::vars::tests::plan_with_uses(
+            &[(&[1, 2, 3, 4], (2, 3), 1), (&[5, 6, 7], (1, 2), 1)],
+            &[],
+        );
         let model = build_model(
             &plan,
             crate::ObjectiveWeights::default(),
@@ -175,38 +189,31 @@ mod tests {
         // is plan data, not a grouping the model shapes.
         assert_eq!(sizes, 4);
 
-        // The objective references every `SharedPair`, so they are all
-        // expanded. The lists are disjoint, so the co-occurring pairs are
-        // C(4,2) + C(3,2) = 6 + 3. Their one-sided definitions reference
-        // nothing but base variables, so the extras of the model are
-        // exactly those nine columns — the whole `PairInGroup` block, and
-        // the helper columns of its reification, are gone.
+        // The objective references every declared extra, so they are all
+        // expanded. The lists are disjoint, so no pair is in two of them and
+        // no product is declared at all.
         //
-        // The two lists have different ranges, so they are two size classes,
-        // sorted: class 0 is list 1's 1..=2 and class 1 is list 0's 2..=3.
-        // Every pair belongs to exactly one of them here.
-        let mut per_class = [0, 0];
-        let mut pieces = 0;
+        // Sites: list 0 has one tier of two groups, so each of its C(4,2) = 6
+        // pairs gets 2. List 1's targets are 2 / 1, and the lone seat is
+        // filtered out (F1), so each of its C(3,2) = 3 pairs gets 1.
+        let mut sites = 0;
+        let mut products = 0;
         let mut helpers = 0;
         for v in model.problem().get_variables().keys() {
             // Exhaustive for the same reason as the `match` above.
             match v {
-                InternalVar::Extra(ExtraVarName::SharedPair { class, .. }) => {
-                    per_class[class.0] += 1
-                }
-                InternalVar::Extra(ExtraVarName::RefGroupInGroup { .. }) => pieces += 1,
+                InternalVar::Extra(ExtraVarName::Together { .. }) => sites += 1,
+                InternalVar::Extra(ExtraVarName::Coincide { .. }) => products += 1,
                 InternalVar::Helper { .. } => helpers += 1,
                 InternalVar::Base(_) => {}
             }
         }
-        assert_eq!(per_class, [3, 6]);
-        // The template spans the union at the canonical 2..=3, so its three
-        // reference groups are {1, 2, 3}, {4, 5} and {6, 7}: the clustering
-        // sees no signal beyond "same spec", and breaks ties by student id.
-        // List 0 ({1, 2, 3, 4}) meets the first two, list 1 ({5, 6, 7}) the
-        // last two, so there are four sites — and one variable per site and
-        // group of its list, 2 groups each.
-        assert_eq!(pieces, 4 * 2);
+        assert_eq!(sites, 6 * 2 + 3);
+        assert_eq!(products, 0);
+        // The one-sided definitions reference nothing but base variables and
+        // each other, so the extras of the model are exactly those columns —
+        // no reification helper anywhere, which is what lets a warm start name
+        // every variable of the model.
         assert_eq!(helpers, 0);
     }
 
