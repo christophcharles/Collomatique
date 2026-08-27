@@ -1,7 +1,8 @@
 # Roadmap: greedy group-list generation
 
 *Companion document: `greedy_algorithm.md` details point 1. This roadmap stays
-general; points 2 and 4 will be detailed in future sessions.*
+general; points 1 to 3 are done, and point 4 will be detailed in a future
+session.*
 
 ## Why this change
 
@@ -50,7 +51,7 @@ These decisions are fixed and shared by every point below:
   optimizes either the adjustment layer alone (prefill fixed + greedy as warm
   start) or the whole model (prefill + greedy as warm start).
 
-## Point 1 — the greedy algorithm
+## Point 1 — the greedy algorithm — **done**
 
 Detailed in `docs/plans/greedy_algorithm.md`. Summary:
 
@@ -63,22 +64,34 @@ Detailed in `docs/plans/greedy_algorithm.md`. Summary:
   payload of `GroupListsUpdateOp::AddGeneratedGroupLists`, mirroring
   `build_group_lists`.
 
-Status: the objective, the prefill/greedy/ILP workflow, the student order,
-the claim tie convention and the arithmetic (`f64`) are settled; the one
-genuinely open question is the prefill coverage rule (§6.3 of the algorithm
-document), implemented as written for now but kept easy to change.
+The kept-list plumbing landed in `a33a69f7`, the generator itself in
+`2ab5e0f5`, and its regression net — every example, plus a random-walk fuzz
+build — in `8b06c7a1`. The objective, the prefill/greedy/ILP workflow, the
+student order, the claim tie convention and the arithmetic (`f64`) are
+settled.
 
-## Point 2 — GUI integration
+One question stays deliberately open, and being done does not close it: the
+prefill coverage rule (§6.3 of the algorithm document) is implemented exactly
+as written, as the first attempt, and kept easy to change.
 
-Today's flow: `generate_dialog` (pick pairs, kept lists, strategy, weights) →
-`naming_dialog` (names + model build off-thread) → `run_solver` dialog
+## Point 2 — GUI integration — **done**
+
+The flow before: `generate_dialog` (pick pairs, kept lists, strategy, weights)
+→ `naming_dialog` (names + model build off-thread) → `run_solver` dialog
 (subprocess solve) → `AddGeneratedGroupLists`.
 
-The greedy replaces the solver leg: it is fast enough to run without the
-solver dialog and without a subprocess. The generate dialog keeps the pair and
-kept-list selection; the strategy/weights/canonical-range controls belong to
-the ILP path and their fate is tied to point 3. To be detailed in a future
-session.
+The greedy took the solver leg (`e1e88578`). `naming_dialog` is now the step
+that generates: it builds the plan, runs the greedy off the UI thread while
+streaming its log into a `DebugView`, and "Valider" lands that answer as it
+stands — no subprocess, no solver dialog. The ILP became a door off the same
+answer: "Optimiser les listes de groupes" opens
+`naming_dialog/optimize_dialog.rs`, and the polish runs from the very plan the
+greedy ran on, with the greedy's own lists as warm start.
+
+The generate dialog kept the pair and kept-list selection. The controls that
+belonged to the ILP path were settled by point 3 (`3cab1012`): the strategy and
+"Figer le pré-remplissage" live in the optimize window, and the weight and
+canonical-range controls are gone.
 
 ## Point 3 (optional) — ILP redesign — **done**
 
