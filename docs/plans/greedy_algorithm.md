@@ -12,14 +12,16 @@ status label:*
 ## 1. Scope — Settled
 
 A greedy algorithm that builds all requested group lists at once, fast, always
-succeeding, with teacher-quality stability. It does not replace the ILP; the
-ILP becomes the optional polish (roadmap point 3). No GUI work here (point 2).
+succeeding, with teacher-quality stability. When this was written the ILP was
+to stay as an optional polish (roadmap point 3); it was tried and then retired,
+so the greedy is now the only generator. No GUI work here (point 2).
 
-- Code: `colloscopes/constraints-groups/src/greedy.rs`, submodules as needed,
+- Code: `colloscopes/greedy-groups/src/greedy.rs`, submodules as needed,
   unit tests in `greedy/tests.rs` (never a `#[cfg(test)]` mod at the bottom of
   the source file).
 - Input: the existing `GenerationPlan` (see §5 for the one extension).
-- Output and API, mirroring `build_group_lists` in `convert.rs`:
+- Output and API, mirroring `build_group_lists` in `convert.rs` (the ILP's own
+  conversion, gone with it):
 
 ```rust
 pub fn greedy_group_lists(
