@@ -50,6 +50,8 @@ pub enum GroupListsInput {
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
+    /// Removes every group list the document holds, in one operation.
+    DeleteAllGroupLists,
     AddGroupList,
     GroupListSelected(collomatique_state_colloscopes::group_lists::GroupList),
 
@@ -177,6 +179,17 @@ impl Component for GroupLists {
                             set_halign: gtk::Align::Start,
                             set_label: "Listes de groupes",
                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                        },
+                        gtk::Button {
+                            #[watch]
+                            set_sensitive: !model.params.group_lists.group_list_map.is_empty(),
+                            set_icon_name: "edit-delete-symbolic",
+                            add_css_class: "flat",
+                            // Not the colloscope panel's "Effacer les listes de groupes", which
+                            // empties the placements inside automatic lists: this one removes the
+                            // lists themselves.
+                            set_tooltip_text: Some("Supprimer toutes les listes de groupes"),
+                            connect_clicked => GroupListsInput::DeleteAllGroupLists,
                         },
                         gtk::Box {
                             set_hexpand: true,
@@ -550,6 +563,13 @@ impl Component for GroupLists {
                 sender
                     .output(GroupListsOutput::UpdateOp(
                         GroupListsUpdateOp::DeleteGroupList(id),
+                    ))
+                    .unwrap();
+            }
+            GroupListsInput::DeleteAllGroupLists => {
+                sender
+                    .output(GroupListsOutput::UpdateOp(
+                        GroupListsUpdateOp::DeleteAllGroupLists,
                     ))
                     .unwrap();
             }
