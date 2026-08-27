@@ -44,11 +44,15 @@ fn plan(specs: &[(&[u64], (u32, u32), usize)], kept: &[(&[&[u64]], usize)]) -> G
     }
 }
 
-fn run(plan: &GenerationPlan) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
+fn run_outcome(plan: &GenerationPlan) -> GreedyOutcome {
     let names: Vec<String> = (0..plan.specs.len())
         .map(|i| format!("Liste {i}"))
         .collect();
     greedy_group_lists(plan, &names)
+}
+
+fn run(plan: &GenerationPlan) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
+    run_outcome(plan).lists
 }
 
 /// The prefilled groups of one list, as student sets.
@@ -109,6 +113,26 @@ fn assert_valid(plan: &GenerationPlan, lists: &[(GroupList, BTreeSet<(PeriodId, 
             }
         }
         assert_eq!(&seen, spec.students(), "every student placed exactly once");
+    }
+}
+
+/// Every frozen seat names the group the produced list actually holds that
+/// student in.
+///
+/// This is the claim the whole pinning feature rests on: the greedy's group
+/// indices are the model's, because `into_group_lists` never compacts.
+fn assert_frozen_agrees(outcome: &GreedyOutcome) {
+    let memberships = memberships(&outcome.lists);
+    for (list, student, group) in outcome.frozen.iter() {
+        let groups = &memberships[list.0];
+        assert!(
+            (group as usize) < groups.len(),
+            "frozen seat {list:?}/{student:?}/{group} names a group the list does not have",
+        );
+        assert!(
+            groups[group as usize].contains(&student),
+            "frozen seat {list:?}/{student:?}/{group} is not where the list holds them",
+        );
     }
 }
 
@@ -264,10 +288,42 @@ fn prefill_exact_fit() {
     // "purity + lowest index" design sent the pair into the 3-group and
     // doomed the trio.
     let plan = plan(&[(&[1, 2, 3, 4, 5], (2, 3), 1), (&[1, 2], (2, 2), 1)], &[]);
-    let lists = run(&plan);
-    assert_valid(&plan, &lists);
+    let outcome = run_outcome(&plan);
+    assert_valid(&plan, &outcome.lists);
 
-    assert_eq!(memberships(&lists)[0], vec![set(&[3, 4, 5]), set(&[1, 2])]);
+    assert_eq!(
+        memberships(&outcome.lists)[0],
+        vec![set(&[3, 4, 5]), set(&[1, 2])]
+    );
+
+    // Prefill covered the whole plan here, so every (list, student) seat is
+    // frozen: five in the first list, two in the second.
+    let seats: usize = plan
+        .specs
+        .iter()
+        .map(|(spec, _covered)| spec.students().len())
+        .sum();
+    assert_eq!(outcome.frozen.len(), seats);
+    assert_frozen_agrees(&outcome);
+}
+
+#[test]
+fn prefill_can_claim_nothing() {
+    // Ten students in two groups of five, split into five cohorts of two by a
+    // kept list that pairs them off. No cohort can tile a five-seat group, so
+    // no list is a claiming list and prefill seats nobody: the pass decides
+    // everything, and there is nothing to pin.
+    let plan = plan(
+        &[(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], (5, 5), 1)],
+        &[(&[&[1, 2], &[3, 4], &[5, 6], &[7, 8], &[9, 10]], 1)],
+    );
+    let outcome = run_outcome(&plan);
+    assert_valid(&plan, &outcome.lists);
+
+    assert!(
+        outcome.frozen.is_empty(),
+        "prefill claimed nothing, so nothing is frozen",
+    );
 }
 
 #[test]
@@ -308,7 +364,7 @@ fn the_log_reaches_the_callback() {
 
     let mut lines: Vec<String> = Vec::new();
     let lists =
-        greedy_group_lists_with_log(&plan, &names, &mut |line| lines.push(line.to_string()));
+        greedy_group_lists_with_log(&plan, &names, &mut |line| lines.push(line.to_string())).lists;
 
     assert_valid(&plan, &lists);
     assert_eq!(

@@ -141,12 +141,12 @@ fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData, coverage: &Coverage) {
     let names: Vec<String> = (0..plan.specs.len())
         .map(|i| format!("Liste {i}"))
         .collect();
-    let lists = greedy_group_lists(&plan, &names);
+    let lists = greedy_group_lists(&plan, &names).lists;
 
     // Deterministic: a second run on the same plan yields the same groups.
     assert_eq!(
         memberships(&lists),
-        memberships(&greedy_group_lists(&plan, &names)),
+        memberships(&greedy_group_lists(&plan, &names).lists),
         "greedy placement must be deterministic",
     );
 

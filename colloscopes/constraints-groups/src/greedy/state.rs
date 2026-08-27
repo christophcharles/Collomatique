@@ -7,7 +7,9 @@
 //! on a strict `>` over a pure function to be unable to cycle.
 
 use super::targets::balanced_targets;
+use crate::frozen::FrozenPlacements;
 use crate::specs::{GenerationPlan, KeptList};
+use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::group_lists::{
     GroupList, GroupListFilling, GroupListParameters, PrefilledGroup,
 };
@@ -183,6 +185,24 @@ impl<'a> State<'a> {
             .copied()
             .filter(|&list| !self.frozen.contains(&(student, list)))
             .collect()
+    }
+
+    /// What prefill seated and the pass never touched, as model coordinates.
+    ///
+    /// The lookup cannot miss: `freeze` is only ever called right after
+    /// `place` on the same pair, and nothing removes a frozen placement —
+    /// the revision sweep only visits `movable_lists`, the profile *minus*
+    /// `frozen`.
+    pub(super) fn frozen_placements(&self) -> FrozenPlacements {
+        FrozenPlacements::new(
+            self.frozen
+                .iter()
+                .map(|&(student, list)| {
+                    let group = self.placements[&student][&list];
+                    ((GroupListIdx(list), student), group as u32)
+                })
+                .collect(),
+        )
     }
 
     // --- mutation --------------------------------------------------------

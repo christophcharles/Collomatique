@@ -83,7 +83,7 @@ fn all_examples_build() {
         let names: Vec<String> = (0..plan.specs.len())
             .map(|i| format!("Liste {i}"))
             .collect();
-        let lists = greedy_group_lists(&plan, &names);
+        let lists = greedy_group_lists(&plan, &names).lists;
         assert_eq!(
             lists.len(),
             plan.specs.len(),

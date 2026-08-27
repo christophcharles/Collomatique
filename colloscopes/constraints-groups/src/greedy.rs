@@ -22,11 +22,24 @@ mod targets;
 #[cfg(test)]
 mod tests;
 
+use crate::frozen::FrozenPlacements;
 use crate::specs::GenerationPlan;
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::{PeriodId, StudentId, SubjectId};
 use std::collections::BTreeSet;
 use std::time::Instant;
+
+/// What one greedy run produced.
+pub struct GreedyOutcome {
+    /// One prefilled `GroupList` per spec, in plan order, paired with the
+    /// (period, subject) pairs it must be associated to — exactly the payload
+    /// of `GroupListsUpdateOp::AddGeneratedGroupLists`.
+    pub lists: Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)>,
+    /// The seats phase one froze, in the shape
+    /// [`build_model`](crate::build_model) pins them from. Empty when prefill
+    /// claimed nothing.
+    pub frozen: FrozenPlacements,
+}
 
 /// Builds one prefilled `GroupList` per spec of the plan, in plan order,
 /// paired with the (period, subject) pairs it must be associated to — exactly
@@ -38,10 +51,7 @@ use std::time::Instant;
 /// unconditionally. `group_names` come out all `None`.
 ///
 /// Panics if `names.len()` is not `plan.specs.len()`.
-pub fn greedy_group_lists(
-    plan: &GenerationPlan,
-    names: &[String],
-) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
+pub fn greedy_group_lists(plan: &GenerationPlan, names: &[String]) -> GreedyOutcome {
     greedy_group_lists_with_log(plan, names, &mut |_: &str| {})
 }
 
@@ -56,7 +66,7 @@ pub fn greedy_group_lists_with_log(
     plan: &GenerationPlan,
     names: &[String],
     log: &mut (dyn FnMut(&str) + Send),
-) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
+) -> GreedyOutcome {
     assert_eq!(
         names.len(),
         plan.specs.len(),
@@ -114,7 +124,9 @@ pub fn greedy_group_lists_with_log(
         t.elapsed(),
     ));
 
+    // Read before `into_group_lists` consumes the state.
+    let frozen = state.frozen_placements();
     let lists = state.into_group_lists(names);
     log(&format!("[greedy] Done ({:.2?})", total.elapsed()));
-    lists
+    GreedyOutcome { lists, frozen }
 }

@@ -581,7 +581,7 @@ impl Component for Dialog {
                         let mut log = move |line: &str| {
                             input.emit(DialogInput::Echo(format!("{}\n", line)));
                         };
-                        let generated = greedy_group_lists_with_log(&plan, &names, &mut log);
+                        let generated = greedy_group_lists_with_log(&plan, &names, &mut log).lists;
                         DialogCommandOutput::Generated(seq, generated)
                     });
                 }

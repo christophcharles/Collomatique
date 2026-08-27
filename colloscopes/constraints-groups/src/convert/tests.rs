@@ -13,7 +13,7 @@ fn names(plan: &GenerationPlan) -> Vec<String> {
 }
 
 fn greedy(plan: &GenerationPlan) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
-    crate::greedy_group_lists(plan, &names(plan))
+    crate::greedy_group_lists(plan, &names(plan)).lists
 }
 
 /// The prefilled groups of one list, as student sets.
