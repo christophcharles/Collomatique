@@ -15,6 +15,7 @@ pub mod dialogs;
 pub mod document;
 pub mod engine;
 pub mod errors;
+pub mod generation;
 pub mod handles;
 pub mod host;
 pub mod ids;
@@ -47,6 +48,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     data::register(m)?;
     dialogs::register(m)?;
     errors::register(m)?;
+    generation::register(m)?;
     host::register(m)?;
     ids::register(m)?;
     model::register(m)?;

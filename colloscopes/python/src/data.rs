@@ -798,6 +798,54 @@ where
     items.map(|item| argument::<H>(doc, &item?)).collect()
 }
 
+/// A field holding a set of (period, subject) pairs
+///
+/// The coordinates of the association table, as a set rather than a mapping:
+/// what a generation request says it wants rebuilt. Anything iterable is
+/// accepted, and each half of each pair goes through
+/// [crate::handles::argument] like every other entity reference — a handle and
+/// an id are the same thing here, and a dead one is refused with that
+/// function's own sentence.
+///
+/// Two spellings of one pair collapse into a single entry, which is
+/// [entity_set]'s stance and for its reason: a set has no attached value to
+/// lose by the collapse, unlike [entity_dict], which refuses the double
+/// naming outright.
+fn pair_set(
+    doc: &Py<Document>,
+    site: Site<'_>,
+    name: &str,
+    obj: &Bound<'_, PyAny>,
+) -> PyResult<BTreeSet<(RawId<Period>, RawId<Subject>)>> {
+    let value = field(site, name, obj)?;
+    let items = value.try_iter().map_err(|_| {
+        PyTypeError::new_err(format!(
+            "{} is a set of (period, subject) pairs, and {} cannot be iterated over",
+            site.field(name),
+            shown(&value, "that value"),
+        ))
+    })?;
+
+    items
+        .map(|item| {
+            let item = item?;
+            let (period, subject): (Bound<'_, PyAny>, Bound<'_, PyAny>) =
+                item.extract().map_err(|_| {
+                    PyTypeError::new_err(format!(
+                        "{} holds (period, subject) pairs, and {} is not one",
+                        site.field(name),
+                        shown(&item, "that pair"),
+                    ))
+                })?;
+
+            Ok((
+                argument::<Period>(doc, &period)?,
+                argument::<Subject>(doc, &subject)?,
+            ))
+        })
+        .collect()
+}
+
 /// A field holding a whole section keyed by entity ids
 ///
 /// The tree of `DocumentData` is a dict per entity section. The keys follow
@@ -3330,6 +3378,69 @@ impl ConductorStrategy {
                 .transpose()?,
         )?;
         kwargs.set_item("warm_start_incumbent", strategy.warm_start_incumbent)?;
+
+        class(py, Self::CLASS)?.call((), Some(&kwargs))
+    }
+}
+
+/// What one group-list generation is asked to build
+///
+/// A [Value] where the strategy above is not, and for the reason that one
+/// gives: this request names entities of a document — the pairs to rebuild,
+/// the lists to keep — so it has one to be resolved against.
+///
+/// The model type is the generator's own [collomatique_greedy_groups::GenerationRequest],
+/// not an op payload: nothing is written by a generation, and the op comes
+/// later, out of what the generator produced.
+pub struct GroupListsGenerationRequest;
+
+impl Value for GroupListsGenerationRequest {
+    type Model = collomatique_greedy_groups::GenerationRequest;
+
+    const CLASS: &'static str = "GroupListsGenerationRequest";
+
+    fn from_py(
+        doc: &Py<Document>,
+        obj: &Bound<'_, PyAny>,
+    ) -> PyResult<collomatique_greedy_groups::GenerationRequest> {
+        let site = Site::whole(Self::CLASS);
+
+        // The fields are read in the order they are declared in the dataclass,
+        // so the first bad one is the one a refusal names. Nothing here is
+        // checked beyond the references themselves: what a request may ask for
+        // is the plan's business, and `doc.generate_group_lists` is where its
+        // refusals are answered.
+        Ok(collomatique_greedy_groups::GenerationRequest {
+            rebuild: pair_set(doc, site, "rebuild", obj)?,
+            kept_lists: entity_set::<GroupList>(doc, site, "kept_lists", obj)?,
+        })
+    }
+
+    fn to_py<'py>(
+        py: Python<'py>,
+        request: &collomatique_greedy_groups::GenerationRequest,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let kwargs = PyDict::new(py);
+        // Sets, not frozensets: these are the fields a script edits before
+        // handing the request over, the way it edits a rule's excluded
+        // periods.
+        kwargs.set_item(
+            "rebuild",
+            PySet::new(
+                py,
+                request
+                    .rebuild
+                    .iter()
+                    .map(|&(period, subject)| (PeriodId::wrap(period), SubjectId::wrap(subject))),
+            )?,
+        )?;
+        kwargs.set_item(
+            "kept_lists",
+            PySet::new(
+                py,
+                request.kept_lists.iter().map(|id| GroupListId::wrap(*id)),
+            )?,
+        )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

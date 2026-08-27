@@ -38,8 +38,8 @@
 //! does not hold is the value boundary's.
 //!
 //! The family's eighth op, `add_generated`, is the landing door of group-list
-//! generation and is not published here: that feature is not settled yet, so
-//! the API fronts nothing for it — neither the generation call nor this door
+//! generation: `doc.generate_group_lists` builds the lists and writes nothing,
+//! and this door lands what it built as one undo slot
 //! (`docs/python/new_api_design.md` §10).
 
 use pyo3::exceptions::PyIndexError;
@@ -402,6 +402,47 @@ impl GroupLists {
         )
     }
 
+    /// Lands generated group lists — one operation, one undo slot
+    ///
+    /// ```python
+    /// result = doc.generate_group_lists(doc.default_generation_request())
+    /// doc.group_lists.add_generated(result.entries)
+    /// ```
+    ///
+    /// Takes `result.entries` from [crate::Document::generate_group_lists], or
+    /// anything of that shape: pairs of a `GroupListData` and the
+    /// `(period, subject)` coordinates it must serve. So a script may land a
+    /// subset of a generation, or entries it built itself with no generation
+    /// behind them.
+    ///
+    /// Each entry adds its list and writes its associations. An association
+    /// overwrites whatever the coordinate held; the list that held it is kept,
+    /// not deleted, and a list nobody uses is an ordinary document. The colles
+    /// of an overwritten coordinate are measured against the list that lands,
+    /// so the cascade trims what no longer fits, and every repair comes back
+    /// on the result.
+    ///
+    /// The answer is a plain `OpResult`, not the `AddResult` [GroupLists::add]
+    /// gives: this op mints a list per entry and reports no id back, so there
+    /// is no one created thing to hand over. The lists are read off the
+    /// collection afterwards.
+    ///
+    /// The two refusals the model keeps reach a script as `GroupListsError`: a
+    /// coordinate whose subject runs no interrogations, and one whose subject
+    /// does not run on the period. A reference the document does not hold is
+    /// caught above the write — the students of a filling by the value
+    /// boundary, the coordinates by the argument convention.
+    fn add_generated(&self, py: Python<'_>, entries: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        // Extracted before the mutable borrow below and never inside it, like
+        // every other value this family writes.
+        let entries = crate::generation::entries_from_py(&self.doc, entries)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::AddGeneratedGroupLists(entries)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.GroupLists count={}>", self.__len__(py))
     }
@@ -410,7 +451,9 @@ impl GroupLists {
 impl GroupLists {
     /// Writes through the document the view came from
     ///
-    /// The six mutators that create nothing end here. The creating one ends in
+    /// The seven mutators that report no created id end here — six that create
+    /// nothing, and [GroupLists::add_generated], whose op mints a list per
+    /// entry and hands none of their ids back. The one that does ends in
     /// [crate::results::created], which takes the same borrow and keeps the id
     /// the op issued as well.
     fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {

@@ -19,8 +19,8 @@ use crate::collections::{
 };
 use crate::dialogs::FileRequest;
 use crate::errors::{
-    Cancelled, CaveatedOverwrite, Error, ExportError, IdCeilingExceeded, LoadError,
-    ModelBuildError, NoDocument, NoOrigin, NothingToUndo, SaveError, UpdateError,
+    Cancelled, CaveatedOverwrite, Error, ExportError, GroupListsGenerationError, IdCeilingExceeded,
+    LoadError, ModelBuildError, NoDocument, NoOrigin, NothingToUndo, SaveError, UpdateError,
 };
 use crate::model::ColloscopeModel;
 use crate::results::{OpResult, Warning};
@@ -1152,5 +1152,163 @@ impl Document {
         built
             .map(|model| ColloscopeModel::new(model, inner.params))
             .map_err(ModelBuildError::new_err)
+    }
+
+    /// The generation request the application's own dialog opens with
+    ///
+    /// ```python
+    /// req = doc.default_generation_request()
+    /// result = doc.generate_group_lists(req)
+    /// ```
+    ///
+    /// `rebuild` holds every `(period, subject)` pair that could take a group
+    /// list and has none — the subject runs interrogations, it is not excluded
+    /// from the period, and nothing is associated to the pair yet — and
+    /// `kept_lists` holds every prefilled list, as a stability anchor. It is
+    /// built by the same function the application's generation dialog fills
+    /// its own switches from, so a script and a click start from one
+    /// selection.
+    ///
+    /// A plain `GroupListsGenerationRequest`, fresh every call and holding
+    /// ids: edit it, or ignore it and build one from nothing.
+    ///
+    /// It says nothing about what will work. A pair whose students the group
+    /// sizes cannot split is defaulted on here just as the dialog shows it —
+    /// where the user must clear it before « Valider » lights up, and where a
+    /// script meets it as `generate_group_lists`'s refusal.
+    fn default_generation_request<'py>(
+        slf: Py<Self>,
+        py: Python<'py>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        use crate::data::Value as _;
+
+        let request = {
+            let doc = slf.borrow(py);
+            collomatique_greedy_groups::default_generation_request(
+                &doc.data().get_inner_data().params,
+            )
+        };
+
+        // Built after the borrow ended: making the value calls back into
+        // python, which must not happen while the document is held.
+        crate::data::GroupListsGenerationRequest::to_py(py, &request)
+    }
+
+    /// Builds the group lists a request asks for
+    ///
+    /// ```python
+    /// result = doc.generate_group_lists(doc.default_generation_request())
+    /// doc.group_lists.add_generated(result.entries)
+    /// ```
+    ///
+    /// The application's own generation, run from here: the same generator on
+    /// the same document produces the same lists. It is fast — milliseconds on
+    /// a whole class — and synchronous, so there is no run to wait on and
+    /// nothing to stop.
+    ///
+    /// Nothing is written and no undo slot is taken. What comes back is a
+    /// `GroupListsGenerationResult`, and `doc.group_lists.add_generated` is
+    /// the door that lands it; a result nobody lands changes nothing.
+    ///
+    /// There is one entry per distinct list, not one per requested pair: two
+    /// pairs whose students and group-size range agree get a single list
+    /// between them, covering both. Each list is named after what it covers —
+    /// « Sortilèges (période 1) », the label the application's naming dialog
+    /// starts from — and a script renames one by editing `.name` on the value
+    /// before landing it.
+    ///
+    /// `on_log` is called with one line of the generator's log at a time;
+    /// `None` discards it. A callback that raises does not tear the
+    /// generation in half: it runs to its end, the callback is not called
+    /// again, and the exception comes out of this call with no result handed
+    /// back.
+    ///
+    /// A request that asks for a pair nobody is registered for is not an
+    /// error: no list is built for it, and the pair comes back in
+    /// `result.skipped`. What *is* refused, with `GroupListsGenerationError`:
+    /// a pair whose subject runs no interrogations, a kept list that is not
+    /// prefilled, and a pair whose students the subject's group sizes cannot
+    /// split — this last one reachable straight from
+    /// `default_generation_request()`, which offers it exactly as the dialog
+    /// does. A reference to something the document does not hold is refused
+    /// earlier still, with `StaleHandleError`.
+    #[pyo3(signature = (request, *, on_log=None))]
+    fn generate_group_lists(
+        slf: Py<Self>,
+        py: Python<'_>,
+        request: &Bound<'_, PyAny>,
+        on_log: Option<Py<PyAny>>,
+    ) -> PyResult<Py<crate::generation::GroupListsGenerationResult>> {
+        use crate::data::Value as _;
+
+        // Extracted before the borrow below and never inside it (§5) — and it
+        // is the extraction that refuses dead references, so the plan below
+        // can only fail on what the request asks for, never on what it names.
+        let request = crate::data::GroupListsGenerationRequest::from_py(&slf, request)?;
+
+        // Copied out of the borrow: the generator runs with the GIL released,
+        // and it must not hold the document while another thread could be
+        // handed it.
+        let params = {
+            let doc = slf.borrow(py);
+            doc.data().get_inner_data().params.clone()
+        };
+
+        let plan = collomatique_greedy_groups::build_generation_plan(&params, &request)
+            .map_err(|e| GroupListsGenerationError::new_err(e.to_string()))?;
+
+        // The coverage labels, which is what the application's naming dialog
+        // seeds its rows with — so the lists a script lands unrenamed are
+        // named exactly as a click would have named them. One per spec is also
+        // what the generator asks for.
+        let names: Vec<String> = plan
+            .specs
+            .iter()
+            .map(|(_spec, covered)| {
+                collomatique_ui_text::rendering::coverage_label(
+                    &params.periods,
+                    &params.subjects,
+                    covered,
+                )
+            })
+            .collect();
+
+        // What the log callback raised, if it raised. The generator takes an
+        // infallible `FnMut`, so a raising callback cannot stop it half-way
+        // through — the first exception is kept here, the callback is not
+        // called again, and the generation is left to finish (§10.2).
+        let mut failure: Option<PyErr> = None;
+        let mut log = |line: &str| {
+            let Some(callback) = on_log.as_ref() else {
+                return;
+            };
+            if failure.is_some() {
+                return;
+            }
+
+            // The GIL is released for the whole generation, so each line takes
+            // it back for the length of one call and gives it up again.
+            Python::attach(|py| {
+                if let Err(error) = callback.call1(py, (line,)) {
+                    failure = Some(error);
+                }
+            });
+        };
+
+        // Released for the duration, like a model build: the generation is
+        // short, but a script watching it through `on_log` is watching one
+        // that is really running.
+        let entries = py.detach(|| {
+            collomatique_greedy_groups::greedy_group_lists_with_log(&plan, &names, &mut log)
+        });
+
+        // The callback's exception wins over what the generation made of it:
+        // the script asked for the lines and one of them was refused, so no
+        // result is handed back.
+        if let Some(failure) = failure {
+            return Err(failure);
+        }
+
+        crate::generation::build(py, entries, &plan.skipped)
     }
 }

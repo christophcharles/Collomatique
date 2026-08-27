@@ -31,6 +31,11 @@ crate-type = [ "rlib", "cdylib" ]
 # The solve configuration `ColloscopeSolveConfig` mirrors, and the model
 # builder it will be handed to (`docs/python/new_api_design.md` §10).
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
+# The group-list generator `doc.generate_group_lists` runs, and the request
+# vocabulary it shares with the application's own dialog — the default
+# selection included, so a script and a click open on the same one
+# (`docs/python/new_api_design.md` §10).
+collomatique-greedy-groups = { path = "../../colloscopes/greedy-groups" }
 # `solution_to_config_data`, for `model.blame`: the engine answers a
 # reconstruction with a bare row of numbers, and that is what puts them back
 # on the variables they belong to. The application's own verification

@@ -7210,6 +7210,453 @@ fn group_lists_document(path: &Path) {
     std::fs::write(path, content).expect("the fixture should be writable");
 }
 
+/// A document written here, holding every shape a generation has to answer to
+///
+/// [group_lists_document] cannot carry this one: it has no assignment rows at
+/// all, so every pair a request named would be skipped, and other scripts pin
+/// its contents exactly. This one is built for the generation instead, and
+/// every part of it earns its place:
+///
+/// - **Sortilèges** and **Métamorphose**, both running colles in groups of two
+///   to three, are what the happy path rebuilds. On period 1 the same five
+///   students take both, so the two pairs share one spec and come out as a
+///   *single* list — the dedup, which is why the door names the lists itself.
+/// - On period 2 Sortilèges is down to four students, which is a spec of its
+///   own: without that, all three pairs would dedup into one and the fixture
+///   could not tell dedup from coincidence.
+/// - **Métamorphose on period 2** has no assignment row, so a request naming
+///   it lands in `skipped` rather than raising.
+/// - **Botanique** runs no interrogations: it is out of the default request
+///   altogether, and naming it is one of the refusals.
+/// - **Potions** asks for groups of exactly four, which five students cannot
+///   fill — the infeasible pair the default request offers anyway, exactly as
+///   the application's dialog does.
+/// - « Maisons » is prefilled and serves (period 1, Sortilèges), so the
+///   default keeps it and landing the generation overwrites its association
+///   without deleting it. « Automatique » is the automatic list a request may
+///   not keep.
+fn generation_document(path: &Path) {
+    use collomatique_state_colloscopes::assignments::Assignments;
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
+    };
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::{
+        Data, GroupListId, InnerData, PeriodId, StudentId, Subject, SubjectId,
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+    };
+
+    // Ids nothing else in this document issues, like [group_lists_document]'s.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+    let group_list = |n: u64| unsafe { GroupListId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+
+    let colles = |name: &str, sizes: (u32, u32)| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range(sizes),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    // The one subject that runs no colles, and so needs no group list.
+    let lectures = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: None,
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    // Display order, which is the order a coverage label enumerates.
+    let subjects = vec![
+        (subject(11), colles("Sortilèges", (2, 3))),
+        (subject(12), colles("Métamorphose", (2, 3))),
+        (subject(13), lectures("Botanique")),
+        (subject(14), colles("Potions", (4, 4))),
+    ];
+
+    let named_student = |firstname: &str, surname: &str| Student {
+        desc: person(firstname, surname, None, None),
+        excluded_periods: BTreeSet::new(),
+    };
+    let students = vec![
+        (student(31), named_student("Harry", "Potter")),
+        (student(32), named_student("Hermione", "Granger")),
+        (student(33), named_student("Ron", "Weasley")),
+        (student(34), named_student("Neville", "Londubat")),
+        (student(35), named_student("Luna", "Lovegood")),
+    ];
+
+    let everyone = BTreeSet::from([
+        student(31),
+        student(32),
+        student(33),
+        student(34),
+        student(35),
+    ]);
+    // Luna does not take Sortilèges on the second period, which is what makes
+    // that pair a spec of its own.
+    let without_luna = BTreeSet::from([student(31), student(32), student(33), student(34)]);
+
+    // Two groups of two, and Luna in none of them — a prefilled list's
+    // privilege, and beside the point here: what matters is that it is
+    // prefilled, so the default keeps it and the generator may respect it.
+    let prefilled = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![None, None],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([student(31), student(32)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(33), student(34)]),
+                },
+            ],
+        },
+    )
+    .expect("the prefilled groups match the names and share no student");
+
+    // Associated to nothing: a list nobody uses is an ordinary document, and
+    // this one is here to be refused as a kept list.
+    let automatic = GroupList::new(
+        GroupListParameters {
+            name: "Automatique".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![None, None],
+        },
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::new(),
+        },
+    )
+    .expect("an automatic list is always internally consistent");
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    let student_count = students.len();
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+
+    inner_data.params.assignments = Assignments {
+        map: [
+            ((period(1), subject(11)), everyone.clone()),
+            ((period(1), subject(12)), everyone.clone()),
+            ((period(1), subject(14)), everyone),
+            ((period(2), subject(11)), without_luna),
+        ]
+        .into_iter()
+        .collect(),
+    };
+
+    inner_data.params.group_lists = GroupLists {
+        group_list_map: [(group_list(51), prefilled), (group_list(52), automatic)]
+            .into_iter()
+            .collect(),
+        subjects_associations: [((period(1), subject(11)), group_list(51))]
+            .into_iter()
+            .collect(),
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The generation fixture, read the way the two generation tests need it
+///
+/// The ids of the entities the scripts name, found by name and by position so
+/// that the fixture may renumber without either test noticing, plus the label
+/// the scripts identify a `(period, subject)` pair by — the period's place in
+/// the document and the subject's name, since an id itself does not cross back.
+struct GenerationFixture {
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
+    periods: Vec<collomatique_state_colloscopes::PeriodId>,
+    subjects: BTreeMap<String, collomatique_state_colloscopes::SubjectId>,
+    group_lists: BTreeMap<String, collomatique_state_colloscopes::GroupListId>,
+}
+
+impl GenerationFixture {
+    fn read(path: &Path) -> GenerationFixture {
+        let params = reload(path).get_inner_data().params.clone();
+
+        let periods = params.periods.period_ids().collect();
+        let subjects = params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, subject)| (subject.parameters.name.clone(), id))
+            .collect();
+        let group_lists = params
+            .group_lists
+            .group_list_map
+            .iter()
+            .map(|(id, group_list)| (group_list.params().name.clone(), id))
+            .collect();
+
+        GenerationFixture {
+            params,
+            periods,
+            subjects,
+            group_lists,
+        }
+    }
+
+    fn subject(&self, name: &str) -> collomatique_state_colloscopes::SubjectId {
+        *self
+            .subjects
+            .get(name)
+            .unwrap_or_else(|| panic!("the fixture holds a subject named {name}"))
+    }
+
+    fn group_list(&self, name: &str) -> collomatique_state_colloscopes::GroupListId {
+        *self
+            .group_lists
+            .get(name)
+            .unwrap_or_else(|| panic!("the fixture holds a group list named {name}"))
+    }
+
+    /// The label the scripts name one pair by
+    fn label(
+        &self,
+        (period, subject): (
+            collomatique_state_colloscopes::PeriodId,
+            collomatique_state_colloscopes::SubjectId,
+        ),
+    ) -> String {
+        let position = self
+            .params
+            .periods
+            .find_period_position(period)
+            .expect("the pair names a period of this document");
+        let name = &self
+            .params
+            .subjects
+            .find_subject(subject)
+            .expect("the pair names a subject of this document")
+            .parameters
+            .name;
+
+        format!("{position}:{name}")
+    }
+
+    fn labels(
+        &self,
+        pairs: &BTreeSet<(
+            collomatique_state_colloscopes::PeriodId,
+            collomatique_state_colloscopes::SubjectId,
+        )>,
+    ) -> Vec<String> {
+        let mut labels: Vec<String> = pairs.iter().map(|&pair| self.label(pair)).collect();
+        labels.sort();
+        labels
+    }
+}
+
+/// A generation, from the default request to the lists it lands
+///
+/// The script drives the three doors — `default_generation_request`,
+/// `generate_group_lists`, `group_lists.add_generated` — and asserts for itself
+/// what it can see: the dedup, the skipped pair, the group sizes, that a
+/// generation writes nothing, that the rename survives to the document, and
+/// that one `undo()` takes all of it back.
+///
+/// What it cannot decide on its own is whether this is really the
+/// application's generation. So rust runs the same three calls on the same
+/// file — the shared default, the same plan, the same greedy, the same
+/// coverage labels — and compares the answers pair for pair. A door that
+/// reimplemented any of it would part company here.
+#[test]
+fn a_generation_runs_from_the_default_request_to_the_landed_lists() {
+    use collomatique_greedy_groups::{
+        GenerationRequest, build_generation_plan, default_generation_request, greedy_group_lists,
+    };
+
+    let dir = workspace("group-lists-generate");
+    let source = dir.join("generation.collomatique");
+    generation_document(&source);
+
+    let globals = run(include_str!("scripts/group_lists_generate.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // The script writes nothing back, so the file still holds the fixture the
+    // script read — and the comparison below is against that same document.
+    let fixture = GenerationFixture::read(&source);
+    let params = &fixture.params;
+
+    // The default is the application's, not a second one written for scripts.
+    let default = default_generation_request(params);
+    assert_eq!(
+        global::<Vec<String>>(&globals, "default_pair_labels"),
+        fixture.labels(&default.rebuild)
+    );
+    let mut kept: Vec<String> = default
+        .kept_lists
+        .iter()
+        .map(|id| {
+            params
+                .group_lists
+                .group_list_map
+                .get(id)
+                .expect("the default keeps lists of this document")
+                .params()
+                .name
+                .clone()
+        })
+        .collect();
+    kept.sort();
+    assert_eq!(global::<Vec<String>>(&globals, "default_kept_names"), kept);
+
+    // The fixture is only worth generating on if it has something to say: the
+    // default offers a pair no list can be built for, and holds back the one
+    // « Maisons » already serves.
+    let sortileges = fixture.subject("Sortilèges");
+    let metamorphose = fixture.subject("Métamorphose");
+    let (p1, p2) = (fixture.periods[0], fixture.periods[1]);
+    assert!(default.rebuild.contains(&(p1, fixture.subject("Potions"))));
+    assert!(!default.rebuild.contains(&(p1, sortileges)));
+
+    // The request the script built by hand, and the generation it ran.
+    let request = GenerationRequest {
+        rebuild: BTreeSet::from([
+            (p1, sortileges),
+            (p1, metamorphose),
+            (p2, sortileges),
+            (p2, metamorphose),
+        ]),
+        kept_lists: BTreeSet::from([fixture.group_list("Maisons")]),
+    };
+    let plan = build_generation_plan(params, &request).expect("the request is a buildable one");
+
+    assert_eq!(
+        global::<Vec<String>>(&globals, "skipped_labels"),
+        fixture.labels(&plan.skipped)
+    );
+
+    // Two specs for three buildable pairs, which is the dedup the script pins
+    // from the other side.
+    assert_eq!(plan.specs.len(), 2);
+
+    let names: Vec<String> = plan
+        .specs
+        .iter()
+        .map(|(_spec, covered)| {
+            collomatique_ui_text::rendering::coverage_label(
+                &params.periods,
+                &params.subjects,
+                covered,
+            )
+        })
+        .collect();
+    assert_eq!(global::<Vec<String>>(&globals, "entry_names"), names);
+
+    let entries = greedy_group_lists(&plan, &names);
+    let sizes: Vec<Vec<usize>> = entries
+        .iter()
+        .map(|(group_list, _covered)| {
+            let mut sizes: Vec<usize> = match group_list.filling() {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                    groups,
+                } => groups.iter().map(|group| group.students.len()).collect(),
+                _ => panic!("the generator only ever builds prefilled lists"),
+            };
+            sizes.sort();
+            sizes
+        })
+        .collect();
+    assert_eq!(global::<Vec<Vec<usize>>>(&globals, "entry_sizes"), sizes);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// Each way a generation can be refused, and the door that refuses it
+///
+/// The script asks for every one of them and keeps the sentence it met. Rust
+/// pins the three the plan raises against the generator's own `Display`, which
+/// is what says the door forwards the message rather than writing one of its
+/// own; the boundary's and the write's the script pins itself, since those are
+/// this module's own sentences and it can read them whole.
+#[test]
+fn a_generation_names_the_door_that_refused_it() {
+    use collomatique_greedy_groups::{GenerationPlanError, GroupListSpecError};
+
+    let dir = workspace("group-lists-generate-errors");
+    let source = dir.join("generation.collomatique");
+    generation_document(&source);
+
+    let globals = run(
+        include_str!("scripts/group_lists_generate_errors.py"),
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+    );
+
+    let fixture = GenerationFixture::read(&source);
+    let messages = global::<BTreeMap<String, String>>(&globals, "messages");
+
+    let sentence = |name: &str| {
+        messages
+            .get(name)
+            .unwrap_or_else(|| panic!("the script meets the `{name}` refusal"))
+            .clone()
+    };
+
+    assert_eq!(
+        sentence("no_interrogations"),
+        GenerationPlanError::SubjectWithoutInterrogations(fixture.subject("Botanique")).to_string()
+    );
+    assert_eq!(
+        sentence("kept_not_prefilled"),
+        GenerationPlanError::KeptListNotPrefilled(fixture.group_list("Automatique")).to_string()
+    );
+    assert_eq!(
+        sentence("unsatisfiable_size"),
+        GenerationPlanError::InvalidSpec(
+            fixture.periods[0],
+            fixture.subject("Potions"),
+            GroupListSpecError::UnsatisfiableSize {
+                students: 5,
+                min: NonZeroU32::new(4).expect("four is not zero"),
+                max: NonZeroU32::new(4).expect("four is not zero"),
+            },
+        )
+        .to_string()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The group lists read back, list by list
 ///
 /// The script walks `doc.group_lists` and leaves what it saw; rust compares it

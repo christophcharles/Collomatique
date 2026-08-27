@@ -75,6 +75,13 @@ create_exception!(
 
 create_exception!(
     collomatique,
+    GroupListsGenerationError,
+    Error,
+    "A group-list generation request could not be turned into a plan."
+);
+
+create_exception!(
+    collomatique,
     SolveError,
     Error,
     "A solve could not be run to an outcome."
@@ -300,6 +307,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("UpdateError", py.get_type::<UpdateError>())?;
     m.add("ExportError", py.get_type::<ExportError>())?;
     m.add("ModelBuildError", py.get_type::<ModelBuildError>())?;
+    m.add(
+        "GroupListsGenerationError",
+        py.get_type::<GroupListsGenerationError>(),
+    )?;
     m.add("SolveError", py.get_type::<SolveError>())?;
     m.add("NoEngine", py.get_type::<NoEngine>())?;
     m.add("NothingToUndo", py.get_type::<NothingToUndo>())?;

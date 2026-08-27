@@ -95,6 +95,7 @@ __all__ = [
     "IncrementalConfig",
     "FuzzyConfig",
     "ConductorStrategy",
+    "GroupListsGenerationRequest",
 ]
 
 
@@ -1383,3 +1384,42 @@ class ConductorStrategy:
         import collomatique
 
         return collomatique._conductor_warnings(self)
+
+
+@dataclass
+class GroupListsGenerationRequest:
+    """What to generate: which subjects get a new group list, and what the
+    generator must respect while it builds them.
+
+    `doc.generate_group_lists(request)` takes one, and
+    `doc.default_generation_request()` hands back the very selection the
+    application's own generation dialog opens with:
+
+        req = doc.default_generation_request()
+        req.rebuild = {(period, maths) for period in doc.periods}
+        result = doc.generate_group_lists(req)
+
+    `rebuild` is a set of `(period, subject)` pairs, each of which gets a
+    freshly built list, associated to that pair. Two pairs whose students and
+    group-size range are the same share *one* list rather than getting two
+    alike — so the generation produces at most as many lists as there are
+    pairs, and often fewer.
+
+    `kept_lists` is a set of group lists the generator reads as fixed: the
+    partners they already put together count in what it is trying to
+    maximize, and nothing about them is rewritten. They must be prefilled
+    lists, since an automatic one has no groups yet to respect.
+
+    Every reference here is an entity of the document the request is handed
+    to, a handle or an id indifferently, like everywhere else in this API.
+
+    The value is dumb, like every other: what a request cannot ask for —
+    a subject that runs no interrogations, a kept list that is not prefilled,
+    a class the group sizes cannot split — is decided when it is used, and
+    `doc.generate_group_lists` is where those refusals are written down.
+    """
+
+    rebuild: set[tuple[Period | PeriodId, Subject | SubjectId]] = field(
+        default_factory=set
+    )
+    kept_lists: set[GroupList | GroupListId] = field(default_factory=set)
