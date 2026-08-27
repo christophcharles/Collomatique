@@ -38,6 +38,10 @@ pub enum DialogInput {
     SetSubjectRebuild(usize, usize, bool),
     /// (period index, new value for every subject of that period)
     SetPeriodRebuild(usize, bool),
+    /// Every subject of every period takes the given value.
+    SetAllRebuild(bool),
+    /// Every prefilled list takes the given value.
+    SetAllKept(bool),
     /// (prefilled-list index, new value)
     SetKeptList(usize, bool),
     /// Recompute both panes from the document, as if the window had just opened.
@@ -362,13 +366,38 @@ impl SimpleComponent for Dialog {
                                 set_margin_all: 0,
                                 set_orientation: gtk::Orientation::Vertical,
                                 set_spacing: 5,
-                                gtk::Label {
-                                    set_halign: gtk::Align::Center,
+                                gtk::Box {
+                                    set_hexpand: true,
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_spacing: 5,
                                     set_margin_all: 10,
-                                    set_label: "<b><big>Matières à recalculer</big></b>",
-                                    set_use_markup: true,
                                     #[watch]
                                     set_visible: model.has_rebuildable_pairs(),
+                                    // Two spacers, not `set_halign: Center`: the heading stays
+                                    // optically centred on the pane while the buttons keep the
+                                    // right edge.
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Label {
+                                        set_label: "<b><big>Matières à recalculer</big></b>",
+                                        set_use_markup: true,
+                                    },
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Button {
+                                        set_icon_name: "edit-select-all-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Activer toutes les listes"),
+                                        connect_clicked => DialogInput::SetAllRebuild(true),
+                                    },
+                                    gtk::Button {
+                                        set_icon_name: "edit-clear-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Désactiver toutes les listes"),
+                                        connect_clicked => DialogInput::SetAllRebuild(false),
+                                    },
                                 },
                                 gtk::ScrolledWindow {
                                     set_hexpand: true,
@@ -402,13 +431,37 @@ impl SimpleComponent for Dialog {
                                 set_margin_all: 0,
                                 set_orientation: gtk::Orientation::Vertical,
                                 set_spacing: 5,
-                                gtk::Label {
-                                    set_halign: gtk::Align::Center,
+                                gtk::Box {
+                                    set_hexpand: true,
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_spacing: 5,
                                     set_margin_all: 10,
-                                    set_label: "<b><big>Listes existantes à conserver</big></b>",
-                                    set_use_markup: true,
                                     #[watch]
                                     set_visible: model.has_prefilled_lists(),
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Label {
+                                        set_label: "<b><big>Listes existantes à conserver</big></b>",
+                                        set_use_markup: true,
+                                    },
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    // This pane's switches mean *keep*, not *rebuild*, so its
+                                    // wording follows the pane rather than the other side.
+                                    gtk::Button {
+                                        set_icon_name: "edit-select-all-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Conserver toutes les listes"),
+                                        connect_clicked => DialogInput::SetAllKept(true),
+                                    },
+                                    gtk::Button {
+                                        set_icon_name: "edit-clear-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Ne conserver aucune liste"),
+                                        connect_clicked => DialogInput::SetAllKept(false),
+                                    },
                                 },
                                 gtk::ScrolledWindow {
                                     set_hexpand: true,
@@ -511,9 +564,23 @@ impl SimpleComponent for Dialog {
                 }
                 self.refresh_periods_list();
             }
+            DialogInput::SetAllRebuild(value) => {
+                for period in &mut self.periods_data {
+                    for subject in &mut period.subjects {
+                        subject.rebuild = value;
+                    }
+                }
+                self.refresh_periods_list();
+            }
             DialogInput::SetKeptList(index, value) => {
                 if let Some(data) = self.kept_lists_data.get_mut(index) {
                     data.keep = value;
+                }
+                self.refresh_kept_lists_list();
+            }
+            DialogInput::SetAllKept(value) => {
+                for list in &mut self.kept_lists_data {
+                    list.keep = value;
                 }
                 self.refresh_kept_lists_list();
             }
