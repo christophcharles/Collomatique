@@ -53,7 +53,7 @@ impl SimpleComponent for NoObjectivePanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Coût obtenu : ",
+                    set_label: "Objectif obtenu : ",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {
@@ -121,7 +121,7 @@ impl NoObjectivePanel {
     fn step(&self) -> String {
         match &self.last {
             None | Some(NoObjectiveProgressData::CheckerSolve(_)) => "1/2 (amorçage)".to_string(),
-            Some(_) => "2/2 (calcul du coût)".to_string(),
+            Some(_) => "2/2 (calcul de l'objectif)".to_string(),
         }
     }
 

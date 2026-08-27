@@ -484,7 +484,7 @@ impl Strategy for IncrementalStrategy {
         })?;
 
         // Announce the cost-computation phase before solving: the reconstruction is forced and may
-        // report no progress until it finishes, so this is what flips the UI to "calcul du coût".
+        // report no progress until it finishes, so this is what flips the UI to "calcul de l'objectif".
         let _ = on_progress(IncrementalProgressData::ReconstructionStarted { total });
 
         let recon_outcome = ctx
