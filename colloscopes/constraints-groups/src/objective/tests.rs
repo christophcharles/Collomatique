@@ -1,15 +1,91 @@
 use super::*;
+use crate::frozen::FrozenPlacements;
 use crate::specs::GenerationPlan;
-use crate::vars::VarEnv;
+use crate::specs::tests::student;
 use crate::vars::tests::plan_with_uses;
-use collomatique_ilp::f64_equals;
+use crate::vars::{GroupListIdx, Var, VarEnv};
 use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
+use collomatique_ilp::{ConfigData, f64_equals};
+use collomatique_state_colloscopes::group_lists::GroupList;
+use collomatique_state_colloscopes::{PeriodId, SubjectId};
+use std::collections::BTreeSet;
 
 /// One name per spec, in plan order — the conversions only ever copy them.
 fn names(plan: &GenerationPlan) -> Vec<String> {
     (0..plan.specs.len())
         .map(|i| format!("Liste {i}"))
         .collect()
+}
+
+/// The group lists of a hand-built placement: `config[list][group]` lists the
+/// students of that group, at the model's own group indices. Every seat is
+/// spelled out, so the placement goes in through the same conversion a solved
+/// configuration does.
+fn lists_of(
+    plan: &GenerationPlan,
+    config: &[&[&[u64]]],
+) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
+    let env = VarEnv::new(plan);
+    let mut data = ConfigData::new();
+    for (list, groups) in config.iter().enumerate() {
+        let list = GroupListIdx(list);
+        for (slot, students) in groups.iter().enumerate() {
+            for &s in *students {
+                for group in 0..env.group_count(list) {
+                    data = data.set(
+                        Var::StudentInGroup {
+                            list,
+                            student: student(s),
+                            group,
+                        },
+                        if group == slot as u32 { 1.0 } else { 0.0 },
+                    );
+                }
+            }
+        }
+    }
+    crate::build_group_lists(plan, &names(plan), &data)
+}
+
+/// What one model scores a hand-built placement at — the objective read at a
+/// configuration, which is all it takes to compare placements. No solver is
+/// involved: these tests never search, they weigh placements written out by
+/// hand, and the model's variables are valued exactly like a warm start's.
+///
+/// Each placement is checked feasible on the way through, so a comparison can
+/// never be between a placement and something the model would have refused.
+fn model_value<'a>(
+    model: &'a crate::GroupListsModel,
+    plan: &'a GenerationPlan,
+) -> impl Fn(&[&[&[u64]]]) -> f64 + 'a {
+    move |config| {
+        let lists = lists_of(plan, config);
+        let solution = model
+            .solution_from_complete_data(crate::group_lists_to_warm_start(plan, &lists))
+            .expect("the placement must value exactly the model's variables");
+        assert!(
+            solution.is_feasible(),
+            "the placement breaks {} constraint(s), so nothing can be read off it",
+            solution.blame().len(),
+        );
+        solution.eval()
+    }
+}
+
+/// Every seat of one list of a hand-built placement, held fixed — what the
+/// prefill hands the model in fast mode.
+fn pin(list: usize, groups: &[&[u64]]) -> FrozenPlacements {
+    FrozenPlacements::new(
+        groups
+            .iter()
+            .enumerate()
+            .flat_map(|(group, students)| {
+                students
+                    .iter()
+                    .map(move |&s| ((GroupListIdx(list), student(s)), group as u32))
+            })
+            .collect(),
+    )
 }
 
 /// CBC and the two summations reach the same rationals by different routes, so
@@ -283,4 +359,99 @@ fn the_optimum_is_reached_at_a_tight_configuration() {
     // partners at 1/2 each (scoring 1/2). Four students either way, so the
     // optimum is 4 — reached only by the two lists agreeing.
     assert_close(solution.eval(), 4.0);
+}
+
+#[test]
+fn repeat_partners_beat_spread_partners() {
+    // Superadditivity read straight off the objective — the `9² + 1² > 5² + 5²`
+    // of §2.4.
+    //
+    // Four students, a heavy colle list of multiplicity 3 and a light one of
+    // multiplicity 1, plus a kept list of weight 2 pairing them the *other*
+    // way: N = 6 for everybody, so a seat in list 0 weighs 3/6, one in list 1
+    // weighs 1/6, and the kept partner is worth 2/6 for free.
+    //
+    // List 0 is pinned to {1, 2} / {3, 4} — the fast mode's model, F4 — so
+    // list 1 is the only choice left, and fixed N gives every student a partner
+    // mass of exactly 1 whichever way it goes: the choice is purely how that
+    // mass is *spread*. Repeating list 0's pairs gives student 1 the
+    // distribution (2/3, 1/3) over (2, 3); handing the seat to the kept partner
+    // gives (1/2, 1/2) — the same total, flatter. Squaring takes the
+    // concentrated one, 4/9 + 1/9 > 1/4 + 1/4, where an objective linear in
+    // meetings would be indifferent.
+    //
+    // Four students in two pairs is three placements and no more, so the model
+    // is read at every one of them: this is the optimum of list 1 by
+    // enumeration, no search involved.
+    let plan = plan_with_uses(
+        &[(&[1, 2, 3, 4], (2, 2), 3), (&[1, 2, 3, 4], (2, 2), 1)],
+        &[(&[&[1, 3], &[2, 4]], 2)],
+    );
+    let pinned: &[&[u64]] = &[&[1, 2], &[3, 4]];
+    let model = crate::build_model(&plan, ObjectiveWeights::default(), &pin(0, pinned));
+    let value = model_value(&model, &plan);
+
+    let repeated = value(&[pinned, &[&[1, 2], &[3, 4]]]);
+    let kept_partner = value(&[pinned, &[&[1, 3], &[2, 4]]]);
+    let fresh = value(&[pinned, &[&[1, 4], &[2, 3]]]);
+
+    // 4 · 5/9, 4 · 1/2 and 4 · 7/18 — every one of them a placement the pinned
+    // model accepts (`model_value` checks it), so what separates them is the
+    // objective and nothing else.
+    assert_close(repeated, 20.0 / 9.0);
+    assert_close(kept_partner, 2.0);
+    assert_close(fresh, 14.0 / 9.0);
+    assert!(
+        repeated > kept_partner && kept_partner > fresh,
+        "repeating scores {repeated}, the kept partner {kept_partner}, two fresh ones {fresh}",
+    );
+}
+
+#[test]
+fn the_license_case_ranks_as_designed() {
+    // `greedy::tests::license_case` on the model's side: the §2.4 scenario,
+    // scored by the ILP objective instead of the greedy's summation. Eight
+    // students, a tutorial in two groups of four and two colles in pairs, one
+    // use each: N = 3, so a colle partner weighs 1/3 and a tutorial mate 1/9.
+    //
+    // The tutorial is pinned (F4, the fast mode's model), which leaves the two
+    // colles. Three of a student's nine ninths go to tutorial mates whatever
+    // happens, so the most concentrated distribution reachable is
+    // 1/9 + 1/3 + 1/3 = 7/9 on a single partner — a tutorial mate taken as
+    // *both* colle partners — with 1/9 on each of the other two. That is
+    // scenario (a), 8 · (49 + 1 + 1)/81 = 408/81, and no placement of the
+    // colles can beat it. Nothing here searches for it: the three scenarios are
+    // spelled out and the model is read at each.
+    let plan = plan_with_uses(
+        &[
+            (&[1, 2, 3, 4, 5, 6, 7, 8], (4, 4), 1),
+            (&[1, 2, 3, 4, 5, 6, 7, 8], (2, 2), 1),
+            (&[1, 2, 3, 4, 5, 6, 7, 8], (2, 2), 1),
+        ],
+        &[],
+    );
+    let tutorial: &[&[u64]] = &[&[1, 2, 3, 4], &[5, 6, 7, 8]];
+    let pairs_inside: &[&[u64]] = &[&[1, 2], &[3, 4], &[5, 6], &[7, 8]];
+    let pairs_across: &[&[u64]] = &[&[1, 5], &[2, 6], &[3, 7], &[4, 8]];
+    let scattered: &[&[u64]] = &[&[1, 3], &[2, 4], &[5, 7], &[6, 8]];
+
+    let model = crate::build_model(&plan, ObjectiveWeights::default(), &pin(0, tutorial));
+    let value = model_value(&model, &plan);
+
+    // (a) stable colle partners who are also tutorial mates, (b) stable colle
+    // partners in the other tutorial group, (c) colle partners scattered among
+    // one's own tutorial mates — the same three the greedy test ranks, at
+    // 8 · 51/81, 8 · 39/81 and 8 · 33/81.
+    let a = value(&[tutorial, pairs_inside, pairs_inside]);
+    let b = value(&[tutorial, pairs_across, pairs_across]);
+    let c = value(&[tutorial, pairs_inside, scattered]);
+
+    assert_close(a, 408.0 / 81.0);
+    assert_close(b, 312.0 / 81.0);
+    assert_close(c, 264.0 / 81.0);
+    assert!(a > b, "stable colle partners belong in your tutorial group");
+    assert!(
+        b > c,
+        "a big tutorial is no license to scatter colle partners: {b} vs {c}",
+    );
 }
