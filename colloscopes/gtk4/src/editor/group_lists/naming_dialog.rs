@@ -364,29 +364,6 @@ impl Component for Dialog {
                         },
                     },
                 },
-                add_bottom_bar = &gtk::Box {
-                    set_hexpand: true,
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_halign: gtk::Align::End,
-                    gtk::Button {
-                        add_css_class: "frame",
-                        set_margin_all: 5,
-                        // The polish only makes sense once there is something to polish.
-                        #[watch]
-                        set_sensitive: model.has_result(),
-                        #[watch]
-                        set_tooltip_text: if model.has_result() {
-                            Some("Chercher une meilleure répartition à partir de celle-ci")
-                        } else {
-                            Some("La répartition n'est pas encore calculée")
-                        },
-                        adw::ButtonContent {
-                            set_icon_name: "emblem-system-symbolic",
-                            set_label: "Optimiser les listes de groupes",
-                        },
-                        connect_clicked => DialogInput::OpenOptimize,
-                    },
-                },
                 #[wrap(Some)]
                 set_content = &gtk::Box {
                     set_hexpand: true,
@@ -442,6 +419,29 @@ impl Component for Dialog {
                                 set_title: "Répartition proposée",
                                 #[watch]
                                 set_visible: model.has_result(),
+                            },
+                            gtk::Box {
+                                set_vexpand: true,
+                            },
+                            gtk::Button {
+                                set_hexpand: true,
+                                add_css_class: "frame",
+                                add_css_class: "warning",
+                                set_margin_all: 5,
+                                // The polish only makes sense once there is something to polish.
+                                #[watch]
+                                set_sensitive: model.has_result(),
+                                #[watch]
+                                set_tooltip_text: if model.has_result() {
+                                    Some("Chercher une meilleure répartition à partir de celle-ci")
+                                } else {
+                                    Some("La répartition n'est pas encore calculée")
+                                },
+                                adw::ButtonContent {
+                                    set_icon_name: "emblem-system-symbolic",
+                                    set_label: "Optimiser les listes de groupes",
+                                },
+                                connect_clicked => DialogInput::OpenOptimize,
                             },
                         },
                     },
