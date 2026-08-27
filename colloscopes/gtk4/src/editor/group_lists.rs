@@ -279,6 +279,11 @@ impl Component for GroupLists {
                         period_id,
                     ))
                 }
+                associations_display::PeriodEntryOutput::ClearAssociations(period_id) => {
+                    GroupListsOutput::UpdateOp(GroupListsUpdateOp::ClearPeriodAssociations(
+                        period_id,
+                    ))
+                }
             });
 
         let edit_dialog = edit_dialog::Dialog::builder()
