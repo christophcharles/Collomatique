@@ -698,6 +698,16 @@ fn optimum_reached<V: UsableData + Send>(
     }
 }
 
+/// How many fuzzy attempts to queue now: one per slot that will still be idle once the queue
+/// drains. Counting the queued work is what makes this fire on the pass that drains the seeded
+/// queue — the pass that matters, since the loop blocks right after it.
+fn fuzzy_top_up_count(free: usize, queued: usize, has_incumbent: bool, solved: bool) -> usize {
+    if !has_incumbent || solved {
+        return 0;
+    }
+    if queued > 0 { 0 } else { free }
+}
+
 /// Fold a freshly reported Default incumbent objective into the tracked best, per sense.
 fn merge_default_obj(current: Option<f64>, candidate: f64, sense: ObjectiveSense) -> f64 {
     match current {
@@ -1229,17 +1239,14 @@ impl Strategy for ConductorStrategy {
             // idle slot with a fuzzy perturbation attempt. Fuzzy needs an incumbent, so this
             // can only start after warm_start/default has produced one.
             if let Some(fuzzy_cfg) = &self.fuzzy_config {
-                if queue.is_empty() {
-                    let free = slots.free_count();
-                    let (has_incumbent, solved) = {
-                        let st = status.lock().expect("conductor status mutex");
-                        (st.best_solution.is_some(), optimum_reached(&st, sense))
-                    };
-                    if free > 0 && has_incumbent && !solved {
-                        for _ in 0..free {
-                            queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy(fuzzy_cfg)));
-                        }
-                    }
+                let (has_incumbent, solved) = {
+                    let st = status.lock().expect("conductor status mutex");
+                    (st.best_solution.is_some(), optimum_reached(&st, sense))
+                };
+                let count =
+                    fuzzy_top_up_count(slots.free_count(), queue.len(), has_incumbent, solved);
+                for _ in 0..count {
+                    queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy(fuzzy_cfg)));
                 }
             }
 
@@ -1884,6 +1891,26 @@ mod tests {
             &status_with(Some(3.0), Some(3.0)),
             ObjectiveSense::Maximize
         ));
+    }
+
+    #[test]
+    fn fuzzy_fills_the_slots_the_queue_will_not_use() {
+        // The pass that matters: four slots, `Default` queued, nothing else. Three slots are
+        // left over and fuzzy must claim them now — the loop blocks right after this.
+        assert_eq!(fuzzy_top_up_count(4, 1, true, false), 3);
+        // A drained queue is the easy case.
+        assert_eq!(fuzzy_top_up_count(3, 0, true, false), 3);
+        // More queued than free: the fill uses every slot, so there is nothing to top up.
+        assert_eq!(fuzzy_top_up_count(1, 2, true, false), 0);
+        assert_eq!(fuzzy_top_up_count(0, 0, true, false), 0);
+    }
+
+    #[test]
+    fn fuzzy_needs_an_incumbent_and_an_open_gap() {
+        // Fuzzy perturbs an incumbent, so without one there is nothing to perturb.
+        assert_eq!(fuzzy_top_up_count(4, 0, false, false), 0);
+        // And once the gap is closed there is nothing left to improve.
+        assert_eq!(fuzzy_top_up_count(4, 0, true, true), 0);
     }
 
     fn kinds(queue: &VecDeque<StrategyKind>) -> Vec<&'static str> {
