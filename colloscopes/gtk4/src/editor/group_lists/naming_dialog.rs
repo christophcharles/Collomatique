@@ -104,48 +104,6 @@ pub enum DialogCommandOutput {
     Generated(u64, Vec<GeneratedList>),
 }
 
-/// "a", "a et b", "a, b et c" — the French enumeration join.
-fn french_join(items: &[String]) -> String {
-    match items {
-        [] => String::new(),
-        [single] => single.clone(),
-        [head @ .., last] => format!("{} et {}", head.join(", "), last),
-    }
-}
-
-/// What one spec covers: "Maths (période 1)", "Maths et Physique (périodes 1 et 2)". Also used
-/// as the default list name — distinct specs cover disjoint pair sets, so these are unique.
-/// Subjects come out in document display order, periods as 1-based positions in display order.
-fn coverage_label(params: &Parameters, covered: &BTreeSet<(PeriodId, SubjectId)>) -> String {
-    let subject_ids: BTreeSet<SubjectId> = covered.iter().map(|&(_, subject)| subject).collect();
-    let period_ids: BTreeSet<PeriodId> = covered.iter().map(|&(period, _)| period).collect();
-
-    let subjects: Vec<String> = params
-        .subjects
-        .ordered_subject_list
-        .iter()
-        .filter(|(id, _subject)| subject_ids.contains(id))
-        .map(|(_id, subject)| subject.parameters.name.clone())
-        .collect();
-
-    // Periods have no name: the 1-based position is what the whole UI shows.
-    let periods: Vec<String> = params
-        .periods
-        .period_ids()
-        .enumerate()
-        .filter(|(_pos, id)| period_ids.contains(id))
-        .map(|(pos, _id)| (pos + 1).to_string())
-        .collect();
-
-    let period_part = if periods.len() == 1 {
-        format!("période {}", periods[0])
-    } else {
-        format!("périodes {}", french_join(&periods))
-    };
-
-    format!("{} ({})", french_join(&subjects), period_part)
-}
-
 /// The skipped-pairs warning text; empty when nothing was skipped.
 fn skipped_label(params: &Parameters, skipped: &BTreeSet<(PeriodId, SubjectId)>) -> String {
     if skipped.is_empty() {
@@ -463,7 +421,13 @@ impl Component for Dialog {
                 self.coverages = plan
                     .specs
                     .iter()
-                    .map(|(_spec, covered)| coverage_label(&self.params, covered))
+                    .map(|(_spec, covered)| {
+                        collomatique_ui_text::rendering::coverage_label(
+                            &self.params.periods,
+                            &self.params.subjects,
+                            covered,
+                        )
+                    })
                     .collect();
                 self.rows_data = self
                     .coverages
