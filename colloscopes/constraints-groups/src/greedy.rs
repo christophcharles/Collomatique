@@ -17,7 +17,6 @@ mod cohorts;
 mod pass;
 mod prefill;
 mod state;
-mod targets;
 
 #[cfg(test)]
 mod tests;

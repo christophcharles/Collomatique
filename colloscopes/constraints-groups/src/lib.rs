@@ -51,6 +51,7 @@ pub mod ghost;
 mod greedy;
 mod objective;
 mod specs;
+mod targets;
 mod types;
 pub mod vars;
 

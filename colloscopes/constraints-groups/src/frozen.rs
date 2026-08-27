@@ -19,8 +19,9 @@ use std::collections::BTreeMap;
 ///
 /// Group indices are the model's: the greedy never compacts its groups
 /// (`State::into_group_lists`) and its group count is the model's own, since
-/// `targets::balanced_targets` and `VarEnv::group_count` share the closed
-/// `⌈n / max⌉` formula.
+/// `VarEnv::group_count` counts the very targets
+/// [`targets::balanced_targets`](crate::targets) hands the greedy, so both
+/// sides number the same `⌈n / max⌉` groups.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct FrozenPlacements {
     seats: BTreeMap<(GroupListIdx, StudentId), u32>,

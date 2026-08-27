@@ -1,4 +1,9 @@
 //! Group targets: the shape of a solution, fixed before any placement.
+//!
+//! Shared by both generators: the greedy fills these targets group by group
+//! ([`greedy::state`](crate::greedy)), and the model pins them as the exact
+//! group sizes ([`VarEnv::targets`](crate::vars::VarEnv::targets)), so the two
+//! always agree on what a solution looks like.
 
 use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use std::num::NonZeroU32;
@@ -15,7 +20,7 @@ use std::num::NonZeroU32;
 ///
 /// The targets sum to `n` and never move afterwards, so a free seat always
 /// exists for the next student — the greedy can never corner itself.
-pub(super) fn balanced_targets(n: u32, range: &NonEmptyRangeInclusive<NonZeroU32>) -> Vec<u32> {
+pub(crate) fn balanced_targets(n: u32, range: &NonEmptyRangeInclusive<NonZeroU32>) -> Vec<u32> {
     let max = range.end().get();
     let k = n.div_ceil(max);
     debug_assert!(k > 0, "a spec always has at least one student");

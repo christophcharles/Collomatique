@@ -6,9 +6,9 @@
 //! states each look better than the other, and the sweep of `pass.rs` relies
 //! on a strict `>` over a pure function to be unable to cycle.
 
-use super::targets::balanced_targets;
 use crate::frozen::FrozenPlacements;
 use crate::specs::{GenerationPlan, KeptList};
+use crate::targets::balanced_targets;
 use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::group_lists::{
     GroupList, GroupListFilling, GroupListParameters, PrefilledGroup,

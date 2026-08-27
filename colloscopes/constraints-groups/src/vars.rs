@@ -7,13 +7,18 @@ use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 /// Pre-loaded data for variable enumeration: the deduplicated specs of a
-/// [`GenerationPlan`], in plan order, together with the size classes they
-/// fall into, the pairs already grouped by the kept lists (the extras of
-/// piece 7 read them), the canonical group size the classes are weighed
-/// against and the template grouping the objective measures deviations from.
+/// [`GenerationPlan`], in plan order, together with their group targets, the
+/// size classes they fall into, the pairs already grouped by the kept lists
+/// (the extras of piece 7 read them), the canonical group size the classes
+/// are weighed against and the template grouping the objective measures
+/// deviations from.
 #[derive(Debug, Clone)]
 pub struct VarEnv {
     specs: Vec<GroupListSpec>,
+    /// Per list, in plan order, the group sizes of
+    /// [`balanced_targets`](crate::targets): the shape the greedy fills and
+    /// the model pins. Its length is the list's group count.
+    targets: Vec<Vec<u32>>,
     /// The distinct `students_per_group` ranges of the specs, sorted.
     /// [`SizeClassIdx`] indexes into this vector.
     classes: Vec<NonEmptyRangeInclusive<NonZeroU32>>,
@@ -31,6 +36,13 @@ pub struct VarEnv {
 impl VarEnv {
     pub fn new(plan: &GenerationPlan) -> VarEnv {
         let specs: Vec<GroupListSpec> = plan.specs.iter().map(|(spec, _)| spec.clone()).collect();
+        let targets: Vec<Vec<u32>> = specs
+            .iter()
+            .map(|spec| {
+                let n = u32::try_from(spec.students().len()).unwrap_or(u32::MAX);
+                crate::targets::balanced_targets(n, spec.students_per_group())
+            })
+            .collect();
         let classes: Vec<NonEmptyRangeInclusive<NonZeroU32>> = specs
             .iter()
             .map(|spec| spec.students_per_group().clone())
@@ -45,6 +57,7 @@ impl VarEnv {
             .collect();
         VarEnv {
             specs,
+            targets,
             classes,
             pinned_pairs,
             canonical_range: plan
@@ -56,9 +69,9 @@ impl VarEnv {
     }
 
     /// Number of groups for a list: `ceil(n / max_size)`, the smallest
-    /// feasible count. It is exact, not an upper bound — every group holds
-    /// between `min_size` and `max_size` students, so the model no longer
-    /// has to optimize the count.
+    /// feasible count — the length of the list's target table. It is exact,
+    /// not an upper bound — every group holds between `min_size` and
+    /// `max_size` students, so the model no longer has to optimize the count.
     ///
     /// [`GroupListSpec::new`] rejects a spec with no feasible count, so
     /// `count · min <= n <= count · max` always holds here, and `n >= 1`
@@ -66,10 +79,20 @@ impl VarEnv {
     ///
     /// Panics if `list` is not an index of the plan the env was built from.
     pub fn group_count(&self, list: GroupListIdx) -> u32 {
-        let spec = &self.specs[list.0];
-        let n = spec.students().len() as u32;
-        let max = spec.students_per_group().end().get();
-        n.div_ceil(max)
+        self.targets[list.0].len() as u32
+    }
+
+    /// The group sizes of a list, indexed by group — the balanced targets of
+    /// [`balanced_targets`](crate::targets), summing to the list's student
+    /// count. Panics on a stale index, like [`VarEnv::group_count`].
+    pub(crate) fn targets(&self, list: GroupListIdx) -> &[u32] {
+        &self.targets[list.0]
+    }
+
+    /// The target size of one group. Panics on a stale list index, like
+    /// [`VarEnv::group_count`], or on a group beyond the list's count.
+    pub(crate) fn target_of(&self, list: GroupListIdx, group: u32) -> u32 {
+        self.targets[list.0][group as usize]
     }
 
     /// The list indices of the plan, in order.
@@ -282,6 +305,31 @@ pub(crate) mod tests {
         assert_eq!(env.group_count(GroupListIdx(0)), 2); // ceil(6 / 3)
         assert_eq!(env.group_count(GroupListIdx(1)), 3); // ceil(7 / 3)
         assert_eq!(env.group_count(GroupListIdx(2)), 1); // ceil(3 / 4)
+    }
+
+    #[test]
+    fn targets_are_the_balanced_sizes() {
+        let plan = plan_of(&[
+            (&[1, 2, 3, 4, 5, 6], (2, 3)),
+            (&[1, 2, 3, 4, 5, 6, 7], (2, 3)),
+            (&[1, 2, 3], (3, 4)),
+        ]);
+        let env = VarEnv::new(&plan);
+
+        // Balanced around n / k, descending: 6 = 3 + 3, 7 = 3 + 2 + 2, 3 = 3.
+        assert_eq!(env.targets(GroupListIdx(0)), &[3, 3]);
+        assert_eq!(env.targets(GroupListIdx(1)), &[3, 2, 2]);
+        assert_eq!(env.targets(GroupListIdx(2)), &[3]);
+
+        assert_eq!(env.target_of(GroupListIdx(1), 0), 3);
+        assert_eq!(env.target_of(GroupListIdx(1), 2), 2);
+
+        // The table length *is* the group count, for every list.
+        for list in env.lists() {
+            assert_eq!(env.targets(list).len(), env.group_count(list) as usize);
+            let seated: u32 = env.targets(list).iter().sum();
+            assert_eq!(seated, env.students(list).len() as u32);
+        }
     }
 
     #[test]
