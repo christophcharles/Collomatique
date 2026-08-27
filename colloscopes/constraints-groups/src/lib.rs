@@ -13,7 +13,8 @@
 //! itself, one variable per (list, student, group), and the only variable of
 //! the model — the `SharedPair` extras of piece 7 and the `RefGroupInGroup`
 //! extras that count how many pieces a list breaks a reference group into, the
-//! shape constraints of piece 8 (one group per student, min and max size), the
+//! shape constraints of piece 8 (one group per student, and each group at its
+//! balanced target size), the
 //! two-term stability objective of piece 9 (minimize the shared student pairs
 //! *and* the shattering of the template, with configurable weights —
 //! [`ObjectiveWeights`], piece 11).

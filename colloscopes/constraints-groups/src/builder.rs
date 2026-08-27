@@ -158,14 +158,12 @@ mod tests {
         // The `match` is exhaustive on purpose: a new constraint family
         // must not slip in without this test growing to count it.
         let mut one_group = 0;
-        let mut max = 0;
-        let mut min = 0;
+        let mut sizes = 0;
         for (_, source) in model.problem().get_constraints() {
             if let ConstraintSource::User(desc) = source {
                 match desc {
                     ConstraintDesc::StudentInOneGroup { .. } => one_group += 1,
-                    ConstraintDesc::StudentsPerGroupMax { .. } => max += 1,
-                    ConstraintDesc::StudentsPerGroupMin { .. } => min += 1,
+                    ConstraintDesc::GroupSize { .. } => sizes += 1,
                     // This plan pins nothing.
                     ConstraintDesc::FrozenPlacement { .. } => unreachable!(),
                 }
@@ -173,11 +171,9 @@ mod tests {
         }
         // One "exactly one group" row per (list, student): 4 + 3.
         assert_eq!(one_group, 7);
-        // One size constraint of each kind per (list, group): 2 + 2. The
-        // template adds none: it is plan data, not a grouping the model
-        // shapes.
-        assert_eq!(max, 4);
-        assert_eq!(min, 4);
+        // One size row per (list, group): 2 + 2. The template adds none: it
+        // is plan data, not a grouping the model shapes.
+        assert_eq!(sizes, 4);
 
         // The objective references every `SharedPair`, so they are all
         // expanded. The lists are disjoint, so the co-occurring pairs are

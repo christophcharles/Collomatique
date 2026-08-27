@@ -89,12 +89,6 @@ impl VarEnv {
         &self.targets[list.0]
     }
 
-    /// The target size of one group. Panics on a stale list index, like
-    /// [`VarEnv::group_count`], or on a group beyond the list's count.
-    pub(crate) fn target_of(&self, list: GroupListIdx, group: u32) -> u32 {
-        self.targets[list.0][group as usize]
-    }
-
     /// The list indices of the plan, in order.
     pub(crate) fn lists(&self) -> impl Iterator<Item = GroupListIdx> {
         (0..self.specs.len()).map(GroupListIdx)
@@ -104,12 +98,6 @@ impl VarEnv {
     /// [`VarEnv::group_count`].
     pub(crate) fn students(&self, list: GroupListIdx) -> &BTreeSet<StudentId> {
         self.specs[list.0].students()
-    }
-
-    /// The smallest allowed group size of a list's spec. Panics on a stale
-    /// index, like [`VarEnv::group_count`].
-    pub(crate) fn min_size(&self, list: GroupListIdx) -> u32 {
-        self.specs[list.0].students_per_group().start().get()
     }
 
     /// The largest allowed group size of a list's spec. Panics on a stale
@@ -320,9 +308,6 @@ pub(crate) mod tests {
         assert_eq!(env.targets(GroupListIdx(0)), &[3, 3]);
         assert_eq!(env.targets(GroupListIdx(1)), &[3, 2, 2]);
         assert_eq!(env.targets(GroupListIdx(2)), &[3]);
-
-        assert_eq!(env.target_of(GroupListIdx(1), 0), 3);
-        assert_eq!(env.target_of(GroupListIdx(1), 2), 2);
 
         // The table length *is* the group count, for every list.
         for list in env.lists() {

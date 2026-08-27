@@ -3,8 +3,8 @@
 //! constraints reference `StudentInGroup`, which must be declared first.
 
 mod frozen_placements;
+mod group_size;
 mod student_in_one_group;
-mod students_per_group;
 
 use crate::extras::MyBundle;
 use crate::frozen::FrozenPlacements;
@@ -12,14 +12,14 @@ use crate::vars::VarEnv;
 
 pub(crate) fn build(env: &VarEnv, frozen: &FrozenPlacements) -> MyBundle {
     student_in_one_group::build(env)
-        .merge(students_per_group::build(env))
+        .merge(group_size::build(env))
         .expect("no duplicate extras")
         .merge(frozen_placements::build(env, frozen))
         .expect("no duplicate extras")
 }
 
 /// The "exactly one group per student" family on its own, for the harnesses
-/// that place students by hand without the size constraints (`extras.rs`'s
+/// that place students by hand without the group-size targets (`extras.rs`'s
 /// and this module's): the base binaries only describe a placement under it.
 #[cfg(test)]
 pub(crate) fn build_student_in_one_group(env: &VarEnv) -> MyBundle {
@@ -115,11 +115,20 @@ mod tests {
     }
 
     #[test]
-    fn max_size_caps_each_group() {
-        // 4 students, sizes 1..=2 → 2 groups, max 2. Push all four into
-        // group 0; the cap lets exactly two of the pushes win.
-        let plan = plan_of(&[(&[1, 2, 3, 4], (1, 2))]);
+    fn groups_sit_exactly_at_their_targets() {
+        // 7 students, sizes 2..=3 → 3 groups, targets 3 / 2 / 2. Push
+        // everyone into group 0: the equality rows let exactly three of the
+        // pushes win, and — unlike a bare maximum — they also forbid the
+        // 3 / 3 / 1 split the pushes would otherwise settle for.
+        let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6, 7], (2, 3))]);
         let list = GroupListIdx(0);
+        let in_group = |s: u64, group: u32| {
+            base_var(Var::StudentInGroup {
+                list,
+                student: student(s),
+                group,
+            })
+        };
 
         let cfg = solve_with_objective(
             &plan,
@@ -128,23 +137,16 @@ mod tests {
                 place(0, 2, 0),
                 place(0, 3, 0),
                 place(0, 4, 0),
+                place(0, 5, 0),
+                place(0, 6, 0),
+                place(0, 7, 0),
             ],
         );
 
-        let in_group_0: f64 = [1, 2, 3, 4]
-            .iter()
-            .map(|&s| {
-                value(
-                    &cfg,
-                    base_var(Var::StudentInGroup {
-                        list,
-                        student: student(s),
-                        group: 0,
-                    }),
-                )
-            })
-            .sum();
-        assert_close(in_group_0, 2.0);
+        for (group, target) in [(0, 3.0), (1, 2.0), (2, 2.0)] {
+            let count: f64 = (1..=7).map(|s| value(&cfg, in_group(s, group))).sum();
+            assert_close(count, target);
+        }
     }
 
     #[test]
@@ -181,51 +183,13 @@ mod tests {
     }
 
     #[test]
-    fn min_size_binds_every_group() {
-        // 9 students, sizes 3..=4 → 3 groups. The maximum alone allows a
-        // 4 / 4 / 1 split, which the pushes below ask for; the minimum
-        // forbids the thin group, and 3 / 3 / 3 is then the only split
-        // left. The group count being exact is what makes the minimum
-        // unconditional: no group may be starved for another's benefit.
-        let plan = plan_of(&[(&[1, 2, 3, 4, 5, 6, 7, 8, 9], (3, 4))]);
-        let list = GroupListIdx(0);
-        let in_group = |s: u64, group: u32| {
-            base_var(Var::StudentInGroup {
-                list,
-                student: student(s),
-                group,
-            })
-        };
-
-        let cfg = solve_with_objective(
-            &plan,
-            &[
-                place(0, 1, 0),
-                place(0, 2, 0),
-                place(0, 3, 0),
-                place(0, 4, 0),
-                place(0, 5, 1),
-                place(0, 6, 1),
-                place(0, 7, 1),
-                place(0, 8, 1),
-            ],
-        );
-
-        for group in 0..3 {
-            let count: f64 = (1..=9).map(|s| value(&cfg, in_group(s, group))).sum();
-            assert_close(count, 3.0);
-        }
-    }
-
-    #[test]
-    fn min_size_forces_a_companion() {
-        // 5 students, sizes 2..=4 → 2 groups. Weight 100 sends student 1 to
-        // group 1; weight −1 on every other student's presence there makes
-        // any companion cost. The minimum of 2 forces exactly one anyway.
-        //
-        // The maximum of 4 is deliberately loose enough to leave student 1
-        // alone in group 1 (the other four fit in group 0), so the
-        // companion is forced by the minimum and by nothing else.
+    fn a_target_forces_a_companion() {
+        // 5 students, sizes 2..=4 → 2 groups, targets 3 / 2. Weight 100
+        // sends student 1 to group 1; weight −1 on every other student's
+        // presence there makes any companion cost. The target of 2 brings
+        // exactly one anyway: the equality row is a floor as much as a
+        // ceiling, so this is the direction `groups_sit_exactly_at_their
+        // _targets` does not exercise.
         let plan = plan_of(&[(&[1, 2, 3, 4, 5], (2, 4))]);
         let list = GroupListIdx(0);
         let in_group_1 = |s: u64| {

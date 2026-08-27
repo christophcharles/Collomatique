@@ -56,20 +56,16 @@ pub enum ConstraintDesc {
         list: GroupListIdx,
         student: StudentId,
     },
-    /// `Σ_s StudentInGroup(list, s, group) <= max_students`.
-    StudentsPerGroupMax {
+    /// `Σ_s StudentInGroup(list, s, group) == target` — the group holds
+    /// exactly its balanced target
+    /// ([`targets`](crate::targets)), which the spec's size range and the
+    /// exact group count
+    /// ([`VarEnv::group_count`](crate::vars::VarEnv::group_count)) leave no
+    /// room to argue with. Replaces the min/max pair the model used to carry.
+    GroupSize {
         list: GroupListIdx,
         group: u32,
-        max_students: u32,
-    },
-    /// `Σ_s StudentInGroup(list, s, group) >= min_students` — every group
-    /// of the list must reach the minimum. The count is exact
-    /// ([`VarEnv::group_count`](crate::vars::VarEnv::group_count)), so no
-    /// group may stay empty.
-    StudentsPerGroupMin {
-        list: GroupListIdx,
-        group: u32,
-        min_students: u32,
+        target: u32,
     },
     /// `StudentInGroup(list, student, group) == 1` — a seat the caller asked
     /// to hold fixed, in practice one the greedy's prefill phase froze.
