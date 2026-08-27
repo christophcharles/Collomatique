@@ -6,7 +6,7 @@ use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
-use collomatique_ilp::{ConfigData, UsableData};
+use collomatique_ilp::{ConfigData, ObjectiveSense, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
     ConductorPayload, ConductorProgress, ConductorStatus, ConductorStrategy, Solution, SolveStatus,
@@ -68,6 +68,7 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     // Instant the best solution was last improved; its end point is the shared `run_end`, so the
     // "time since the best solution" clock freezes when the solve stops. `None` before any solution.
     best_solution_at: Option<Instant>,
+    obj_sense: ObjectiveSense,
     _phantom: PhantomData<fn() -> C>,
 }
 
@@ -328,6 +329,17 @@ where
                                         gtk::Box {
                                             set_orientation: gtk::Orientation::Horizontal,
                                             gtk::Label {
+                                                set_label: "Sens de l'objectif : ",
+                                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                            },
+                                            gtk::Label {
+                                                #[watch]
+                                                set_label: &model.objective_sense(),
+                                            },
+                                        },
+                                        gtk::Box {
+                                            set_orientation: gtk::Orientation::Horizontal,
+                                            gtk::Label {
                                                 set_label: "Meilleure solution depuis : ",
                                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                                             },
@@ -552,6 +564,7 @@ where
             run_start: None,
             run_end: None,
             best_solution_at: None,
+            obj_sense: ObjectiveSense::Minimize,
             _phantom: PhantomData,
         };
 
@@ -574,6 +587,7 @@ where
                 self.verdict = None;
                 self.show_debug = false;
                 self.last_line = String::new();
+                self.obj_sense = model.problem().get_objective().get_sense();
 
                 // Start the elapsed-time clock and kick off the periodic refresh loop.
                 let epoch = Instant::now();
@@ -914,6 +928,13 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
         match self.conductor_status.best_bound {
             Some(bound) => format!("{:.1}", bound),
             None => "-".to_string(),
+        }
+    }
+
+    fn objective_sense(&self) -> String {
+        match &self.obj_sense {
+            ObjectiveSense::Maximize => "maximisation".into(),
+            ObjectiveSense::Minimize => "minimisation".into(),
         }
     }
 
