@@ -152,9 +152,31 @@ sketch and the anti-drift net in detail, is the previous version of this
 section: `git show 2e1233ac:docs/plans/greedy_roadmap.md`. The code is at the
 same commit, under `colloscopes/constraints-groups/`.
 
-## Point 4 — Python API
+## Point 4 — Python API — **done**
 
-There is deliberately no `group_lists.add_generated` door in the Python API
-while generation is unsettled (`a7c434d0`). Once points 1–2 have stabilized,
-expose the generation request, the greedy, and the resulting update op through
-the API. To be detailed in a future session.
+Shipped in five commits, `22d6bc18..2ed2177a`. The API hole `a7c434d0` left
+open is filled; `docs/python/new_api_design.md` §10 is the authority for the
+shape, and this section only records what moved where.
+
+Two pieces moved out of the GUI so both front ends share them, rather than
+being reimplemented on the Python side where they would drift:
+`default_generation_request` — the generate dialog's opening selection — went
+to `greedy-groups/src/specs.rs` beside `GenerationRequest`, and the coverage
+label — the naming dialog's default row name — went to `ui-text`'s
+`rendering.rs` beside the entity renderers. The dialogs now call them.
+
+The API itself: a `GroupListsGenerationRequest` value, a
+`GroupListsGenerationResult` pyclass carrying `entries` and `skipped`, the
+three doors `doc.default_generation_request()`,
+`doc.generate_group_lists(request, *, on_log=None)` and
+`doc.group_lists.add_generated(entries)`, and one exception,
+`GroupListsGenerationError`, carrying the plan's own sentence. There is no
+`names` parameter — the dedup makes the list count unknowable before the plan
+exists — and no objective weights, since the greedy has one fixed objective and
+the ILP that had tunable ones is retired.
+
+Adjacent, and decided with the same session: the Python `ConductorStrategy`
+gained `warm_start_incumbent`, which the Rust struct and the solve dialog have
+had all along. It is inert from a script — a script's solve hands the conductor
+no ready-made solution — and it is mirrored anyway, so a strategy built in
+Python is the application's structure whole (`95ea8eba`).
