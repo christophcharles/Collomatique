@@ -38,6 +38,8 @@ pub enum DialogInput {
     SetSubjectRebuild(usize, usize, bool),
     /// (prefilled-list index, new value)
     SetKeptList(usize, bool),
+    /// Recompute both panes from the document, as if the window had just opened.
+    ResetToDefaults,
 }
 
 #[derive(Debug)]
@@ -304,6 +306,12 @@ impl SimpleComponent for Dialog {
                         set_label: "Annuler",
                         connect_clicked => DialogInput::Cancel,
                     },
+                    pack_start = &gtk::Button {
+                        set_icon_name: "view-refresh-symbolic",
+                        add_css_class: "flat",
+                        set_tooltip: "Réinitialiser : recalculer les matières à recalculer et les listes à conserver comme à l'ouverture",
+                        connect_clicked => DialogInput::ResetToDefaults,
+                    },
                     pack_end = &gtk::Button {
                         set_label: "Valider",
                         add_css_class: "suggested-action",
@@ -494,6 +502,11 @@ impl SimpleComponent for Dialog {
                 if let Some(data) = self.kept_lists_data.get_mut(index) {
                     data.keep = value;
                 }
+                self.refresh_kept_lists_list();
+            }
+            DialogInput::ResetToDefaults => {
+                self.set_data_from_params();
+                self.refresh_periods_list();
                 self.refresh_kept_lists_list();
             }
             DialogInput::Cancel => {
