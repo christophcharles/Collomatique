@@ -1,5 +1,5 @@
-use adw::prelude::{ActionRowExt, PreferencesGroupExt, PreferencesRowExt};
-use gtk::prelude::{OrientableExt, WidgetExt};
+use adw::prelude::{ActionRowExt, PreferencesRowExt};
+use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::FactorySender;
 use relm4::factory::FactoryView;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque};
@@ -42,12 +42,16 @@ pub enum PeriodGroupInput {
     UpdateData(Data),
     /// (subject index within this period, new value) — relayed from a `SubjectRow`.
     SubjectToggled(usize, bool),
+    /// Every subject of this period takes the given value.
+    SetAll(bool),
 }
 
 #[derive(Debug)]
 pub enum PeriodGroupOutput {
     /// (period index, subject index, new value)
     SubjectToggled(usize, usize, bool),
+    /// (period index, new value for every subject of that period)
+    SetAll(usize, bool),
 }
 
 #[relm4::factory(pub)]
@@ -62,11 +66,38 @@ impl FactoryComponent for PeriodGroup {
         #[root]
         gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
+            // The period name used to be the preferences group's own title, which left
+            // nowhere to hang a button. It moves out onto a label line of its own, the
+            // way the association panel already lays out a period header.
+            gtk::Box {
+                set_hexpand: true,
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 5,
+                gtk::Label {
+                    set_halign: gtk::Align::Start,
+                    #[watch]
+                    set_label: &self.data.title,
+                    set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                },
+                gtk::Box {
+                    set_hexpand: true,
+                },
+                gtk::Button {
+                    set_icon_name: "edit-select-all-symbolic",
+                    add_css_class: "flat",
+                    set_tooltip_text: Some("Activer toutes les listes de la période"),
+                    connect_clicked => PeriodGroupInput::SetAll(true),
+                },
+                gtk::Button {
+                    set_icon_name: "edit-clear-symbolic",
+                    add_css_class: "flat",
+                    set_tooltip_text: Some("Désactiver toutes les listes de la période"),
+                    connect_clicked => PeriodGroupInput::SetAll(false),
+                },
+            },
             #[local_ref]
             subject_group -> adw::PreferencesGroup {
                 set_hexpand: true,
-                #[watch]
-                set_title: &self.data.title,
             },
         }
     }
@@ -94,7 +125,7 @@ impl FactoryComponent for PeriodGroup {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let subject_group = self.subject_rows.widget();
         let widgets = view_output!();
@@ -115,6 +146,13 @@ impl FactoryComponent for PeriodGroup {
                         subject_index,
                         value,
                     ))
+                    .unwrap();
+            }
+            // Like a single toggle: the parent owns the values and pushes them back
+            // through `UpdateData`, so nothing is written into `self.data` here.
+            PeriodGroupInput::SetAll(value) => {
+                sender
+                    .output(PeriodGroupOutput::SetAll(self.index.current_index(), value))
                     .unwrap();
             }
         }

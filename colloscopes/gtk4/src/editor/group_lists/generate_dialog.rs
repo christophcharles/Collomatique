@@ -36,6 +36,8 @@ pub enum DialogInput {
     Accept,
     /// (period index, subject index within that period, new value)
     SetSubjectRebuild(usize, usize, bool),
+    /// (period index, new value for every subject of that period)
+    SetPeriodRebuild(usize, bool),
     /// (prefilled-list index, new value)
     SetKeptList(usize, bool),
     /// Recompute both panes from the document, as if the window had just opened.
@@ -449,6 +451,9 @@ impl SimpleComponent for Dialog {
                 period_group::PeriodGroupOutput::SubjectToggled(period, subject, value) => {
                     DialogInput::SetSubjectRebuild(period, subject, value)
                 }
+                period_group::PeriodGroupOutput::SetAll(period, value) => {
+                    DialogInput::SetPeriodRebuild(period, value)
+                }
             });
         let kept_lists_list = FactoryVecDeque::builder()
             .launch(adw::PreferencesGroup::default())
@@ -495,6 +500,14 @@ impl SimpleComponent for Dialog {
                     .and_then(|p| p.subjects.get_mut(subject))
                 {
                     data.rebuild = value;
+                }
+                self.refresh_periods_list();
+            }
+            DialogInput::SetPeriodRebuild(period, value) => {
+                if let Some(data) = self.periods_data.get_mut(period) {
+                    for subject in &mut data.subjects {
+                        subject.rebuild = value;
+                    }
                 }
                 self.refresh_periods_list();
             }
