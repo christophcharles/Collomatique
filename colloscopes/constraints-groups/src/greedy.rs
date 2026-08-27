@@ -124,9 +124,63 @@ pub fn greedy_group_lists_with_log(
         t.elapsed(),
     ));
 
+    // The §9 diagnostic: what the two phases actually scored. It is the number
+    // an optional ILP polish over the same plan has to beat — or tie, since
+    // the greedy solution is its warm start — so the two runs can be compared
+    // line to line in the same log.
+    log(&format!(
+        "[greedy] Objective value: {:.6}",
+        state.objective_value(),
+    ));
+
     // Read before `into_group_lists` consumes the state.
     let frozen = state.frozen_placements();
     let lists = state.into_group_lists(names);
     log(&format!("[greedy] Done ({:.2?})", total.elapsed()));
     GreedyOutcome { lists, frozen }
+}
+
+/// The collision probability a finished placement reaches: `Σ_s Σ_t P_s(t)²`
+/// (§2.3), kept-list mass included — the very quantity
+/// [`greedy_group_lists`] maximizes, evaluated on lists it did not
+/// necessarily produce.
+///
+/// `lists` is one prefilled list per spec, in plan order: a
+/// [`GreedyOutcome::lists`] or a
+/// [`build_group_lists`](crate::build_group_lists) output for the same plan.
+/// That is what makes it the ground truth of the model's objective — the two
+/// numbers must agree on the same placement — and the reason it is public:
+/// the equality is asserted outside the crate's unit tests too.
+///
+/// Panics on internal inconsistency, like
+/// [`group_lists_to_warm_start`](crate::group_lists_to_warm_start): a list
+/// count differing from the plan's, a student of a spec sitting in no group of
+/// its list, or a group index beyond the ones the plan gives the list.
+pub fn placement_objective(
+    plan: &GenerationPlan,
+    lists: &[(GroupList, BTreeSet<(PeriodId, SubjectId)>)],
+) -> f64 {
+    assert_eq!(
+        lists.len(),
+        plan.specs.len(),
+        "one list per spec is required"
+    );
+
+    let mut state = state::State::new(plan);
+    for (list, ((spec, _covered), (group_list, _pairs))) in
+        plan.specs.iter().zip(lists.iter()).enumerate()
+    {
+        for &student in spec.students() {
+            let group = group_list
+                .filling()
+                .find_student_group(student)
+                .expect("every student of a spec sits in a group of its list");
+            assert!(
+                group < state.targets(list).len(),
+                "the list has more groups than the plan gives it",
+            );
+            state.place(student, list, group);
+        }
+    }
+    state.objective_value()
 }

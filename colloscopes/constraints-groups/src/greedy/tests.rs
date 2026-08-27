@@ -113,19 +113,6 @@ fn score(plan: &GenerationPlan, config: &[&[&[u64]]]) -> f64 {
     state.objective_value()
 }
 
-/// The objective value the greedy actually reached.
-fn score_of(plan: &GenerationPlan, lists: &[(GroupList, BTreeSet<(PeriodId, SubjectId)>)]) -> f64 {
-    let mut state = State::new(plan);
-    for (list, groups) in memberships(lists).iter().enumerate() {
-        for (group, students) in groups.iter().enumerate() {
-            for &s in students {
-                state.place(s, list, group);
-            }
-        }
-    }
-    state.objective_value()
-}
-
 #[test]
 fn hard_constraints_hold() {
     // An uneven count: 7 students in groups of 2 to 3 → targets 3, 2, 2.
@@ -238,7 +225,7 @@ fn license_case() {
     // And the search itself must not land below the middle configuration.
     let lists = run(&plan);
     assert_valid(&plan, &lists);
-    let found = score_of(&plan, &lists);
+    let found = placement_objective(&plan, &lists);
     assert!(found >= b, "the greedy scores {found}, below {b}");
 }
 
@@ -354,6 +341,15 @@ fn the_log_reaches_the_callback() {
     };
     assert_line("[greedy] Prefill: 3 student(s) seated, 3 left to the pass (");
     assert_line("[greedy] Pass: 3 student(s) placed (");
+    // The score line closes no timing, so it is matched whole: it must report
+    // the value of the placement the run returned, not some intermediate one.
+    assert!(
+        lines.contains(&format!(
+            "[greedy] Objective value: {:.6}",
+            placement_objective(&plan, &lists),
+        )),
+        "no line reporting the produced placement's score: {lines:?}",
+    );
     assert!(
         lines
             .last()

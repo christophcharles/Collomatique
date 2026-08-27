@@ -303,10 +303,9 @@ impl<'a> State<'a> {
 
     /// The whole objective: `Σ_s Σ_t P_s(t)²` (§2.3). Not used by the search
     /// — the search works on deltas — but it is the instrument the objective
-    /// tests measure with, and the diagnostic to compare a greedy solution
-    /// with the ILP's optimum on small instances (§9). Deliberately wired
-    /// nowhere else for now, hence the allow.
-    #[allow(dead_code)]
+    /// tests measure with, the run's closing diagnostic, and the ground truth
+    /// the ILP's optimum is compared against on small instances (§9), through
+    /// [`placement_objective`](super::placement_objective).
     pub(super) fn objective_value(&self) -> f64 {
         let mut total = 0.0;
         for student in self.universe() {

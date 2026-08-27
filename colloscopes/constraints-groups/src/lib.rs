@@ -61,7 +61,9 @@ pub use builder::{build_model, build_model_with_log};
 pub use convert::{build_group_lists, group_lists_to_warm_start};
 pub use frozen::FrozenPlacements;
 pub use ghost::GhostGrouping;
-pub use greedy::{GreedyOutcome, greedy_group_lists, greedy_group_lists_with_log};
+pub use greedy::{
+    GreedyOutcome, greedy_group_lists, greedy_group_lists_with_log, placement_objective,
+};
 pub use objective::ObjectiveWeights;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
