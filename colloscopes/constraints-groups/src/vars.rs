@@ -247,8 +247,10 @@ impl Var {
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
-    use crate::specs::tests::{range, set, student};
+    use crate::specs::KeptList;
+    use crate::specs::tests::{period_id, range, set, student, subject_id};
     use collomatique_ilp_modeler::DescribeVar;
+    use collomatique_state_colloscopes::{PeriodId, SubjectId};
     use std::collections::{BTreeMap, BTreeSet};
 
     /// A plan of bare specs, with no covered pairs (the model never reads
@@ -278,6 +280,51 @@ pub(crate) mod tests {
             canonical_range,
             ghost,
             kept_lists: Vec::new(),
+        }
+    }
+
+    /// `count` distinct (period, subject) pairs, so a spec can be given a
+    /// multiplicity. Coverage is read honestly — a spec covering nothing
+    /// weighs nothing in the objective — so anything that exercises scoring
+    /// must supply pairs.
+    fn covered(spec: usize, count: usize) -> BTreeSet<(PeriodId, SubjectId)> {
+        (0..count as u64)
+            .map(|i| (period_id(1), subject_id(spec as u64 * 100 + i + 1)))
+            .collect()
+    }
+
+    /// A plan that carries coverage: `specs` are `(students, (min, max), use
+    /// count)` and `kept` are `(groups, use count)`. Unlike [`plan_of`], whose
+    /// specs cover nothing, this is what the collision objective needs — a
+    /// multiplicity-0 list is filtered out of the pair enumeration entirely.
+    ///
+    /// The ILP-era fields stay empty; the collision objective never reads
+    /// them.
+    pub(crate) fn plan_with_uses(
+        specs: &[(&[u64], (u32, u32), usize)],
+        kept: &[(&[&[u64]], usize)],
+    ) -> GenerationPlan {
+        GenerationPlan {
+            specs: specs
+                .iter()
+                .enumerate()
+                .map(|(i, &(students, (min, max), uses))| {
+                    let spec =
+                        GroupListSpec::new(set(students), range(min, max)).expect("feasible spec");
+                    (spec, covered(i, uses))
+                })
+                .collect(),
+            skipped: BTreeSet::new(),
+            pinned_pairs: BTreeMap::new(),
+            canonical_range: None,
+            ghost: None,
+            kept_lists: kept
+                .iter()
+                .map(|&(groups, use_count)| KeptList {
+                    groups: groups.iter().map(|group| set(group)).collect(),
+                    use_count,
+                })
+                .collect(),
         }
     }
 

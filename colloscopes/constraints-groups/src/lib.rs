@@ -51,6 +51,7 @@ mod frozen;
 pub mod ghost;
 mod greedy;
 mod objective;
+mod pairs;
 mod specs;
 mod targets;
 mod types;

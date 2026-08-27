@@ -7,6 +7,7 @@
 //! on a strict `>` over a pure function to be unable to cycle.
 
 use crate::frozen::FrozenPlacements;
+use crate::pairs::{pair_mass, plan_n_uses};
 use crate::specs::{GenerationPlan, KeptList};
 use crate::targets::balanced_targets;
 use crate::vars::GroupListIdx;
@@ -94,15 +95,9 @@ impl<'a> State<'a> {
             }
         }
 
-        let mut n_uses: BTreeMap<StudentId, usize> = BTreeMap::new();
-        for (&student, profile) in &profiles {
-            let uses = profile.iter().map(|&list| lists[list].multiplicity).sum();
-            n_uses.insert(student, uses);
-        }
-        for (&student, memberships) in &kept_memberships {
-            let uses: usize = memberships.iter().map(|&(k, _g)| kept[k].use_count).sum();
-            *n_uses.entry(student).or_default() += uses;
-        }
+        // Same student universe as the two tables above: the specs' students,
+        // plus whoever a weighing kept list groups.
+        let n_uses = plan_n_uses(plan);
 
         State {
             plan,
@@ -240,26 +235,20 @@ impl<'a> State<'a> {
     // --- scoring ---------------------------------------------------------
 
     /// The mass one meeting in `list` puts on each partner, for a group of
-    /// target `target`: `k / (N_s · (target − 1))` (§2.2). Zero when the
-    /// student sits alone there, and zero when `N_s = 0` — a student whose
-    /// every list serves no (period, subject) pair is placed, but scores
-    /// nothing.
+    /// target `target`: `k / (N_s · (target − 1))` (§2.2), through the shared
+    /// [`pair_mass`] the model's objective reads too.
     fn mass(&self, student: StudentId, list: usize, target: u32) -> f64 {
-        let n = self.n_uses(student);
-        if n == 0 || target <= 1 {
-            return 0.0;
-        }
-        self.lists[list].multiplicity as f64 / (n as f64 * f64::from(target - 1))
+        pair_mass(
+            self.lists[list].multiplicity,
+            self.n_uses(student),
+            target as usize,
+        )
     }
 
     /// Same, for a kept list. The partner count comes from the *actual* group
     /// size (§2.1): prefilled lists are user-made and may be unbalanced.
     fn kept_mass(&self, student: StudentId, kept: usize, size: usize) -> f64 {
-        let n = self.n_uses(student);
-        if n == 0 || size <= 1 {
-            return 0.0;
-        }
-        self.kept[kept].use_count as f64 / (n as f64 * (size - 1) as f64)
+        pair_mass(self.kept[kept].use_count, self.n_uses(student), size)
     }
 
     /// `P_s(t)` — the mass the student's partner distribution puts on `t`,

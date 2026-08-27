@@ -1,48 +1,11 @@
 use super::state::State;
 use super::*;
-use crate::specs::tests::{period_id, range, set, student, subject_id};
-use crate::specs::{GroupListSpec, KeptList};
+use crate::specs::tests::{set, student};
+// The hand-built plan shape lives with the other test helpers, since the model
+// tests of the collision objective need the very same coverage-carrying plans.
+use crate::vars::tests::plan_with_uses as plan;
 use collomatique_state_colloscopes::StudentId;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
-use std::collections::BTreeMap;
-
-/// `count` distinct (period, subject) pairs, so a spec can be given a
-/// multiplicity. The greedy reads `covered.len()` honestly — a spec covering
-/// nothing weighs nothing — so a test that exercises scoring must supply
-/// pairs.
-fn covered(spec: usize, count: usize) -> BTreeSet<(PeriodId, SubjectId)> {
-    (0..count as u64)
-        .map(|i| (period_id(1), subject_id(spec as u64 * 100 + i + 1)))
-        .collect()
-}
-
-/// A hand-built plan. `specs` are `(students, (min, max), use count)` and
-/// `kept` are `(groups, use count)`. The ILP-only fields stay empty: the
-/// greedy never reads them.
-fn plan(specs: &[(&[u64], (u32, u32), usize)], kept: &[(&[&[u64]], usize)]) -> GenerationPlan {
-    GenerationPlan {
-        specs: specs
-            .iter()
-            .enumerate()
-            .map(|(i, &(students, (min, max), uses))| {
-                let spec =
-                    GroupListSpec::new(set(students), range(min, max)).expect("feasible spec");
-                (spec, covered(i, uses))
-            })
-            .collect(),
-        skipped: BTreeSet::new(),
-        pinned_pairs: BTreeMap::new(),
-        canonical_range: None,
-        ghost: None,
-        kept_lists: kept
-            .iter()
-            .map(|&(groups, use_count)| KeptList {
-                groups: groups.iter().map(|group| set(group)).collect(),
-                use_count,
-            })
-            .collect(),
-    }
-}
 
 fn run_outcome(plan: &GenerationPlan) -> GreedyOutcome {
     let names: Vec<String> = (0..plan.specs.len())
