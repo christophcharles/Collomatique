@@ -705,7 +705,7 @@ fn fuzzy_top_up_count(free: usize, queued: usize, has_incumbent: bool, solved: b
     if !has_incumbent || solved {
         return 0;
     }
-    if queued > 0 { 0 } else { free }
+    free.saturating_sub(queued)
 }
 
 /// Fold a freshly reported Default incumbent objective into the tracked best, per sense.
@@ -1234,10 +1234,12 @@ impl Strategy for ConductorStrategy {
         > = FuturesUnordered::new();
 
         loop {
-            // Keep spare workers exploring around the incumbent: once the seeded queue is
-            // drained, a warm start exists, and we are not yet at a proven optimum, fill every
-            // idle slot with a fuzzy perturbation attempt. Fuzzy needs an incumbent, so this
-            // can only start after warm_start/default has produced one.
+            // Keep spare workers exploring around the incumbent: every slot the queue below will
+            // not use gets a fuzzy perturbation attempt, provided an incumbent exists and we are
+            // not yet at a proven optimum. Queued behind whatever is already there, so the fill
+            // still gives the seeded substrategies their slots first. Fuzzy needs an incumbent,
+            // so this starts either once warm_start/incremental/default has produced one, or
+            // straight away when the supplied warm start was adopted as one above.
             if let Some(fuzzy_cfg) = &self.fuzzy_config {
                 let (has_incumbent, solved) = {
                     let st = status.lock().expect("conductor status mutex");
