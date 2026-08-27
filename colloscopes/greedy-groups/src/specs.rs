@@ -92,6 +92,52 @@ pub struct GenerationRequest {
     pub kept_lists: BTreeSet<GroupListId>,
 }
 
+/// The request the config dialog opens with: rebuild every (period, subject)
+/// pair that could take a list and has none — the subject holds
+/// interrogations and does not exclude the period, and no association exists
+/// for the pair — and keep every prefilled list as a stability anchor.
+///
+/// Deliberately *not* filtered through [`GroupListSpec::new`]: an infeasible
+/// pair is defaulted on like any other, the dialog paints it red and blocks
+/// « Valider » until it is deselected, and [`build_generation_plan`] refuses
+/// it with [`GenerationPlanError::InvalidSpec`]. That is the same gate, run
+/// once, downstream of the default.
+///
+/// Pairs nobody is registered for are defaulted on too, for the same reason:
+/// the plan reports them as `skipped`, which is not an error.
+pub fn default_generation_request(params: &Parameters) -> GenerationRequest {
+    GenerationRequest {
+        rebuild: params
+            .periods
+            .period_ids()
+            .flat_map(|period| {
+                params
+                    .subjects
+                    .ordered_subject_list
+                    .iter()
+                    .filter(move |(_id, subject)| {
+                        subject.parameters.interrogation_parameters.is_some()
+                            && !subject.excluded_periods.contains(&period)
+                    })
+                    .filter(move |(id, _subject)| {
+                        !params
+                            .group_lists
+                            .subjects_associations
+                            .contains(&(period, *id))
+                    })
+                    .map(move |(id, _subject)| (period, id))
+            })
+            .collect(),
+        kept_lists: params
+            .group_lists
+            .group_list_map
+            .iter()
+            .filter(|(_id, list)| list.is_prefilled())
+            .map(|(id, _list)| id)
+            .collect(),
+    }
+}
+
 /// One kept prefilled list, as the greedy objective sees it: its actual
 /// groups and how many (period, subject) pairs currently use it. Partner
 /// counts come from the actual group sizes, never from the list's size
@@ -599,5 +645,90 @@ pub(crate) mod tests {
         let plan =
             build_generation_plan(&params, &request(&[(1, 1)], &[])).expect("well-formed request");
         assert!(plan.kept_lists.is_empty());
+    }
+
+    #[test]
+    fn default_request_rebuilds_every_eligible_unassociated_pair() {
+        let params = base_params();
+        let request = default_generation_request(&params);
+
+        // Both periods, every subject that has interrogations and excludes
+        // neither of them: subject 4 has none, so it never appears.
+        //
+        // Two pins that mirror the dialog rather than the planner. Subject 5
+        // is in, although its sizes cannot split the four students assigned
+        // to it: the default does not gate on feasibility, `Valider` and
+        // `build_generation_plan` do. And period 2 carries no assignment row
+        // at all, yet its pairs are defaulted on the same way — the plan
+        // reports them as `skipped`, which is not an error.
+        assert_eq!(
+            request.rebuild,
+            BTreeSet::from([
+                (period_id(1), subject_id(1)),
+                (period_id(1), subject_id(2)),
+                (period_id(1), subject_id(3)),
+                (period_id(1), subject_id(5)),
+                (period_id(2), subject_id(1)),
+                (period_id(2), subject_id(2)),
+                (period_id(2), subject_id(3)),
+                (period_id(2), subject_id(5)),
+            ])
+        );
+        assert!(request.kept_lists.is_empty());
+    }
+
+    #[test]
+    fn default_request_leaves_out_pairs_that_already_have_a_list() {
+        let mut params = base_params();
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(7), prefilled_list(&[&[1, 2], &[3, 4]]));
+        params
+            .group_lists
+            .subjects_associations
+            .insert((period_id(1), subject_id(1)), group_list_id(7));
+
+        let request = default_generation_request(&params);
+
+        assert!(!request.rebuild.contains(&(period_id(1), subject_id(1))));
+        // The association is per pair: the same subject on the other period
+        // still has no list, so it keeps its default.
+        assert!(request.rebuild.contains(&(period_id(2), subject_id(1))));
+    }
+
+    #[test]
+    fn default_request_ignores_periods_a_subject_excludes() {
+        let mut params = base_params();
+        let mut subject = subject_with_range(2, 3);
+        subject.excluded_periods = BTreeSet::from([period_id(2)]);
+        params.subjects.ordered_subject_list = vec![(subject_id(1), subject)]
+            .try_into()
+            .expect("distinct subject ids");
+
+        let request = default_generation_request(&params);
+
+        assert_eq!(
+            request.rebuild,
+            BTreeSet::from([(period_id(1), subject_id(1))])
+        );
+    }
+
+    #[test]
+    fn default_request_keeps_the_prefilled_lists_only() {
+        let mut params = base_params();
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(7), prefilled_list(&[&[1, 2], &[3, 4]]));
+        // An automatic list is the default filling, and is no anchor.
+        params
+            .group_lists
+            .group_list_map
+            .insert(group_list_id(8), GroupList::default());
+
+        let request = default_generation_request(&params);
+
+        assert_eq!(request.kept_lists, BTreeSet::from([group_list_id(7)]));
     }
 }

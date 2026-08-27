@@ -38,5 +38,5 @@ mod targets;
 pub use greedy::{greedy_group_lists, greedy_group_lists_with_log};
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
-    KeptList, build_generation_plan,
+    KeptList, build_generation_plan, default_generation_request,
 };

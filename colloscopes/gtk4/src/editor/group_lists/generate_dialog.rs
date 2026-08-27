@@ -6,7 +6,9 @@ use relm4::factory::FactoryVecDeque;
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
-use collomatique_greedy_groups::{GenerationRequest, GroupListSpec, GroupListSpecError};
+use collomatique_greedy_groups::{
+    GenerationRequest, GroupListSpec, GroupListSpecError, default_generation_request,
+};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 /// First step of the generation chain: *what* to generate. The solver's own settings are no
@@ -133,6 +135,11 @@ impl Dialog {
     /// are a function of the current document (rebuild what has no list yet, keep every prefilled
     /// list), so nothing is carried over between openings.
     fn set_data_from_params(&mut self) {
+        // The defaults themselves live beside the generator, because the Python
+        // API opens on the very same selection (`doc.default_generation_request`)
+        // and the two must not drift.
+        let defaults = default_generation_request(&self.params);
+
         let periods_data: Vec<period_group::Data> = self
             .params
             .periods
@@ -191,7 +198,7 @@ impl Dialog {
                             title: name,
                             subtitle,
                             // The default: rebuild exactly the pairs that have no list yet.
-                            rebuild: current.is_none(),
+                            rebuild: defaults.rebuild.contains(&(period_id, subject_id)),
                             error,
                         }
                     })
@@ -231,7 +238,7 @@ impl Dialog {
                     title,
                     subtitle: format!("{} groupes, {} élèves", groups, students),
                     // The default: every existing prefilled list is kept as a stability anchor.
-                    keep: true,
+                    keep: defaults.kept_lists.contains(&group_list_id),
                 },
             )
             .collect();
