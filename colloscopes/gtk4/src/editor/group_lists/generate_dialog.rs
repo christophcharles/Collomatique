@@ -261,10 +261,6 @@ impl Dialog {
                 .filter(|list| list.keep)
                 .map(|list| list.group_list_id)
                 .collect(),
-            // This window no longer decides the reference size: the greedy that runs next
-            // elects it from the document, and the optimize window injects an override into
-            // the request when the user sets one there.
-            canonical_range: None,
         }
     }
 

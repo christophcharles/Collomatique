@@ -2,8 +2,8 @@
 
 use crate::GroupListsModel;
 use crate::frozen::FrozenPlacements;
-use crate::objective::ObjectiveWeights;
-use crate::specs::{GenerationPlan, RangeSource};
+use crate::pairs::{PairData, cross_tiers};
+use crate::specs::GenerationPlan;
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::{Var, VarEnv};
 use collomatique_ilp_modeler::{Modeler, ReifyError};
@@ -12,72 +12,35 @@ use std::time::Instant;
 pub(crate) type MyModeler<'m> =
     Modeler<'m, Var, ExtraVarName, ConstraintDesc, VarEnv, ReifyError<Var, ExtraVarName>>;
 
-/// What the stability objective was resolved to, one line at a time, for the
-/// build log. Three decisions shape that objective and none of them is
-/// visible in the model itself: the canonical group size, what each size
-/// class then weighs, and whether there is a template grouping at all. Two of
-/// them the user can steer from the advanced dialog, so a log that does not
-/// name them cannot be acted on.
-fn plan_report(plan: &GenerationPlan, env: &VarEnv, frozen: &FrozenPlacements) -> Vec<String> {
-    let mut lines = Vec::new();
-
-    match &plan.canonical_range {
-        Some((range, source)) => {
-            let source = match source {
-                RangeSource::Automatic => "automatic, student-weighted vote",
-                RangeSource::Manual => "manual, set in the advanced settings",
-            };
-            lines.push(format!(
-                "[build_model] Canonical group size: {}-{} ({})",
-                range.start().get(),
-                range.end().get(),
-                source,
-            ));
+/// The size of the objective, one line at a time, for the build log.
+///
+/// The objective itself is not a decision any more — it is the greedy's score,
+/// coefficient for coefficient — so what is worth reporting is how big it came
+/// out: how many pairs of students can still be brought together, how many
+/// terms that costs, and what the kept lists already scored before the solver
+/// decided anything. Those numbers are also the model's own size, since every
+/// term is one extra column.
+fn plan_report(pairs: &PairData, frozen: &FrozenPlacements) -> Vec<String> {
+    let mut sites = 0usize;
+    let mut products = 0usize;
+    for (_pair, table) in pairs.pairs() {
+        for tier in table {
+            sites += tier.groups.len();
         }
-        None => lines.push(String::from(
-            "[build_model] Canonical group size: none (the plan has no list to build)",
-        )),
+        products += cross_tiers(table).count();
     }
 
-    for class in env.classes() {
-        let range = env.class_range(class);
-        let lists = env
-            .lists()
-            .filter(|list| env.class_of(*list) == class)
-            .count();
-        lines.push(format!(
-            "[build_model] Size class {}-{}: {} list(s), pair weight {:.3}",
-            range.start().get(),
-            range.end().get(),
-            lists,
-            env.class_weight(class),
-        ));
-    }
-
-    match &plan.ghost {
-        Some(ghost) => lines.push(format!(
-            "[build_model] Template grouping: {} students in {} groups of {}-{}",
-            ghost.spec().students().len(),
-            env.ghost_group_count(),
-            ghost.spec().students_per_group().start().get(),
-            ghost.spec().students_per_group().end().get(),
-        )),
-        // The three ways to end up without one, told apart by the canonical
-        // range beside it: no specs at all, a manual size that cannot split
-        // the whole student body (a manual size is never fallen back from),
-        // or — automatically — no group size of the document that can.
-        None => lines.push(String::from(match &plan.canonical_range {
-            None => "[build_model] Template grouping: none (the plan has no list to build)",
-            Some((_, RangeSource::Manual)) => {
-                "[build_model] Template grouping: none (the chosen size cannot split all the \
-                 students; the deviation weight has no effect)"
-            }
-            Some((_, RangeSource::Automatic)) => {
-                "[build_model] Template grouping: none (no group size of the document can split \
-                 all the students; the deviation weight has no effect)"
-            }
-        })),
-    }
+    let mut lines = vec![
+        format!(
+            "[build_model] Pairs that can meet in a rebuilt group: {}",
+            pairs.pairs().count(),
+        ),
+        format!(
+            "[build_model] Objective terms: {sites} site(s), {products} product(s), \
+             constant {:.6}",
+            pairs.constant_term(),
+        ),
+    ];
 
     lines.push(match frozen.len() {
         0 => {
@@ -92,29 +55,16 @@ fn plan_report(plan: &GenerationPlan, env: &VarEnv, frozen: &FrozenPlacements) -
 /// An empty `frozen` is how a caller says "pin nothing" — there is no
 /// `Option`, because "the user did not ask" and "the user asked, and prefill
 /// froze nobody" build exactly the same model.
-pub fn build_model(
-    plan: &GenerationPlan,
-    weights: ObjectiveWeights,
-    frozen: &FrozenPlacements,
-) -> GroupListsModel {
-    build_model_with_log(plan, weights, frozen, &mut |_: &str| {})
+pub fn build_model(plan: &GenerationPlan, frozen: &FrozenPlacements) -> GroupListsModel {
+    build_model_with_log(plan, frozen, &mut |_: &str| {})
 }
 
-/// `_weights` is already dead: the collision objective has nothing to weigh.
-/// The parameter survives one commit so that gtk4, which names
-/// [`ObjectiveWeights`] in four files, can be simplified on its own before the
-/// type is retired.
 pub fn build_model_with_log(
     plan: &GenerationPlan,
-    _weights: ObjectiveWeights,
     frozen: &FrozenPlacements,
     log: &mut (dyn FnMut(&str) + Send),
 ) -> GroupListsModel {
     let env = VarEnv::new(plan);
-
-    for line in plan_report(plan, &env, frozen) {
-        log(&line);
-    }
 
     let mut modeler: MyModeler<'_> = Modeler::from_described(&env);
 
@@ -134,8 +84,14 @@ pub fn build_model_with_log(
 
     // One enumeration, three readings: it declares the extras, weighs them in
     // the objective, and is what a warm start valuates them from
-    // (`group_lists_to_warm_start`).
-    let pairs = crate::pairs::PairData::new(plan, &env);
+    // (`group_lists_to_warm_start`). The report is read off it too, so it
+    // comes first — before any bundle, so the log opens on the size of what
+    // is about to be built.
+    let pairs = PairData::new(plan, &env);
+
+    for line in plan_report(&pairs, frozen) {
+        log(&line);
+    }
 
     // The extras must be declared before the constraints and the objective
     // reference them.
@@ -163,11 +119,7 @@ mod tests {
             &[(&[1, 2, 3, 4], (2, 3), 1), (&[5, 6, 7], (1, 2), 1)],
             &[],
         );
-        let model = build_model(
-            &plan,
-            crate::ObjectiveWeights::default(),
-            &FrozenPlacements::default(),
-        );
+        let model = build_model(&plan, &FrozenPlacements::default());
 
         // The `match` is exhaustive on purpose: a new constraint family
         // must not slip in without this test growing to count it.
@@ -185,8 +137,7 @@ mod tests {
         }
         // One "exactly one group" row per (list, student): 4 + 3.
         assert_eq!(one_group, 7);
-        // One size row per (list, group): 2 + 2. The template adds none: it
-        // is plan data, not a grouping the model shapes.
+        // One size row per (list, group): 2 + 2.
         assert_eq!(sizes, 4);
 
         // The objective references every declared extra, so they are all
@@ -218,26 +169,34 @@ mod tests {
     }
 
     #[test]
-    fn the_log_reports_the_objective_resolution() {
-        // Two colle lists of four students (8 votes) against one tutorial
-        // list of six (6 votes): 2..=3 is canonical, so a tutorial meeting
-        // weighs (3 − 1) / (6 − 1) = 0.4 of a colle meeting. The template
-        // spans the six students at the canonical size: ceil(6 / 3) = 2
-        // groups.
-        let plan = crate::vars::tests::plan_of(&[
-            (&[1, 2, 3, 4], (2, 3)),
-            (&[3, 4, 5, 6], (2, 3)),
-            (&[1, 2, 3, 4, 5, 6], (6, 6)),
-        ]);
-        let lines = plan_report(&plan, &VarEnv::new(&plan), &FrozenPlacements::default());
+    fn the_log_opens_on_the_size_of_the_objective() {
+        // Two lists sharing two students, plus a kept list that already
+        // groups two others.
+        //
+        // List 0: 4 students at 2..=3 → 2 groups of 2, one tier. List 1: 4
+        // students at 2..=2 → 2 groups of 2, one tier. Each list gives its
+        // C(4, 2) = 6 pairs 2 sites, so 24 in all; the pair (3, 4) is the only
+        // one in both lists, so it is the only product — and the only pair
+        // counted once instead of twice, leaving 11 distinct pairs.
+        //
+        // The kept list groups 1 and 2 for one use each way. Both take part in
+        // two uses in all (their spec and it), so each puts a mass of
+        // 1 / (2 · (2 − 1)) = 0.5 on the other, and the constant is 2 × 0.5².
+        let plan = crate::vars::tests::plan_with_uses(
+            &[(&[1, 2, 3, 4], (2, 3), 1), (&[3, 4, 5, 6], (2, 2), 1)],
+            &[(&[&[1, 2]], 1)],
+        );
+        let mut lines: Vec<String> = Vec::new();
+        build_model_with_log(&plan, &FrozenPlacements::default(), &mut |line| {
+            lines.push(line.to_string())
+        });
 
+        // The report is the head of the log, before any bundle is applied.
         assert_eq!(
-            lines,
-            vec![
-                "[build_model] Canonical group size: 2-3 (automatic, student-weighted vote)",
-                "[build_model] Size class 2-3: 2 list(s), pair weight 1.000",
-                "[build_model] Size class 6-6: 1 list(s), pair weight 0.400",
-                "[build_model] Template grouping: 6 students in 2 groups of 2-3",
+            lines[..3],
+            [
+                "[build_model] Pairs that can meet in a rebuilt group: 11",
+                "[build_model] Objective terms: 24 site(s), 1 product(s), constant 0.500000",
                 "[build_model] Frozen placements: none (the polish may undo the prefill)",
             ]
         );
@@ -248,10 +207,11 @@ mod tests {
         // The last line of the report tells the two silences apart: a
         // generation that was not asked to keep the prefill, and one whose
         // prefill claimed nobody, build the same model.
-        let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 3))]);
+        let plan = crate::vars::tests::plan_with_uses(&[(&[1, 2, 3, 4], (2, 3), 1)], &[]);
         let env = VarEnv::new(&plan);
+        let pairs = PairData::new(&plan, &env);
 
-        let none = plan_report(&plan, &env, &FrozenPlacements::default());
+        let none = plan_report(&pairs, &FrozenPlacements::default());
         assert_eq!(
             none.last().expect("the report is never empty"),
             "[build_model] Frozen placements: none (the polish may undo the prefill)",
@@ -273,57 +233,10 @@ mod tests {
                 0,
             ),
         ]));
-        let some = plan_report(&plan, &env, &frozen);
+        let some = plan_report(&pairs, &frozen);
         assert_eq!(
             some.last().expect("the report is never empty"),
             "[build_model] Frozen placements: 2 seat(s) pinned",
-        );
-    }
-
-    #[test]
-    fn the_log_says_why_there_is_no_template() {
-        let mut plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 3))]);
-        // What a manual 3..=3 over five students would give: the size stays
-        // in force for the class weights, but nothing is templated.
-        plan.canonical_range = Some((
-            crate::specs::tests::range(3, 3),
-            crate::specs::RangeSource::Manual,
-        ));
-        plan.ghost = None;
-
-        let lines = plan_report(&plan, &VarEnv::new(&plan), &FrozenPlacements::default());
-        assert_eq!(
-            lines[0],
-            "[build_model] Canonical group size: 3-3 (manual, set in the advanced settings)"
-        );
-        assert!(
-            lines[2].contains("none (the chosen size cannot split all the students"),
-            "unexpected template line: {}",
-            lines[2]
-        );
-    }
-
-    #[test]
-    fn the_report_reaches_the_build_log() {
-        let plan = crate::vars::tests::plan_of(&[(&[1, 2, 3, 4], (2, 2))]);
-        let mut lines: Vec<String> = Vec::new();
-        build_model_with_log(
-            &plan,
-            crate::ObjectiveWeights::default(),
-            &FrozenPlacements::default(),
-            &mut |line| lines.push(line.to_string()),
-        );
-
-        // The report is the head of the log, before any bundle is applied.
-        assert_eq!(
-            lines[0],
-            "[build_model] Canonical group size: 2-2 (automatic, student-weighted vote)"
-        );
-        assert!(
-            lines
-                .iter()
-                .any(|line| line.starts_with("[build_model] Template grouping: 4 students")),
-            "the template line is missing from the build log"
         );
     }
 }

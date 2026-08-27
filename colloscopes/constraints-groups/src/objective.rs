@@ -43,33 +43,6 @@ use crate::pairs::{PairData, cross_tiers};
 use crate::types::ExtraVarName;
 use collomatique_ilp::linexpr::LinExpr;
 
-/// Default weight of the "share as few pairs as possible" term.
-const W_PAIRS_DEFAULT: f64 = 1.0;
-
-/// Default weight of one extra piece a list breaks a reference group into.
-const W_TEMPLATE_DEFAULT: f64 = 0.25;
-
-/// The weights of the retired stability objective. The collision objective has
-/// nothing to weigh — its coefficients are the expansion of a square — so this
-/// is dead machinery, kept for exactly one commit so that gtk4, which names it
-/// in four files, can be simplified on its own before the type goes.
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ObjectiveWeights {
-    /// Weight of the "share as few pairs as possible" term.
-    pub w_pairs: f64,
-    /// Weight of one piece a list breaks a reference group into.
-    pub w_template: f64,
-}
-
-impl Default for ObjectiveWeights {
-    fn default() -> Self {
-        ObjectiveWeights {
-            w_pairs: W_PAIRS_DEFAULT,
-            w_template: W_TEMPLATE_DEFAULT,
-        }
-    }
-}
-
 pub(crate) fn build(pairs: &PairData) -> MyBundle {
     // The expression is grown in place: `LinExpr`'s `+` clones the whole
     // coefficient map, which would make building the objective quadratic in

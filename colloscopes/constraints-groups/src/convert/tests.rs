@@ -1,5 +1,4 @@
 use super::*;
-use crate::ObjectiveWeights;
 use crate::specs::tests::student;
 use crate::vars::tests::{plan_of, plan_with_uses};
 use collomatique_ilp::f64_equals;
@@ -121,8 +120,7 @@ fn the_warm_start_is_a_tight_solution_of_the_model() {
         ],
         &[(&[&[1, 2]], 1)],
     );
-    let weights = ObjectiveWeights::default();
-    let model = crate::build_model(&plan, weights, &crate::FrozenPlacements::default());
+    let model = crate::build_model(&plan, &crate::FrozenPlacements::default());
     let warm = group_lists_to_warm_start(&plan, &greedy(&plan));
 
     let solution = model

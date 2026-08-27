@@ -178,11 +178,7 @@ fn objective_matches_the_greedy_ground_truth() {
         let lists = crate::greedy_group_lists(&plan, &names(&plan)).lists;
         let expected = crate::placement_objective(&plan, &lists);
 
-        let model = crate::build_model(
-            &plan,
-            ObjectiveWeights::default(),
-            &crate::FrozenPlacements::default(),
-        );
+        let model = crate::build_model(&plan, &crate::FrozenPlacements::default());
         let warm = crate::group_lists_to_warm_start(&plan, &lists);
         let solution = model.solution_from_complete_data(warm).unwrap_or_else(|| {
             panic!("{label}: the warm start must value exactly the model's variables")
@@ -216,11 +212,7 @@ fn kept_lists_enter_as_constants() {
     assert_close(pairs.constant_term(), 2.0);
 
     let lists = crate::greedy_group_lists(&plan, &names(&plan)).lists;
-    let model = crate::build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &crate::FrozenPlacements::default(),
-    );
+    let model = crate::build_model(&plan, &crate::FrozenPlacements::default());
     let solution = model
         .solution_from_complete_data(crate::group_lists_to_warm_start(&plan, &lists))
         .expect("the warm start must value exactly the model's variables");
@@ -250,11 +242,7 @@ fn reconstruction_recovers_tight_values() {
         ],
         &[(&[&[1, 5]], 1)],
     );
-    let model = crate::build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &crate::FrozenPlacements::default(),
-    );
+    let model = crate::build_model(&plan, &crate::FrozenPlacements::default());
     let solver = ColloCbcSolver::with_disable_logging(true);
 
     let base = model
@@ -305,11 +293,7 @@ fn every_declared_variable_is_paid_for() {
 
     // And the built model holds exactly those columns — no more (a declared
     // extra nothing references is not expanded) and no fewer.
-    let model = crate::build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &crate::FrozenPlacements::default(),
-    );
+    let model = crate::build_model(&plan, &crate::FrozenPlacements::default());
     let mut built_sites = 0;
     let mut built_products = 0;
     for var in model.problem().get_variables().keys() {
@@ -339,11 +323,7 @@ fn the_optimum_is_reached_at_a_tight_configuration() {
         &[(&[1, 2, 3, 4], (2, 2), 1), (&[1, 2, 3, 4], (2, 2), 1)],
         &[],
     );
-    let model = crate::build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &crate::FrozenPlacements::default(),
-    );
+    let model = crate::build_model(&plan, &crate::FrozenPlacements::default());
     let solution = model
         .solve(&ColloCbcSolver::with_disable_logging(true))
         .expect("the model must be feasible")
@@ -388,7 +368,7 @@ fn repeat_partners_beat_spread_partners() {
         &[(&[&[1, 3], &[2, 4]], 2)],
     );
     let pinned: &[&[u64]] = &[&[1, 2], &[3, 4]];
-    let model = crate::build_model(&plan, ObjectiveWeights::default(), &pin(0, pinned));
+    let model = crate::build_model(&plan, &pin(0, pinned));
     let value = model_value(&model, &plan);
 
     let repeated = value(&[pinned, &[&[1, 2], &[3, 4]]]);
@@ -435,7 +415,7 @@ fn the_license_case_ranks_as_designed() {
     let pairs_across: &[&[u64]] = &[&[1, 5], &[2, 6], &[3, 7], &[4, 8]];
     let scattered: &[&[u64]] = &[&[1, 3], &[2, 4], &[5, 7], &[6, 8]];
 
-    let model = crate::build_model(&plan, ObjectiveWeights::default(), &pin(0, tutorial));
+    let model = crate::build_model(&plan, &pin(0, tutorial));
     let value = model_value(&model, &plan);
 
     // (a) stable colle partners who are also tutorial mates, (b) stable colle

@@ -28,11 +28,6 @@
 //! greedy below supplies the initial solution — so the epochs are gone; the
 //! pinned roadmap still describes them.
 //!
-//! The *template* ([`GenerationPlan::ghost`]) is a grouping of every student
-//! at the canonical group size, which the objective asks the real lists to
-//! reuse. It is plan data, computed by clustering ([`ghost`]), not something
-//! the solver decides.
-//!
 //! The number of groups is *not* optimized: it is the closed-form minimum
 //! `⌈n / max_size⌉` ([`vars::VarEnv::group_count`]), imposed on the model.
 //! A student count the size range cannot split at all is rejected upfront
@@ -53,7 +48,6 @@ mod constraints;
 mod convert;
 mod extras;
 mod frozen;
-pub mod ghost;
 mod greedy;
 mod objective;
 mod pairs;
@@ -65,16 +59,14 @@ pub mod vars;
 pub use builder::{build_model, build_model_with_log};
 pub use convert::{build_group_lists, group_lists_to_warm_start};
 pub use frozen::FrozenPlacements;
-pub use ghost::GhostGrouping;
 pub use greedy::{
     GreedyOutcome, greedy_group_lists, greedy_group_lists_with_log, placement_objective,
 };
-pub use objective::ObjectiveWeights;
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
-    KeptList, RangeSource, build_generation_plan,
+    KeptList, build_generation_plan,
 };
 pub use types::{ConstraintDesc, ExtraVarName};
-pub use vars::{GroupListIdx, RefGroupIdx, SizeClassIdx, Var};
+pub use vars::{GroupListIdx, Var};
 
 pub type GroupListsModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;

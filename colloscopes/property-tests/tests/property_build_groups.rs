@@ -23,8 +23,8 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::InnerData;
 
 use collomatique_constraints_groups::{
-    FrozenPlacements, GroupListIdx, ObjectiveWeights, Var, build_generation_plan,
-    build_group_lists, build_model, vars::VarEnv,
+    FrozenPlacements, GroupListIdx, Var, build_generation_plan, build_group_lists, build_model,
+    vars::VarEnv,
 };
 use collomatique_ilp::ConfigData;
 
@@ -71,11 +71,7 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
     }
 
     // The (trivial) model must build without panicking.
-    let model = build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &FrozenPlacements::default(),
-    );
+    let model = build_model(&plan, &FrozenPlacements::default());
     let _ = model.stats();
 
     let env = VarEnv::new(&plan);

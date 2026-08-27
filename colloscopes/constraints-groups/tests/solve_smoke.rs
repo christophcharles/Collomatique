@@ -5,13 +5,12 @@
 //! constrained model too.
 
 use collomatique_constraints_groups::{
-    FrozenPlacements, GenerationPlan, GhostGrouping, GroupListSpec, ObjectiveWeights, RangeSource,
-    build_group_lists, build_model,
+    FrozenPlacements, GenerationPlan, GroupListSpec, build_group_lists, build_model,
 };
 use collomatique_ilp::solvers::collo_cbc::ColloCbcSolver;
 use collomatique_state_colloscopes::ids::Id;
 use collomatique_state_colloscopes::{NonEmptyRangeInclusive, StudentId};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 
 fn student(n: u64) -> StudentId {
@@ -32,28 +31,12 @@ fn model_solves_and_converts() {
     let spec = GroupListSpec::new((1..=6).map(student).collect(), range(2, 3))
         .expect("6 students split into groups of 2 to 3");
     let plan = GenerationPlan {
-        specs: vec![(spec.clone(), BTreeSet::new())],
+        specs: vec![(spec, BTreeSet::new())],
         skipped: BTreeSet::new(),
-        pinned_pairs: BTreeMap::new(),
-        // The only spec, so the vote could only ever elect its own range.
-        canonical_range: Some((range(2, 3), RangeSource::Automatic)),
-        // And the template spans the same students at the same size, split
-        // by hand like everything else here — ceil(6 / 3) = 2 groups of 3.
-        ghost: Some(GhostGrouping::new(
-            spec,
-            vec![
-                (1..=3).map(student).collect(),
-                (4..=6).map(student).collect(),
-            ],
-        )),
         kept_lists: Vec::new(),
     };
 
-    let model = build_model(
-        &plan,
-        ObjectiveWeights::default(),
-        &FrozenPlacements::default(),
-    );
+    let model = build_model(&plan, &FrozenPlacements::default());
 
     let solver = ColloCbcSolver::with_disable_logging(true);
     let solution = model.solve(&solver).expect("the model must be feasible");

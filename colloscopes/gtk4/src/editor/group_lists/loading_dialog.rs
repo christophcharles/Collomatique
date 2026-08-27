@@ -5,7 +5,7 @@ use relm4::{
 };
 
 use collomatique_constraints_groups::{
-    FrozenPlacements, GenerationPlan, GroupListsModel, ObjectiveWeights, build_model_with_log,
+    FrozenPlacements, GenerationPlan, GroupListsModel, build_model_with_log,
 };
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
@@ -152,8 +152,7 @@ impl Component for Dialog {
                     let mut log = move |line: &str| {
                         input.emit(DialogInput::Echo(seq, format!("{}\n", line)));
                     };
-                    let model =
-                        build_model_with_log(&plan, ObjectiveWeights::default(), &frozen, &mut log);
+                    let model = build_model_with_log(&plan, &frozen, &mut log);
                     DialogCommandOutput::Built(seq, model)
                 });
             }

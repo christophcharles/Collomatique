@@ -9,9 +9,9 @@
 //! `1 / (group size − 1)` so a meeting in a twelve-seat tutorial cannot buy
 //! the right to scatter someone's colle partners.
 //!
-//! The greedy reads only `plan.specs` (with their covered pairs) and
-//! `plan.kept_lists`. It ignores `ghost`, `canonical_range` and
-//! `pinned_pairs` entirely — ILP-era machinery.
+//! The greedy reads the whole plan: `plan.specs` (with their covered pairs)
+//! and `plan.kept_lists`, which is all a plan holds — the same input the model
+//! is built from, and the reason the two score a placement alike.
 
 mod cohorts;
 mod pass;

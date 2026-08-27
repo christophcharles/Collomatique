@@ -7,9 +7,9 @@
 //! the only producer.
 //!
 //! Not to be confused with `GroupListFilling::Prefilled`, the state-layer
-//! filling mode every generated list uses, nor with
-//! [`GenerationPlan::pinned_pairs`](crate::GenerationPlan::pinned_pairs),
-//! which pins *pairs* of students as already-met in a kept list.
+//! filling mode every generated list uses, nor with the plan's
+//! [`kept_lists`](crate::GenerationPlan::kept_lists), which are groupings the
+//! generation does not touch at all rather than seats inside a list it builds.
 
 use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::StudentId;

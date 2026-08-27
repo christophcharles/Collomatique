@@ -53,7 +53,7 @@ fn the_warm_start_still_solves_the_pinned_model() {
         "this plan must have something to pin, or the test proves nothing",
     );
 
-    let model = crate::build_model(&plan, crate::ObjectiveWeights::default(), &outcome.frozen);
+    let model = crate::build_model(&plan, &outcome.frozen);
     let warm = crate::group_lists_to_warm_start(&plan, &outcome.lists);
 
     let solution = model
@@ -78,7 +78,7 @@ fn every_pinned_seat_is_one_row() {
         ((GroupListIdx(0), student(2)), 1),
         ((GroupListIdx(1), student(5)), 0),
     ]));
-    let model = crate::build_model(&plan, crate::ObjectiveWeights::default(), &frozen);
+    let model = crate::build_model(&plan, &frozen);
 
     let pins: Vec<_> = model
         .problem()
@@ -107,10 +107,10 @@ fn every_pinned_seat_is_one_row() {
 #[test]
 #[should_panic(expected = "is not in this plan")]
 fn a_seat_outside_the_plan_is_refused() {
-    // The seats are computed against the plan the naming dialog built, and
-    // the loading dialog rebuilds its own: this is the backstop if the two
+    // The seats are computed against a plan, and nothing forces the caller to
+    // build the model from that same plan: this is the backstop if the two
     // ever stop agreeing.
     let plan = plan_of(&[(&[1, 2, 3, 4], (2, 3))]);
     let frozen = FrozenPlacements::new(BTreeMap::from([((GroupListIdx(0), student(9)), 0)]));
-    let _ = crate::build_model(&plan, crate::ObjectiveWeights::default(), &frozen);
+    let _ = crate::build_model(&plan, &frozen);
 }
