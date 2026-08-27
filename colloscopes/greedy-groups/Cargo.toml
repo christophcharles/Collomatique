@@ -1,5 +1,5 @@
 [package]
-name = "collomatique-constraints-groups"
+name = "collomatique-greedy-groups"
 version.workspace = true
 edition.workspace = true
 authors.workspace = true

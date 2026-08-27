@@ -33,7 +33,7 @@
 //! change the starting document of six fuzz walks: coverage could drop with
 //! nothing going red, or a walk could go red for a reason unrelated to the
 //! commit that broke it. A test pins its own input. This is not in tension
-//! with `constraints-groups/tests/examples_build.rs`, which reads `examples/`
+//! with `greedy-groups/tests/examples_build.rs`, which reads `examples/`
 //! live on purpose: *checking the examples* is what that test is for, whereas
 //! here hogwarts is only a conveniently realistic document.
 //!

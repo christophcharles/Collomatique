@@ -37,7 +37,7 @@ pub enum GroupListsInput {
     /// "Générer des listes automatiquement" was clicked.
     GenerateClicked,
     GenerationConfigAccepted(
-        collomatique_constraints_groups::GenerationRequest,
+        collomatique_greedy_groups::GenerationRequest,
         collomatique_state_colloscopes::colloscope_params::Parameters,
     ),
     GenerationConfigCancelled,

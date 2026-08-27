@@ -11,7 +11,7 @@ use std::collections::BTreeSet;
 use collomatique_testgen_colloscopes::ChaCha8Rng;
 use collomatique_testgen_colloscopes::rand::Rng;
 
-use collomatique_constraints_groups::{GenerationRequest, GroupListSpec};
+use collomatique_greedy_groups::{GenerationRequest, GroupListSpec};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 /// Random valid request drawn from the current state: any assigned

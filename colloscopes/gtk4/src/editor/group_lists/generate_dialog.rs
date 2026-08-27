@@ -6,7 +6,7 @@ use relm4::factory::FactoryVecDeque;
 use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
-use collomatique_constraints_groups::{GenerationRequest, GroupListSpec, GroupListSpecError};
+use collomatique_greedy_groups::{GenerationRequest, GroupListSpec, GroupListSpecError};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
 /// First step of the generation chain: *what* to generate. The solver's own settings are no

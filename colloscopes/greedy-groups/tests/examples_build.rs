@@ -14,9 +14,7 @@
 //! walks make the opposite call, reading `tests/fixtures/`, because they are
 //! about the code.
 
-use collomatique_constraints_groups::{
-    GenerationRequest, build_generation_plan, greedy_group_lists,
-};
+use collomatique_greedy_groups::{GenerationRequest, build_generation_plan, greedy_group_lists};
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_storage::deserialize_data;
 use std::collections::BTreeSet;

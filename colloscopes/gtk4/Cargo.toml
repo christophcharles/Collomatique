@@ -32,7 +32,7 @@ collomatique-rpc-colloscopes = { path = "../../colloscopes/rpc-colloscopes" }
 collomatique-rpc-engine-colloscopes = { path = "../../colloscopes/rpc-engine-colloscopes" }
 collomatique-settings = { path = "../../colloscopes/settings" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
-collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
+collomatique-greedy-groups = { path = "../../colloscopes/greedy-groups" }
 collomatique-xlsx = { path = "../../colloscopes/xlsx" }
 collomatique-mps = { path = "../../generic/mps" }
 collomatique-strategies = { path = "../../generic/strategies" }

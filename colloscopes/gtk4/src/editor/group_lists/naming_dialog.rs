@@ -11,7 +11,7 @@ use relm4::{
 };
 use relm4::{adw, gtk};
 
-use collomatique_constraints_groups::{
+use collomatique_greedy_groups::{
     GenerationRequest, build_generation_plan, greedy_group_lists_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
@@ -26,7 +26,7 @@ type GeneratedList = (GroupList, BTreeSet<(PeriodId, SubjectId)>);
 
 /// Modal naming dialog: the second step of the generation chain, and the one that actually
 /// generates. It turns the configured request into a
-/// [`GenerationPlan`](collomatique_constraints_groups::GenerationPlan), runs the greedy off the
+/// [`GenerationPlan`](collomatique_greedy_groups::GenerationPlan), runs the greedy off the
 /// UI thread while streaming its log into a [`DebugView`], shows one editable name per spec and
 /// the resulting groups, and reports the pairs nobody is registered for. "Valider" lands the
 /// greedy answer as it stands — it is the whole result.

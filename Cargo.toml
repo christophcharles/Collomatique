@@ -8,7 +8,7 @@ members = [
     "generic/rpc-engine", "generic/state", "generic/state-derive",
     "generic/strategies", "generic/subprocesses", "generic/time",
 
-    "colloscopes/constraints-colloscopes", "colloscopes/constraints-groups",
+    "colloscopes/constraints-colloscopes", "colloscopes/greedy-groups",
     "colloscopes/gtk4", "colloscopes/ops", "colloscopes/python",
     "colloscopes/property-tests", "colloscopes/python-runner",
     "colloscopes/rpc-colloscopes",

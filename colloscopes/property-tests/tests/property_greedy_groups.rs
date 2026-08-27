@@ -28,7 +28,7 @@ use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::group_lists::{GroupList, GroupListFilling};
 use collomatique_state_colloscopes::{InnerData, PeriodId, StudentId, SubjectId};
 
-use collomatique_constraints_groups::{build_generation_plan, greedy_group_lists};
+use collomatique_greedy_groups::{build_generation_plan, greedy_group_lists};
 
 use harness::RunConfig;
 

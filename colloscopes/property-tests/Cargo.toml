@@ -18,7 +18,7 @@ collomatique-state = { path = "../../generic/state" }
 collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
 collomatique-ops = { path = "../../colloscopes/ops" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
-collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
+collomatique-greedy-groups = { path = "../../colloscopes/greedy-groups" }
 collomatique-time = { path = "../../generic/time" }
 # `fixture_starts` reads and writes the walk-start documents.
 collomatique-storage = { path = "../../colloscopes/storage" }
