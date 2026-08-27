@@ -5,8 +5,8 @@ use relm4::{
 };
 
 use collomatique_constraints_groups::{
-    GenerationPlan, GenerationRequest, GroupListsModel, ObjectiveWeights, build_generation_plan,
-    build_model_with_log,
+    FrozenPlacements, GenerationPlan, GenerationRequest, GroupListsModel, ObjectiveWeights,
+    build_generation_plan, build_model_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 
@@ -26,8 +26,14 @@ pub struct Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     /// Build the plan and the model for this request — canonical range included — against
-    /// these parameters, with these objective weights.
-    Show(GenerationRequest, ObjectiveWeights, Parameters),
+    /// these parameters, with these objective weights, holding these seats fixed. An empty
+    /// set pins nothing, which is what leaves the polish free to redo the whole assignment.
+    Show(
+        GenerationRequest,
+        ObjectiveWeights,
+        FrozenPlacements,
+        Parameters,
+    ),
     /// One build-log line, streamed from the off-thread build that carries this sequence number.
     Echo(u64, String),
     Cancel,
@@ -136,7 +142,7 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(request, weights, params) => {
+            DialogInput::Show(request, weights, frozen, params) => {
                 self.hidden = false;
                 self.move_front = true;
                 // Any build still running from a previous opening is now stale.
@@ -163,9 +169,11 @@ impl Component for Dialog {
                     // range: a failure here is a caller bug, like it is there.
                     let plan = build_generation_plan(&params, &request)
                         .expect("the naming dialog already built a plan from this request");
-                    // Pinning the greedy's prefill is the next commit's business; nothing
-                    // is held fixed yet.
-                    let model = build_model_with_log(&plan, weights, &Default::default(), &mut log);
+                    // The seats were read off the plan the naming dialog built, and this one
+                    // is rebuilt from the same request and parameters — the very assumption the
+                    // `expect` above states. `build_model_with_log` asserts on a seat this plan
+                    // does not have, so a drift here is loud rather than silent.
+                    let model = build_model_with_log(&plan, weights, &frozen, &mut log);
                     DialogCommandOutput::Built(seq, plan, model)
                 });
             }

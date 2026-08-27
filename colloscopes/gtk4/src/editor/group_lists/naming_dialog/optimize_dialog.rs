@@ -38,6 +38,8 @@ pub struct Dialog {
     /// switching the expander off and on again does not lose it.
     canonical_min: u32,
     canonical_max: u32,
+    /// Whether the ILP keeps the greedy's prefill instead of re-deciding it.
+    fix_prefill: bool,
     /// The solver configuration this window carries, seeded on `Show` and edited through the
     /// child `conductor_config` dialog.
     strategy: ConductorStrategy,
@@ -85,12 +87,14 @@ pub enum DialogInput {
         ObjectiveWeights,
         Option<NonEmptyRangeInclusive<NonZeroU32>>,
         ConductorStrategy,
+        bool,
     ),
     Cancel,
     Accept,
     UpdatePairsWeight(f64),
     UpdateTemplateWeight(f64),
     SetCanonicalEnabled(bool),
+    SetFixPrefill(bool),
     UpdateCanonicalMin(u32),
     UpdateCanonicalMax(u32),
     /// The frame's edit button: open the solver-configuration dialog.
@@ -108,11 +112,13 @@ pub enum DialogInput {
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    /// The assembled weights, canonical-size override and solver configuration.
+    /// The assembled weights, canonical-size override, solver configuration and
+    /// whether the prefill is to be held fixed.
     Accepted(
         ObjectiveWeights,
         Option<NonEmptyRangeInclusive<NonZeroU32>>,
         ConductorStrategy,
+        bool,
     ),
     /// The dialog just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
@@ -273,6 +279,23 @@ impl SimpleComponent for Dialog {
                                     },
                                 },
                             },
+                            adw::PreferencesGroup {
+                                set_title: "Pré-remplissage",
+                                set_description: Some("La première phase du calcul remplit des groupes entiers avec des élèves qui suivent exactement les mêmes matières"),
+                                set_margin_all: 5,
+                                set_hexpand: true,
+                                adw::SwitchRow {
+                                    set_hexpand: true,
+                                    set_title: "Figer le pré-remplissage",
+                                    set_subtitle: "Ces élèves gardent leur groupe et l'optimisation ne déplace que les autres. Le calcul est bien plus rapide, mais les meilleures solutions peuvent devenir inatteignables",
+                                    #[track(model.should_redraw)]
+                                    set_active: model.fix_prefill,
+                                    connect_active_notify[sender] => move |widget| {
+                                        let value = widget.is_active();
+                                        sender.input(DialogInput::SetFixPrefill(value));
+                                    },
+                                },
+                            },
                         },
                     },
                     gtk::Frame {
@@ -342,6 +365,7 @@ impl SimpleComponent for Dialog {
             canonical_enabled: false,
             canonical_min: SEED_CANONICAL_MIN,
             canonical_max: SEED_CANONICAL_MAX,
+            fix_prefill: false,
             strategy: ConductorStrategy::with_parallelism_optimize_only(),
             conductor_config_dialog,
         };
@@ -355,7 +379,7 @@ impl SimpleComponent for Dialog {
         self.should_redraw = false;
         self.move_front = false;
         match msg {
-            DialogInput::Show(weights, canonical_range, strategy) => {
+            DialogInput::Show(weights, canonical_range, strategy, fix_prefill) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.should_redraw = true;
@@ -367,6 +391,7 @@ impl SimpleComponent for Dialog {
                     self.canonical_max = range.end().get();
                 }
                 self.strategy = strategy;
+                self.fix_prefill = fix_prefill;
             }
             DialogInput::Cancel => {
                 if !self.hidden {
@@ -387,6 +412,7 @@ impl SimpleComponent for Dialog {
                             },
                             self.canonical_range(),
                             self.strategy.clone(),
+                            self.fix_prefill,
                         ))
                         .unwrap();
                 }
@@ -408,6 +434,12 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.canonical_enabled = value;
+            }
+            DialogInput::SetFixPrefill(value) => {
+                if self.fix_prefill == value {
+                    return;
+                }
+                self.fix_prefill = value;
             }
             DialogInput::UpdateCanonicalMin(value) => {
                 if self.canonical_min == value {

@@ -74,6 +74,8 @@ pub enum GroupListsInput {
         canonical_range:
             Option<collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>>,
         strategy: collomatique_strategies::ConductorStrategy,
+        fix_prefill: bool,
+        frozen: collomatique_constraints_groups::FrozenPlacements,
     },
     GenerationNamingCancelled,
     /// The model for the optimize path is built: start the solve from the greedy answer.
@@ -131,6 +133,11 @@ pub struct GroupLists {
     /// from the document instead.
     canonical_range:
         Option<collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>>,
+
+    /// Whether the last-validated optimize run held the greedy's prefill fixed, reopened-on
+    /// like the weights. `false` (the default, and the reset value) leaves the polish free to
+    /// re-decide the whole assignment.
+    fix_prefill: bool,
 
     /// The optimize path's state, held from the moment it is taken until the solver returns:
     /// the user-chosen list names, the greedy answer the solve starts from, and — once the
@@ -323,6 +330,8 @@ impl Component for GroupLists {
                     weights,
                     canonical_range,
                     strategy,
+                    fix_prefill,
+                    frozen,
                 } => GroupListsInput::GenerationOptimizeRequested {
                     request,
                     names,
@@ -330,6 +339,8 @@ impl Component for GroupLists {
                     weights,
                     canonical_range,
                     strategy,
+                    fix_prefill,
+                    frozen,
                 },
                 naming_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationNamingCancelled
@@ -375,6 +386,7 @@ impl Component for GroupLists {
             strategy: collomatique_strategies::ConductorStrategy::with_parallelism_optimize_only(),
             weights: collomatique_constraints_groups::ObjectiveWeights::default(),
             canonical_range: None,
+            fix_prefill: false,
             pending_generation: None,
             selection_reason: GroupListSelectionReason::New,
         };
@@ -399,6 +411,7 @@ impl Component for GroupLists {
                     collomatique_strategies::ConductorStrategy::with_parallelism_optimize_only();
                 self.weights = collomatique_constraints_groups::ObjectiveWeights::default();
                 self.canonical_range = None;
+                self.fix_prefill = false;
             }
             GroupListsInput::GenerateClicked => {
                 // The dialog is modal, so the parameters it is configured against stay valid until
@@ -421,6 +434,7 @@ impl Component for GroupLists {
                         self.weights,
                         self.canonical_range.clone(),
                         self.strategy.clone(),
+                        self.fix_prefill,
                     ))
                     .unwrap();
             }
@@ -442,11 +456,14 @@ impl Component for GroupLists {
                 weights,
                 canonical_range,
                 strategy,
+                fix_prefill,
+                frozen,
             } => {
-                // Persist the three settings so the optimize window reopens on the last choice.
+                // Persist the four settings so the optimize window reopens on the last choice.
                 self.weights = weights;
                 self.canonical_range = canonical_range.clone();
                 self.strategy = strategy;
+                self.fix_prefill = fix_prefill;
                 // The canonical range is the optimize window's to set, and the generate dialog
                 // no longer puts one in the request: inject it here, on the way to the plan.
                 request.canonical_range = canonical_range;
@@ -463,6 +480,7 @@ impl Component for GroupLists {
                     .send(loading_dialog::DialogInput::Show(
                         request,
                         self.weights,
+                        frozen,
                         self.params.clone(),
                     ))
                     .unwrap();

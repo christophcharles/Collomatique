@@ -30,6 +30,7 @@ use std::collections::BTreeSet;
 use std::time::Instant;
 
 /// What one greedy run produced.
+#[derive(Debug)]
 pub struct GreedyOutcome {
     /// One prefilled `GroupList` per spec, in plan order, paired with the
     /// (period, subject) pairs it must be associated to — exactly the payload

@@ -13,7 +13,8 @@ use relm4::{
 use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::{
-    GenerationRequest, ObjectiveWeights, build_generation_plan, greedy_group_lists_with_log,
+    FrozenPlacements, GenerationRequest, GreedyOutcome, ObjectiveWeights, build_generation_plan,
+    greedy_group_lists_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::group_lists::GroupList;
@@ -56,9 +57,12 @@ pub struct Dialog {
     weights: ObjectiveWeights,
     canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
     strategy: ConductorStrategy,
-    /// `Some` once the off-thread greedy has answered, in plan order. Consumed by "Valider"
-    /// (renamed, then handed over) and by the optimize path (raw, as the solve's warm start).
-    generated: Option<Vec<GeneratedList>>,
+    /// Whether the optimize path holds the greedy's prefill fixed in the model.
+    fix_prefill: bool,
+    /// `Some` once the off-thread greedy has answered, its lists in plan order. Consumed by
+    /// "Valider" (renamed, then handed over) and by the optimize path (the lists raw, as the
+    /// solve's warm start, and the frozen seats as what the model may pin).
+    outcome: Option<GreedyOutcome>,
     /// The skipped-pairs warning; empty when nothing was skipped.
     skipped_text: String,
     /// What each spec covers, in plan/spec order. The naming rows seed their name from it and
@@ -79,7 +83,7 @@ impl Dialog {
     /// Whether there is a generated result to hand over. Zero specs never produce one, which is
     /// what keeps both "Valider" and "Optimiser" insensitive in that case.
     fn has_result(&self) -> bool {
-        self.generated.is_some()
+        self.outcome.is_some()
     }
 
     /// The names the user currently has in the naming rows, in plan order.
@@ -91,13 +95,14 @@ impl Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     /// Open the dialog for this request, against the parameters the config dialog echoed back.
-    /// The last three only seed the optimize window; the greedy uses none of them.
+    /// The last four only seed the optimize window; the greedy uses none of them.
     Show(
         GenerationRequest,
         Parameters,
         ObjectiveWeights,
         Option<NonEmptyRangeInclusive<NonZeroU32>>,
         ConductorStrategy,
+        bool,
     ),
     Cancel,
     Accept,
@@ -113,6 +118,7 @@ pub enum DialogInput {
         ObjectiveWeights,
         Option<NonEmptyRangeInclusive<NonZeroU32>>,
         ConductorStrategy,
+        bool,
     ),
     /// The optimize window closed without validating: the greedy result still stands.
     IgnoreOrRefresh,
@@ -134,6 +140,11 @@ pub enum DialogOutput {
         weights: ObjectiveWeights,
         canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
         strategy: ConductorStrategy,
+        /// What the user asked for, kept so the window reopens on it. An empty `frozen` cannot
+        /// say whether the box was unticked or the prefill simply claimed nobody.
+        fix_prefill: bool,
+        /// The seats the model must pin. Already empty when `fix_prefill` is false.
+        frozen: FrozenPlacements,
     },
     Cancelled,
     /// The dialog just closed: whoever owns the window underneath should bring
@@ -143,8 +154,8 @@ pub enum DialogOutput {
 
 #[derive(Debug)]
 pub enum DialogCommandOutput {
-    /// (the `build_seq` this run was spawned with, the generated lists)
-    Generated(u64, Vec<GeneratedList>),
+    /// (the `build_seq` this run was spawned with, what the greedy produced)
+    Generated(u64, GreedyOutcome),
 }
 
 /// "a", "a et b", "a, b et c" — the French enumeration join.
@@ -480,9 +491,12 @@ impl Component for Dialog {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                optimize_dialog::DialogOutput::Accepted(weights, canonical_range, strategy) => {
-                    DialogInput::OptimizeAccepted(weights, canonical_range, strategy)
-                }
+                optimize_dialog::DialogOutput::Accepted(
+                    weights,
+                    canonical_range,
+                    strategy,
+                    fix_prefill,
+                ) => DialogInput::OptimizeAccepted(weights, canonical_range, strategy, fix_prefill),
                 optimize_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
                 optimize_dialog::DialogOutput::PresentParent => DialogInput::Present,
             });
@@ -498,7 +512,8 @@ impl Component for Dialog {
             weights: ObjectiveWeights::default(),
             canonical_range: None,
             strategy: ConductorStrategy::with_parallelism_optimize_only(),
-            generated: None,
+            fix_prefill: false,
+            outcome: None,
             skipped_text: String::new(),
             coverages: Vec::new(),
             rows_data: Vec::new(),
@@ -520,12 +535,12 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(request, params, weights, canonical_range, strategy) => {
+            DialogInput::Show(request, params, weights, canonical_range, strategy, fix_prefill) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.show_debug = false;
                 self.done = false;
-                self.generated = None;
+                self.outcome = None;
                 // Any run still going from a previous opening is now stale.
                 self.build_seq += 1;
                 self.debug_view.emit(DebugViewInput::Clear);
@@ -535,6 +550,7 @@ impl Component for Dialog {
                 self.weights = weights;
                 self.canonical_range = canonical_range;
                 self.strategy = strategy;
+                self.fix_prefill = fix_prefill;
 
                 // The config dialog only offers valid choices, and both dialogs are modal, so
                 // the document cannot have changed in between: a plan error here is a caller
@@ -581,8 +597,8 @@ impl Component for Dialog {
                         let mut log = move |line: &str| {
                             input.emit(DialogInput::Echo(format!("{}\n", line)));
                         };
-                        let generated = greedy_group_lists_with_log(&plan, &names, &mut log).lists;
-                        DialogCommandOutput::Generated(seq, generated)
+                        let outcome = greedy_group_lists_with_log(&plan, &names, &mut log);
+                        DialogCommandOutput::Generated(seq, outcome)
                     });
                 }
             }
@@ -596,10 +612,10 @@ impl Component for Dialog {
             DialogInput::Accept => {
                 // "Valider" is insensitive until the result exists, so a missing one here can
                 // only come from a race; ignore it.
-                let Some(generated) = self.generated.take() else {
+                let Some(outcome) = self.outcome.take() else {
                     return;
                 };
-                let entries = rename(&generated, &self.names());
+                let entries = rename(&outcome.lists, &self.names());
 
                 if !self.hidden {
                     self.hidden = true;
@@ -625,16 +641,18 @@ impl Component for Dialog {
                         self.weights,
                         self.canonical_range.clone(),
                         self.strategy.clone(),
+                        self.fix_prefill,
                     ))
                     .unwrap();
             }
-            DialogInput::OptimizeAccepted(weights, canonical_range, strategy) => {
+            DialogInput::OptimizeAccepted(weights, canonical_range, strategy, fix_prefill) => {
                 self.weights = weights;
                 self.canonical_range = canonical_range.clone();
                 self.strategy = strategy.clone();
+                self.fix_prefill = fix_prefill;
 
                 // "Optimiser" is insensitive until the result exists, same race as above.
-                let Some(generated) = self.generated.take() else {
+                let Some(outcome) = self.outcome.take() else {
                     return;
                 };
                 let names = self.names();
@@ -649,10 +667,18 @@ impl Component for Dialog {
                     .output(DialogOutput::OptimizeRequested {
                         request: self.request.clone(),
                         names,
-                        generated,
+                        generated: outcome.lists,
                         weights,
                         canonical_range,
                         strategy,
+                        fix_prefill,
+                        // Off means an empty set, which is what "pin nothing" is: the page
+                        // never has to think about the flag again.
+                        frozen: if fix_prefill {
+                            outcome.frozen
+                        } else {
+                            FrozenPlacements::default()
+                        },
                     })
                     .unwrap();
             }
@@ -670,16 +696,16 @@ impl Component for Dialog {
         _root: &Self::Root,
     ) {
         self.move_front = false;
-        let DialogCommandOutput::Generated(seq, generated) = msg;
+        let DialogCommandOutput::Generated(seq, outcome) = msg;
         // A stale result: the dialog was reopened (new sequence number) or cancelled (hidden)
         // while this run was going. Drop it.
         if seq != self.build_seq || self.hidden {
             return;
         }
         self.done = true;
-        self.results_data = result_data(&self.params, &self.coverages, &generated);
+        self.results_data = result_data(&self.params, &self.coverages, &outcome.lists);
         self.refresh_results();
-        self.generated = Some(generated);
+        self.outcome = Some(outcome);
     }
 
     fn post_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
