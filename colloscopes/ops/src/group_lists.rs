@@ -16,6 +16,15 @@ pub enum GroupListsUpdateOp {
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
     DuplicatePreviousPeriod(collomatique_state_colloscopes::PeriodId),
+    /// Removes every group list the document holds, one `DeleteGroupList` at a
+    /// time. Everything that named a list goes with it — the associations, the
+    /// colloscope placement rows, the colles left out of range — all of it the
+    /// cascade's business, exactly as for the single removal.
+    DeleteAllGroupLists,
+    /// Drops every `(this period, subject) → group list` association, leaving
+    /// the lists themselves alone: a list no association names any more is an
+    /// ordinary document.
+    ClearPeriodAssociations(collomatique_state_colloscopes::PeriodId),
     /// Lands the output of the automatic group-list generation as one undo
     /// slot: each entry is a sealed group list plus the `(period, subject)`
     /// coordinates it must be associated to. Associations overwrite whatever
@@ -43,6 +52,8 @@ pub enum GroupListsUpdateError {
     AssignGroupListToSubject(#[from] AssignGroupListToSubjectError),
     #[error(transparent)]
     DuplicatePreviousPeriod(#[from] DuplicatePreviousPeriodAssociationsError),
+    #[error(transparent)]
+    ClearPeriodAssociations(#[from] ClearPeriodAssociationsError),
     #[error(transparent)]
     AddGeneratedGroupLists(#[from] AddGeneratedGroupListsError),
 }
@@ -94,6 +105,16 @@ pub enum DuplicatePreviousPeriodAssociationsError {
     /// trying to override first period
     #[error("given period ({0:?}) is the first period")]
     FirstPeriodHasNoPreviousPeriod(collomatique_state_colloscopes::PeriodId),
+}
+
+/// The one way clearing a period can be wrong. Everything else the coordinates
+/// could be blamed for — a subject with no interrogations, a subject excluded
+/// from the period — is implied by there *being* an association to clear.
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ClearPeriodAssociationsError {
+    /// period id is invalid
+    #[error("invalid period id ({0:?})")]
+    InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
 
 /// The five ways the generated payload can be wrong, all of them address
@@ -433,6 +454,88 @@ impl GroupListsUpdateOp {
 
                 Ok(None)
             }
+            Self::DeleteAllGroupLists => {
+                // Only the lists that are there need removing, and the map
+                // yields exactly those, so nothing here can fail. The ids are
+                // collected up front so the mutable `session.apply` loop does
+                // not overlap the shared read borrow.
+                let group_list_ids: Vec<_> = session
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .keys()
+                    .collect();
+
+                for group_list_id in group_list_ids {
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::GroupList(
+                                collomatique_state_colloscopes::GroupListOp::Remove(group_list_id),
+                            ),
+                            self.get_desc(),
+                        )
+                        // The same reasoning as the single removal above: both
+                        // sites a removal leaves dangling are the cascade's.
+                        .expect("the cascade repairs everything a removed list leaves behind");
+                    assert!(result.is_none());
+                }
+
+                Ok(None)
+            }
+            Self::ClearPeriodAssociations(period_id) => {
+                if session
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .periods
+                    .find_period_position(*period_id)
+                    .is_none()
+                {
+                    return Err(ClearPeriodAssociationsError::InvalidPeriodId(*period_id).into());
+                }
+
+                // Read once, before the loop (the frame rule): no repair a
+                // cascade can make creates or removes an association, so the
+                // coordinates planned against the pre-state stay true op after
+                // op.
+                let subject_ids: Vec<_> = session
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .group_lists
+                    .subjects_associations
+                    .iter()
+                    .filter_map(|((period, subject), _group_list)| {
+                        (period == *period_id).then_some(subject)
+                    })
+                    .collect();
+
+                for subject_id in subject_ids {
+                    let result = session
+                        .apply(
+                            collomatique_state_colloscopes::Op::GroupList(
+                                collomatique_state_colloscopes::GroupListOp::AssignToSubject(
+                                    *period_id, subject_id, None,
+                                ),
+                            ),
+                            self.get_desc(),
+                        )
+                        // The two predicates watching an association — a
+                        // subject with no interrogations, a subject that does
+                        // not run on the period — are implied by there being an
+                        // association to clear. What is left is the colles
+                        // written at the coordinate: taking the list away puts
+                        // their bound at zero, and the cascade empties them.
+                        .expect(
+                            "the cascade trims whatever colles the new bound leaves out of range",
+                        );
+                    assert!(result.is_none());
+                }
+
+                Ok(None)
+            }
             Self::AddGeneratedGroupLists(entries) => {
                 // The whole payload is prechecked before anything lands, and
                 // the answers survive the loop below (the frame rule): adding a
@@ -575,6 +678,12 @@ impl GroupListsUpdateOp {
                 }
                 GroupListsUpdateOp::DuplicatePreviousPeriod(_period_id) => {
                     "Dupliquer les listes de groupes d'une période".into()
+                }
+                GroupListsUpdateOp::DeleteAllGroupLists => {
+                    "Supprimer toutes les listes de groupes".into()
+                }
+                GroupListsUpdateOp::ClearPeriodAssociations(_period_id) => {
+                    "Effacer les listes de groupes d'une période".into()
                 }
                 GroupListsUpdateOp::AddGeneratedGroupLists(_entries) => {
                     "Ajouter des listes de groupes générées automatiquement".into()
@@ -1633,6 +1742,147 @@ mod tests {
                 .unwrap_err(),
             GroupListsUpdateError::DuplicatePreviousPeriod(
                 DuplicatePreviousPeriodAssociationsError::FirstPeriodHasNoPreviousPeriod(first)
+            ),
+        );
+    }
+
+    /// The wholesale removal, on the fixture that carries every dangle site at
+    /// once: three lists, associations on all three periods, a placement row
+    /// and colles written against it. What comes out is what the same removals
+    /// one at a time come out as, which is the whole claim — and, read on the
+    /// document itself, a base with no list, no association and no placement.
+    #[test]
+    fn deleting_every_list_leaves_no_association_and_no_placement() {
+        let placed = placed_list();
+        let base = placed.base;
+        let list_ids: Vec<_> = base
+            .get_data()
+            .get_inner_data()
+            .params
+            .group_lists
+            .group_list_map
+            .keys()
+            .collect();
+        assert_eq!(
+            list_ids.len(),
+            3,
+            "the fixture should carry the base's two prefilled lists and its own automatic one",
+        );
+
+        let op = GroupListsUpdateOp::DeleteAllGroupLists;
+        let (state, warnings) = apply_alone(&base, &op);
+
+        // The reference is the single removal run once per list, in the order
+        // the map yields them — not a replay of elementary `Remove` ops, which
+        // would leave every association dangling: the cleaning up is the
+        // cascade's, and only a session runs it.
+        let mut expected = base.clone();
+        let mut expected_fixes = Vec::new();
+        for group_list_id in &list_ids {
+            let (next, step_warnings) = apply_alone(
+                &expected,
+                &GroupListsUpdateOp::DeleteGroupList(*group_list_id),
+            );
+            expected = next;
+            expected_fixes.extend(fixes(&step_warnings));
+        }
+
+        assert_eq!(fixes(&warnings), expected_fixes);
+        assert_eq!(state.get_data(), expected.get_data());
+        let params = &state.get_data().get_inner_data().params;
+        assert!(params.group_lists.group_list_map.is_empty());
+        assert!(params.group_lists.subjects_associations.is_empty());
+        assert_eq!(
+            state
+                .get_data()
+                .get_inner_data()
+                .colloscope
+                .group_list(placed.list),
+            None,
+        );
+        assert!(
+            expected_fixes.contains(&Fix::ClearColloscopeGroupListRow {
+                group_list: placed.list,
+            }),
+            "the fixture should exercise the placement-row dangle site: {expected_fixes:?}",
+        );
+    }
+
+    /// Clearing one period: its associations go, the other periods keep theirs,
+    /// and every list survives — an orphaned list is legal state, and nothing
+    /// here deletes one.
+    #[test]
+    fn clearing_a_period_leaves_the_other_periods_and_the_lists_alone() {
+        let base = hogwarts();
+        let first = period_at(base.get_data(), 0);
+        let second = period_at(base.get_data(), 1);
+        let cleared: Vec<_> = base
+            .get_data()
+            .get_inner_data()
+            .params
+            .group_lists
+            .subjects_associations
+            .iter()
+            .filter_map(|((period, subject), _list)| (period == first).then_some(subject))
+            .collect();
+        assert!(
+            !cleared.is_empty(),
+            "the fixture's first period should hold associations to clear",
+        );
+        let lists_before = base
+            .get_data()
+            .get_inner_data()
+            .params
+            .group_lists
+            .group_list_map
+            .clone();
+
+        let op = GroupListsUpdateOp::ClearPeriodAssociations(first);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        assert_eq!(
+            state.get_data(),
+            expected_document(
+                &base,
+                cleared
+                    .iter()
+                    .map(|subject| Op::GroupList(GroupListOp::AssignToSubject(
+                        first, *subject, None
+                    )))
+                    .collect(),
+            )
+            .get_data(),
+        );
+        let group_lists = &state.get_data().get_inner_data().params.group_lists;
+        assert!(
+            !group_lists
+                .subjects_associations
+                .keys()
+                .any(|(period, _subject)| period == first),
+        );
+        assert!(
+            group_lists
+                .subjects_associations
+                .keys()
+                .any(|(period, _subject)| period == second),
+            "the second period should keep its own associations",
+        );
+        assert_eq!(group_lists.group_list_map, lists_before);
+    }
+
+    /// The composite's one ops-level precheck.
+    #[test]
+    fn clearing_a_dead_period_is_refused() {
+        let base = hogwarts();
+        let mut session = CascadeSession::new(base);
+
+        assert_eq!(
+            GroupListsUpdateOp::ClearPeriodAssociations(dangling_period())
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            GroupListsUpdateError::ClearPeriodAssociations(
+                ClearPeriodAssociationsError::InvalidPeriodId(dangling_period())
             ),
         );
     }

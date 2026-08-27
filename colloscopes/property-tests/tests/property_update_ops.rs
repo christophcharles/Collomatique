@@ -939,6 +939,10 @@ fn gen_group_lists(
     };
     let remove_w = if n > 0 { 3 } else { 0 };
     let duplicate_w = if pools.period_ids.is_empty() { 0 } else { 2 };
+    // Kept low on purpose: it empties the pool, so a high weight starves every
+    // arm that needs a live list.
+    let remove_all_w = if n > 0 { 1 } else { 0 };
+    let clear_period_w = if pools.period_ids.is_empty() { 0 } else { 2 };
     let generate_w = if !pools.period_ids.is_empty() && !pools.subject_ids.is_empty() {
         2
     } else {
@@ -947,7 +951,16 @@ fn gen_group_lists(
 
     match weighted(
         rng,
-        &[add_w, update_w, assign_w, remove_w, duplicate_w, generate_w],
+        &[
+            add_w,
+            update_w,
+            assign_w,
+            remove_w,
+            duplicate_w,
+            remove_all_w,
+            clear_period_w,
+            generate_w,
+        ],
     ) {
         0 => {
             let group_count = rng.random_range(2..=5);
@@ -1000,6 +1013,8 @@ fn gen_group_lists(
         ),
         3 => GroupListsUpdateOp::DeleteGroupList(pick(rng, &pools.group_list_ids)),
         4 => GroupListsUpdateOp::DuplicatePreviousPeriod(pick(rng, &pools.period_ids)),
+        5 => GroupListsUpdateOp::DeleteAllGroupLists,
+        6 => GroupListsUpdateOp::ClearPeriodAssociations(pick(rng, &pools.period_ids)),
         // The generation's composite: one or two fresh lists, each with the
         // coordinates it is to be associated to. A drawn subject may well be
         // excluded from the drawn period, so some of these ops are refused —
