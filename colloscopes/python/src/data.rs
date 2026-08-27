@@ -3278,10 +3278,11 @@ impl ConductorStrategy {
             warm_start_config: sub_config(site, "warm_start_config", obj, warm_start_config)?,
             incremental_config: sub_config(site, "incremental_config", obj, incremental_config)?,
             fuzzy_config: sub_config(site, "fuzzy_config", obj, fuzzy_config)?,
-            // Not a field of the dataclass: it decides what the conductor does with a solution
-            // handed to the run as warm start, and a script's solve hands none over. Left at the
-            // model's own default, where it is inert.
-            warm_start_incumbent: RawConductorStrategy::default().warm_start_incumbent,
+            // Read like any other field, and inert like no other: it decides what the conductor
+            // does with a solution handed to the run as warm start, and a script's solve hands
+            // none over. The field is here so a strategy built in a script is the application's
+            // structure, whole.
+            warm_start_incumbent: flag(site, "warm_start_incumbent", obj)?,
         })
     }
 
@@ -3328,6 +3329,7 @@ impl ConductorStrategy {
                 .map(|config| fuzzy_config_to_py(py, config))
                 .transpose()?,
         )?;
+        kwargs.set_item("warm_start_incumbent", strategy.warm_start_incumbent)?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))
     }

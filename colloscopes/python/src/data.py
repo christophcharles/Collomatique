@@ -1322,6 +1322,13 @@ class ConductorStrategy:
     worker, warm-start only, which finds a colloscope and stops there. The two
     classmethods below are the application's own presets.
 
+    `warm_start_incumbent` says what the run does with a ready-made solution
+    handed to it as a warm start: `True` evaluates it against the model and
+    adopts it as the initial incumbent if it holds up, `False` leaves it its
+    weaker role of a hint each worker starts from. A solve run from here hands
+    no warm start over, so the field changes nothing today; it is here because
+    a strategy built in a script is the application's structure, whole.
+
     A strategy is not stored on the model. It is an argument, and every solve
     takes its own.
     """
@@ -1331,6 +1338,7 @@ class ConductorStrategy:
     warm_start_config: WarmStartConfig | None = field(default_factory=WarmStartConfig)
     incremental_config: IncrementalConfig | None = None
     fuzzy_config: FuzzyConfig | None = None
+    warm_start_incumbent: bool = True
 
     @classmethod
     def search(cls) -> ConductorStrategy:

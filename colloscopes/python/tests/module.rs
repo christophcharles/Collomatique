@@ -14069,9 +14069,7 @@ fn the_conductor_strategy_crosses_the_boundary() {
             warm_start_config: Some(WarmStartConfig::default()),
             incremental_config: Some(IncrementalConfig::default()),
             fuzzy_config: Some(FuzzyConfig::default()),
-            // Not a field of the dataclass — a script's solve is handed no ready-made solution,
-            // so what the conductor would do with one stays at the model's default.
-            warm_start_incumbent: RawConductorStrategy::default().warm_start_incumbent,
+            warm_start_incumbent: true,
         }
     );
 
@@ -14110,7 +14108,9 @@ fn the_conductor_strategy_crosses_the_boundary() {
             time_limit: TimeLimit::none(),
             incumbent_time_limit: seconds(7),
         }),
-        warm_start_incumbent: RawConductorStrategy::default().warm_start_incumbent,
+        // The one field the presets never exercise the other way round, so the
+        // spelled-out strategy is where the non-default value is read.
+        warm_start_incumbent: false,
     };
     assert_eq!(strategy(&globals, "spelled_out"), spelled_out);
 
