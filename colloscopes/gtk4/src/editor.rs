@@ -1104,10 +1104,6 @@ impl Component for EditorPanel {
                     .sender()
                     .send(colloscope::ColloscopeInput::ResetSolveConfig)
                     .unwrap();
-                self.group_lists
-                    .sender()
-                    .send(group_lists::GroupListsInput::ResetGenerationConfig)
-                    .unwrap();
                 self.advanced_tools
                     .emit(advanced_tools::AdvancedToolsInput::ResetMpsExportConfig);
                 self.send_msg_for_interface_update(sender);

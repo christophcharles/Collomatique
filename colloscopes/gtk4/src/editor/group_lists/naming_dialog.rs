@@ -1,4 +1,3 @@
-mod optimize_dialog;
 mod result_display;
 mod spec_row;
 
@@ -13,13 +12,11 @@ use relm4::{
 use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::{
-    FrozenPlacements, GenerationPlan, GenerationRequest, GreedyOutcome, build_generation_plan,
-    greedy_group_lists_with_log,
+    GenerationRequest, GreedyOutcome, build_generation_plan, greedy_group_lists_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::{PeriodId, SubjectId};
-use collomatique_strategies::ConductorStrategy;
 
 use crate::widgets::debug_view::{DebugView, DebugViewInput};
 
@@ -32,8 +29,7 @@ type GeneratedList = (GroupList, BTreeSet<(PeriodId, SubjectId)>);
 /// [`GenerationPlan`](collomatique_constraints_groups::GenerationPlan), runs the greedy off the
 /// UI thread while streaming its log into a [`DebugView`], shows one editable name per spec and
 /// the resulting groups, and reports the pairs nobody is registered for. "Valider" lands the
-/// greedy answer as it stands; "Optimiser les listes de groupes" opens the door to the optional
-/// ILP polish, which the page runs from this same answer.
+/// greedy answer as it stands — it is the whole result.
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
@@ -46,19 +42,10 @@ pub struct Dialog {
     /// Discards results from a superseded `Show` (or from after a cancel).
     build_seq: u64,
     /// The parameters the plan was built against: the student names of the result display come
-    /// from them, and the optimize path echoes them nowhere — the page holds its own copy.
+    /// from them.
     params: Parameters,
-    /// The plan the greedy ran on, handed over when the optimize path is taken: the model is
-    /// built from exactly it, and the solution converted back against exactly it.
-    plan: Option<GenerationPlan>,
-    /// The solver settings this dialog only carries: they mean nothing to the greedy, and seed
-    /// the optimize window when it opens.
-    strategy: ConductorStrategy,
-    /// Whether the optimize path holds the greedy's prefill fixed in the model.
-    fix_prefill: bool,
     /// `Some` once the off-thread greedy has answered, its lists in plan order. Consumed by
-    /// "Valider" (renamed, then handed over) and by the optimize path (the lists raw, as the
-    /// solve's warm start, and the frozen seats as what the model may pin).
+    /// "Valider", which renames them and hands them over.
     outcome: Option<GreedyOutcome>,
     /// The skipped-pairs warning; empty when nothing was skipped.
     skipped_text: String,
@@ -73,12 +60,11 @@ pub struct Dialog {
     results_data: Vec<result_display::Data>,
     results: FactoryVecDeque<result_display::ListRow>,
     debug_view: Controller<DebugView>,
-    optimize_dialog: Controller<optimize_dialog::Dialog>,
 }
 
 impl Dialog {
     /// Whether there is a generated result to hand over. Zero specs never produce one, which is
-    /// what keeps both "Valider" and "Optimiser" insensitive in that case.
+    /// what keeps "Valider" insensitive in that case.
     fn has_result(&self) -> bool {
         self.outcome.is_some()
     }
@@ -92,8 +78,7 @@ impl Dialog {
 #[derive(Debug)]
 pub enum DialogInput {
     /// Open the dialog for this request, against the parameters the config dialog echoed back.
-    /// The last two only seed the optimize window; the greedy uses neither.
-    Show(GenerationRequest, Parameters, ConductorStrategy, bool),
+    Show(GenerationRequest, Parameters),
     Cancel,
     Accept,
     /// One log line, streamed from the off-thread greedy.
@@ -101,34 +86,12 @@ pub enum DialogInput {
     ToggleDebug(bool),
     /// (spec index, new name), forwarded from a row.
     SetName(usize, String),
-    /// "Optimiser les listes de groupes" was clicked.
-    OpenOptimize,
-    /// The optimize window was validated: hand everything the solve needs up to the page.
-    OptimizeAccepted(ConductorStrategy, bool),
-    /// The optimize window closed without validating: the greedy result still stands.
-    IgnoreOrRefresh,
-    /// The optimize window just closed: bring this window back to the front.
-    Present,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     /// The generated lists, named as the user left them: the op payload itself.
     Accepted(Vec<GeneratedList>),
-    /// The optimize path was taken. Carries what the page needs to run it: the plan the greedy
-    /// ran on, the names, the raw greedy result the solve starts from, and the settings the
-    /// optimize window assembled.
-    OptimizeRequested {
-        plan: GenerationPlan,
-        names: Vec<String>,
-        generated: Vec<GeneratedList>,
-        strategy: ConductorStrategy,
-        /// What the user asked for, kept so the window reopens on it. An empty `frozen` cannot
-        /// say whether the box was unticked or the prefill simply claimed nobody.
-        fix_prefill: bool,
-        /// The seats the model must pin. Already empty when `fix_prefill` is false.
-        frozen: FrozenPlacements,
-    },
     Cancelled,
     /// The dialog just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
@@ -417,26 +380,6 @@ impl Component for Dialog {
                             gtk::Box {
                                 set_vexpand: true,
                             },
-                            gtk::Button {
-                                set_hexpand: true,
-                                add_css_class: "frame",
-                                add_css_class: "warning",
-                                set_margin_all: 5,
-                                // The polish only makes sense once there is something to polish.
-                                #[watch]
-                                set_sensitive: model.has_result(),
-                                #[watch]
-                                set_tooltip_text: if model.has_result() {
-                                    Some("Chercher une meilleure répartition à partir de celle-ci")
-                                } else {
-                                    Some("La répartition n'est pas encore calculée")
-                                },
-                                adw::ButtonContent {
-                                    set_icon_name: "emblem-system-symbolic",
-                                    set_label: "Optimiser les listes de groupes",
-                                },
-                                connect_clicked => DialogInput::OpenOptimize,
-                            },
                         },
                     },
                     gtk::Box {
@@ -470,17 +413,6 @@ impl Component for Dialog {
 
         let debug_view = DebugView::builder().launch(None).detach();
 
-        let optimize_dialog = optimize_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                optimize_dialog::DialogOutput::Accepted(strategy, fix_prefill) => {
-                    DialogInput::OptimizeAccepted(strategy, fix_prefill)
-                }
-                optimize_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
-                optimize_dialog::DialogOutput::PresentParent => DialogInput::Present,
-            });
-
         let model = Dialog {
             hidden: true,
             move_front: false,
@@ -488,9 +420,6 @@ impl Component for Dialog {
             done: false,
             build_seq: 0,
             params: Parameters::default(),
-            plan: None,
-            strategy: ConductorStrategy::with_parallelism_optimize_only(),
-            fix_prefill: false,
             outcome: None,
             skipped_text: String::new(),
             coverages: Vec::new(),
@@ -499,7 +428,6 @@ impl Component for Dialog {
             results_data: Vec::new(),
             results,
             debug_view,
-            optimize_dialog,
         };
 
         let rows_box = model.rows.widget();
@@ -513,7 +441,7 @@ impl Component for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(request, params, strategy, fix_prefill) => {
+            DialogInput::Show(request, params) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.show_debug = false;
@@ -524,17 +452,12 @@ impl Component for Dialog {
                 self.debug_view.emit(DebugViewInput::Clear);
 
                 self.params = params;
-                self.strategy = strategy;
-                self.fix_prefill = fix_prefill;
 
                 // The config dialog only offers valid choices, and both dialogs are modal, so
                 // the document cannot have changed in between: a plan error here is a caller
                 // bug (that is exactly what `GenerationPlanError` documents).
                 let plan = build_generation_plan(&self.params, &request)
                     .expect("the config dialog assembled the request against these parameters");
-                // The optimize path hands this very plan over rather than a recipe for
-                // rebuilding one: the greedy answer is read against it, seat by seat.
-                self.plan = Some(plan.clone());
 
                 self.skipped_text = skipped_label(&self.params, &plan.skipped);
                 self.coverages = plan
@@ -611,56 +534,6 @@ impl Component for Dialog {
                 if let Some(data) = self.rows_data.get_mut(index) {
                     data.name = name;
                 }
-            }
-            DialogInput::OpenOptimize => {
-                self.optimize_dialog
-                    .sender()
-                    .send(optimize_dialog::DialogInput::Show(
-                        self.strategy.clone(),
-                        self.fix_prefill,
-                    ))
-                    .unwrap();
-            }
-            DialogInput::OptimizeAccepted(strategy, fix_prefill) => {
-                self.strategy = strategy.clone();
-                self.fix_prefill = fix_prefill;
-
-                // "Optimiser" is insensitive until the result exists, same race as above.
-                let Some(outcome) = self.outcome.take() else {
-                    return;
-                };
-                let plan = self
-                    .plan
-                    .clone()
-                    .expect("a greedy result implies the plan it was run on");
-                let names = self.names();
-
-                // Both windows step aside: from here on the page drives, through the model
-                // build and the solve.
-                if !self.hidden {
-                    self.hidden = true;
-                    sender.output(DialogOutput::PresentParent).unwrap();
-                }
-                sender
-                    .output(DialogOutput::OptimizeRequested {
-                        plan,
-                        names,
-                        generated: outcome.lists,
-                        strategy,
-                        fix_prefill,
-                        // Off means an empty set, which is what "pin nothing" is: the page
-                        // never has to think about the flag again.
-                        frozen: if fix_prefill {
-                            outcome.frozen
-                        } else {
-                            FrozenPlacements::default()
-                        },
-                    })
-                    .unwrap();
-            }
-            DialogInput::IgnoreOrRefresh => {}
-            DialogInput::Present => {
-                self.move_front = true;
             }
         }
     }
