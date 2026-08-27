@@ -19,7 +19,6 @@ collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" 
 collomatique-ops = { path = "../../colloscopes/ops" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
 collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
-collomatique-ilp = { path = "../../generic/ilp" }
 collomatique-time = { path = "../../generic/time" }
 # `fixture_starts` reads and writes the walk-start documents.
 collomatique-storage = { path = "../../colloscopes/storage" }
@@ -49,11 +48,6 @@ required-features = ["fuzz"]
 [[test]]
 name = "property_build_colloscopes"
 path = "tests/property_build_colloscopes.rs"
-required-features = ["fuzz"]
-
-[[test]]
-name = "property_build_groups"
-path = "tests/property_build_groups.rs"
 required-features = ["fuzz"]
 
 [[test]]

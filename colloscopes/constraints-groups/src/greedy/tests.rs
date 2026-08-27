@@ -1,21 +1,14 @@
 use super::state::State;
 use super::*;
-use crate::specs::tests::{set, student};
-// The hand-built plan shape lives with the other test helpers, since the model
-// tests of the collision objective need the very same coverage-carrying plans.
-use crate::vars::tests::plan_with_uses as plan;
+use crate::specs::tests::{plan_with_uses as plan, set, student};
 use collomatique_state_colloscopes::StudentId;
 use collomatique_state_colloscopes::group_lists::GroupListFilling;
 
-fn run_outcome(plan: &GenerationPlan) -> GreedyOutcome {
+fn run(plan: &GenerationPlan) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
     let names: Vec<String> = (0..plan.specs.len())
         .map(|i| format!("Liste {i}"))
         .collect();
     greedy_group_lists(plan, &names)
-}
-
-fn run(plan: &GenerationPlan) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
-    run_outcome(plan).lists
 }
 
 /// The prefilled groups of one list, as student sets.
@@ -79,22 +72,30 @@ fn assert_valid(plan: &GenerationPlan, lists: &[(GroupList, BTreeSet<(PeriodId, 
     }
 }
 
-/// Every frozen seat names the group the produced list actually holds that
-/// student in.
-///
-/// This is the claim the whole pinning feature rests on: the greedy's group
-/// indices are the model's, because `into_group_lists` never compacts.
-fn assert_frozen_agrees(outcome: &GreedyOutcome) {
-    let memberships = memberships(&outcome.lists);
-    for (list, student, group) in outcome.frozen.iter() {
-        let groups = &memberships[list.0];
+/// Phase one alone, on a fresh state: what prefill seated, before the pass
+/// gets to decide anything. The prefill tests need the phase boundary as an
+/// observable, and the finished lists do not show it.
+fn prefilled(plan: &GenerationPlan) -> State<'_> {
+    let mut state = State::new(plan);
+    let cohorts = super::cohorts::ordered_cohorts(&state);
+    super::prefill::prefill(&mut state, &cohorts);
+    state
+}
+
+/// Every frozen seat names the group the *finished* lists hold that student
+/// in: prefill's decisions are the ones the pass never revises, and the group
+/// indices stay put because `into_group_lists` never compacts.
+fn assert_frozen_agrees(plan: &GenerationPlan, seats: &[(StudentId, usize, usize)]) {
+    let memberships = memberships(&run(plan));
+    for &(student, list, group) in seats {
+        let groups = &memberships[list];
         assert!(
-            (group as usize) < groups.len(),
-            "frozen seat {list:?}/{student:?}/{group} names a group the list does not have",
+            group < groups.len(),
+            "frozen seat {list}/{student:?}/{group} names a group the list does not have",
         );
         assert!(
-            groups[group as usize].contains(&student),
-            "frozen seat {list:?}/{student:?}/{group} is not where the list holds them",
+            groups[group].contains(&student),
+            "frozen seat {list}/{student:?}/{group} is not where the list holds them",
         );
     }
 }
@@ -108,6 +109,29 @@ fn score(plan: &GenerationPlan, config: &[&[&[u64]]]) -> f64 {
             for &s in *students {
                 state.place(student(s), list, group);
             }
+        }
+    }
+    state.objective_value()
+}
+
+/// The same, for a finished placement read back from the lists that carry it:
+/// the quantity `greedy_group_lists` maximizes, evaluated on lists it did not
+/// necessarily produce.
+fn score_lists(
+    plan: &GenerationPlan,
+    lists: &[(GroupList, BTreeSet<(PeriodId, SubjectId)>)],
+) -> f64 {
+    assert_eq!(lists.len(), plan.specs.len(), "one list per spec");
+    let mut state = State::new(plan);
+    for (list, ((spec, _covered), (group_list, _covered_again))) in
+        plan.specs.iter().zip(lists.iter()).enumerate()
+    {
+        for &s in spec.students() {
+            let group = group_list
+                .filling()
+                .find_student_group(s)
+                .expect("every student of a spec sits in a group of its list");
+            state.place(s, list, group);
         }
     }
     state.objective_value()
@@ -225,7 +249,7 @@ fn license_case() {
     // And the search itself must not land below the middle configuration.
     let lists = run(&plan);
     assert_valid(&plan, &lists);
-    let found = placement_objective(&plan, &lists);
+    let found = score_lists(&plan, &lists);
     assert!(found >= b, "the greedy scores {found}, below {b}");
 }
 
@@ -238,13 +262,10 @@ fn prefill_exact_fit() {
     // "purity + lowest index" design sent the pair into the 3-group and
     // doomed the trio.
     let plan = plan(&[(&[1, 2, 3, 4, 5], (2, 3), 1), (&[1, 2], (2, 2), 1)], &[]);
-    let outcome = run_outcome(&plan);
-    assert_valid(&plan, &outcome.lists);
+    let lists = run(&plan);
+    assert_valid(&plan, &lists);
 
-    assert_eq!(
-        memberships(&outcome.lists)[0],
-        vec![set(&[3, 4, 5]), set(&[1, 2])]
-    );
+    assert_eq!(memberships(&lists)[0], vec![set(&[3, 4, 5]), set(&[1, 2])]);
 
     // Prefill covered the whole plan here, so every (list, student) seat is
     // frozen: five in the first list, two in the second.
@@ -253,8 +274,10 @@ fn prefill_exact_fit() {
         .iter()
         .map(|(spec, _covered)| spec.students().len())
         .sum();
-    assert_eq!(outcome.frozen.len(), seats);
-    assert_frozen_agrees(&outcome);
+    let state = prefilled(&plan);
+    let frozen: Vec<(StudentId, usize, usize)> = state.frozen_seats().collect();
+    assert_eq!(frozen.len(), seats);
+    assert_frozen_agrees(&plan, &frozen);
 }
 
 #[test]
@@ -267,11 +290,13 @@ fn prefill_can_claim_nothing() {
         &[(&[1, 2, 3, 4, 5, 6, 7, 8, 9, 10], (5, 5), 1)],
         &[(&[&[1, 2], &[3, 4], &[5, 6], &[7, 8], &[9, 10]], 1)],
     );
-    let outcome = run_outcome(&plan);
-    assert_valid(&plan, &outcome.lists);
+    let lists = run(&plan);
+    assert_valid(&plan, &lists);
 
-    assert!(
-        outcome.frozen.is_empty(),
+    let state = prefilled(&plan);
+    assert_eq!(
+        state.frozen_seats().count(),
+        0,
         "prefill claimed nothing, so nothing is frozen",
     );
 }
@@ -314,7 +339,7 @@ fn the_log_reaches_the_callback() {
 
     let mut lines: Vec<String> = Vec::new();
     let lists =
-        greedy_group_lists_with_log(&plan, &names, &mut |line| lines.push(line.to_string())).lists;
+        greedy_group_lists_with_log(&plan, &names, &mut |line| lines.push(line.to_string()));
 
     assert_valid(&plan, &lists);
     assert_eq!(
@@ -346,7 +371,7 @@ fn the_log_reaches_the_callback() {
     assert!(
         lines.contains(&format!(
             "[greedy] Objective value: {:.6}",
-            placement_objective(&plan, &lists),
+            score_lists(&plan, &lists),
         )),
         "no line reporting the produced placement's score: {lines:?}",
     );

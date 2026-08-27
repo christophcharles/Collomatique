@@ -6,11 +6,9 @@
 //! states each look better than the other, and the sweep of `pass.rs` relies
 //! on a strict `>` over a pure function to be unable to cycle.
 
-use crate::frozen::FrozenPlacements;
-use crate::pairs::{pair_mass, plan_n_uses};
+use crate::mass::{pair_mass, plan_n_uses};
 use crate::specs::{GenerationPlan, KeptList};
 use crate::targets::balanced_targets;
-use crate::vars::GroupListIdx;
 use collomatique_state_colloscopes::group_lists::{
     GroupList, GroupListFilling, GroupListParameters, PrefilledGroup,
 };
@@ -182,22 +180,23 @@ impl<'a> State<'a> {
             .collect()
     }
 
-    /// What prefill seated and the pass never touched, as model coordinates.
+    /// What prefill seated and the pass never touched, as `(student, list,
+    /// group)`.
     ///
     /// The lookup cannot miss: `freeze` is only ever called right after
     /// `place` on the same pair, and nothing removes a frozen placement —
     /// the revision sweep only visits `movable_lists`, the profile *minus*
     /// `frozen`.
-    pub(super) fn frozen_placements(&self) -> FrozenPlacements {
-        FrozenPlacements::new(
-            self.frozen
-                .iter()
-                .map(|&(student, list)| {
-                    let group = self.placements[&student][&list];
-                    ((GroupListIdx(list), student), group as u32)
-                })
-                .collect(),
-        )
+    ///
+    /// The greedy itself never reads this back: prefill's output is only
+    /// visible in the finished lists. It exists so the prefill tests have an
+    /// observable of their own, instead of inferring the phase boundary from
+    /// the result.
+    #[cfg(test)]
+    pub(super) fn frozen_seats(&self) -> impl Iterator<Item = (StudentId, usize, usize)> + '_ {
+        self.frozen
+            .iter()
+            .map(|&(student, list)| (student, list, self.placements[&student][&list]))
     }
 
     // --- mutation --------------------------------------------------------
@@ -303,9 +302,7 @@ impl<'a> State<'a> {
 
     /// The whole objective: `Σ_s Σ_t P_s(t)²` (§2.3). Not used by the search
     /// — the search works on deltas — but it is the instrument the objective
-    /// tests measure with, the run's closing diagnostic, and the ground truth
-    /// the ILP's optimum is compared against on small instances (§9), through
-    /// [`placement_objective`](super::placement_objective).
+    /// tests measure with, and the run's closing diagnostic (§9).
     pub(super) fn objective_value(&self) -> f64 {
         let mut total = 0.0;
         for student in self.universe() {
@@ -339,9 +336,9 @@ impl<'a> State<'a> {
     /// One prefilled `GroupList` per spec, in plan order, paired with the
     /// (period, subject) pairs it must be associated to.
     ///
-    /// No compaction and no empty group, unlike the ILP conversion: every
-    /// student was placed and the targets sum to the student count, so every
-    /// group is exactly at its target.
+    /// No compaction and no empty group: every student was placed and the
+    /// targets sum to the student count, so every group is exactly at its
+    /// target.
     pub(super) fn into_group_lists(
         self,
         names: &[String],

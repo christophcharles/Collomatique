@@ -15,11 +15,6 @@
 //! from the small bootstrap document alone every single spec it ever planned
 //! was a one-group list, and a one-group list has no placement to decide.
 //!
-//! It is a sibling of `property_build_groups`, not a part of it: a greedy
-//! regression must fail a test named for the greedy, not the ILP-build net.
-//! The two share their request generator (`support/generation_request.rs`) so
-//! they cannot drift apart in what they consider a reachable request.
-//!
 //! On failure the harness prints the seed and the full op log, so re-running
 //! the binary reproduces the exact walk.
 
@@ -37,8 +32,7 @@ use collomatique_constraints_groups::{build_generation_plan, greedy_group_lists}
 
 use harness::RunConfig;
 
-// Shared with `property_build_groups`: both walks must draw their requests
-// the same way (see the module for why it lives outside this file).
+// The request generator lives outside this file — see the module for why.
 #[path = "support/generation_request.rs"]
 mod generation_request;
 use generation_request::gen_generation_request;
@@ -49,10 +43,8 @@ use generation_request::gen_generation_request;
 #[path = "support/start_points.rs"]
 mod start_points;
 
-/// Same walk size as the model-build net, but the greedy on testgen-sized
-/// states costs microseconds where a model build costs milliseconds, so this
-/// walk probes after *every* successful op instead of every fifth. Tune
-/// against the measured runtime.
+/// The greedy on testgen-sized states costs microseconds, so this walk probes
+/// after *every* successful op. Tune against the measured runtime.
 ///
 /// `seeds` is the budget for the bootstrap start; the four big starts share
 /// the same again between them (`start_points::seeds_for`).
@@ -141,12 +133,12 @@ fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData, coverage: &Coverage) {
     let names: Vec<String> = (0..plan.specs.len())
         .map(|i| format!("Liste {i}"))
         .collect();
-    let lists = greedy_group_lists(&plan, &names).lists;
+    let lists = greedy_group_lists(&plan, &names);
 
     // Deterministic: a second run on the same plan yields the same groups.
     assert_eq!(
         memberships(&lists),
-        memberships(&greedy_group_lists(&plan, &names).lists),
+        memberships(&greedy_group_lists(&plan, &names)),
         "greedy placement must be deterministic",
     );
 

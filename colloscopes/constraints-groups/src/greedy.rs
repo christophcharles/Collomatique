@@ -10,8 +10,7 @@
 //! the right to scatter someone's colle partners.
 //!
 //! The greedy reads the whole plan: `plan.specs` (with their covered pairs)
-//! and `plan.kept_lists`, which is all a plan holds — the same input the model
-//! is built from, and the reason the two score a placement alike.
+//! and `plan.kept_lists`, which is all a plan holds.
 
 mod cohorts;
 mod pass;
@@ -21,37 +20,25 @@ mod state;
 #[cfg(test)]
 mod tests;
 
-use crate::frozen::FrozenPlacements;
 use crate::specs::GenerationPlan;
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::{PeriodId, StudentId, SubjectId};
 use std::collections::BTreeSet;
 use std::time::Instant;
 
-/// What one greedy run produced.
-#[derive(Debug)]
-pub struct GreedyOutcome {
-    /// One prefilled `GroupList` per spec, in plan order, paired with the
-    /// (period, subject) pairs it must be associated to — exactly the payload
-    /// of `GroupListsUpdateOp::AddGeneratedGroupLists`.
-    pub lists: Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)>,
-    /// The seats phase one froze, in the shape
-    /// [`build_model`](crate::build_model) pins them from. Empty when prefill
-    /// claimed nothing.
-    pub frozen: FrozenPlacements,
-}
-
 /// Builds one prefilled `GroupList` per spec of the plan, in plan order,
 /// paired with the (period, subject) pairs it must be associated to — exactly
-/// the payload of `GroupListsUpdateOp::AddGeneratedGroupLists`, mirroring
-/// [`build_group_lists`](crate::build_group_lists).
+/// the payload of `GroupListsUpdateOp::AddGeneratedGroupLists`.
 ///
 /// Always succeeds: the group targets are fixed upfront and sum to the
 /// student count, so a free seat always exists and the hard constraints hold
 /// unconditionally. `group_names` come out all `None`.
 ///
 /// Panics if `names.len()` is not `plan.specs.len()`.
-pub fn greedy_group_lists(plan: &GenerationPlan, names: &[String]) -> GreedyOutcome {
+pub fn greedy_group_lists(
+    plan: &GenerationPlan,
+    names: &[String],
+) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
     greedy_group_lists_with_log(plan, names, &mut |_: &str| {})
 }
 
@@ -66,7 +53,7 @@ pub fn greedy_group_lists_with_log(
     plan: &GenerationPlan,
     names: &[String],
     log: &mut (dyn FnMut(&str) + Send),
-) -> GreedyOutcome {
+) -> Vec<(GroupList, BTreeSet<(PeriodId, SubjectId)>)> {
     assert_eq!(
         names.len(),
         plan.specs.len(),
@@ -124,63 +111,14 @@ pub fn greedy_group_lists_with_log(
         t.elapsed(),
     ));
 
-    // The §9 diagnostic: what the two phases actually scored. It is the number
-    // an optional ILP polish over the same plan has to beat — or tie, since
-    // the greedy solution is its warm start — so the two runs can be compared
-    // line to line in the same log.
+    // The §9 diagnostic: what the two phases actually scored, so two runs
+    // over the same plan can be compared line to line in the same log.
     log(&format!(
         "[greedy] Objective value: {:.6}",
         state.objective_value(),
     ));
 
-    // Read before `into_group_lists` consumes the state.
-    let frozen = state.frozen_placements();
     let lists = state.into_group_lists(names);
     log(&format!("[greedy] Done ({:.2?})", total.elapsed()));
-    GreedyOutcome { lists, frozen }
-}
-
-/// The collision probability a finished placement reaches: `Σ_s Σ_t P_s(t)²`
-/// (§2.3), kept-list mass included — the very quantity
-/// [`greedy_group_lists`] maximizes, evaluated on lists it did not
-/// necessarily produce.
-///
-/// `lists` is one prefilled list per spec, in plan order: a
-/// [`GreedyOutcome::lists`] or a
-/// [`build_group_lists`](crate::build_group_lists) output for the same plan.
-/// That is what makes it the ground truth of the model's objective — the two
-/// numbers must agree on the same placement — and the reason it is public:
-/// the equality is asserted outside the crate's unit tests too.
-///
-/// Panics on internal inconsistency, like
-/// [`group_lists_to_warm_start`](crate::group_lists_to_warm_start): a list
-/// count differing from the plan's, a student of a spec sitting in no group of
-/// its list, or a group index beyond the ones the plan gives the list.
-pub fn placement_objective(
-    plan: &GenerationPlan,
-    lists: &[(GroupList, BTreeSet<(PeriodId, SubjectId)>)],
-) -> f64 {
-    assert_eq!(
-        lists.len(),
-        plan.specs.len(),
-        "one list per spec is required"
-    );
-
-    let mut state = state::State::new(plan);
-    for (list, ((spec, _covered), (group_list, _pairs))) in
-        plan.specs.iter().zip(lists.iter()).enumerate()
-    {
-        for &student in spec.students() {
-            let group = group_list
-                .filling()
-                .find_student_group(student)
-                .expect("every student of a spec sits in a group of its list");
-            assert!(
-                group < state.targets(list).len(),
-                "the list has more groups than the plan gives it",
-            );
-            state.place(student, list, group);
-        }
-    }
-    state.objective_value()
+    lists
 }

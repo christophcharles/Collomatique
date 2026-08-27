@@ -12,7 +12,7 @@ use relm4::{
 use relm4::{adw, gtk};
 
 use collomatique_constraints_groups::{
-    GenerationRequest, GreedyOutcome, build_generation_plan, greedy_group_lists_with_log,
+    GenerationRequest, build_generation_plan, greedy_group_lists_with_log,
 };
 use collomatique_state_colloscopes::colloscope_params::Parameters;
 use collomatique_state_colloscopes::group_lists::GroupList;
@@ -46,7 +46,7 @@ pub struct Dialog {
     params: Parameters,
     /// `Some` once the off-thread greedy has answered, its lists in plan order. Consumed by
     /// "Valider", which renames them and hands them over.
-    outcome: Option<GreedyOutcome>,
+    outcome: Option<Vec<GeneratedList>>,
     /// The skipped-pairs warning; empty when nothing was skipped.
     skipped_text: String,
     /// What each spec covers, in plan/spec order. The naming rows seed their name from it and
@@ -101,7 +101,7 @@ pub enum DialogOutput {
 #[derive(Debug)]
 pub enum DialogCommandOutput {
     /// (the `build_seq` this run was spawned with, what the greedy produced)
-    Generated(u64, GreedyOutcome),
+    Generated(u64, Vec<GeneratedList>),
 }
 
 /// "a", "a et b", "a, b et c" — the French enumeration join.
@@ -516,7 +516,7 @@ impl Component for Dialog {
                 let Some(outcome) = self.outcome.take() else {
                     return;
                 };
-                let entries = rename(&outcome.lists, &self.names());
+                let entries = rename(&outcome, &self.names());
 
                 if !self.hidden {
                     self.hidden = true;
@@ -552,7 +552,7 @@ impl Component for Dialog {
             return;
         }
         self.done = true;
-        self.results_data = result_data(&self.params, &self.coverages, &outcome.lists);
+        self.results_data = result_data(&self.params, &self.coverages, &outcome);
         self.refresh_results();
         self.outcome = Some(outcome);
     }

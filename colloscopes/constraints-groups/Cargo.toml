@@ -6,8 +6,6 @@ authors.workspace = true
 
 [dependencies]
 collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
-collomatique-ilp = { path = "../../generic/ilp" }
-collomatique-ilp-modeler = { path = "../../generic/ilp-modeler" }
 thiserror.workspace = true
 
 [dev-dependencies]

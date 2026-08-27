@@ -141,20 +141,6 @@ pub enum GenerationPlanError {
     InvalidSpec(PeriodId, SubjectId, GroupListSpecError),
 }
 
-/// The pairs `(a, b)` with `a < b` of a student set, in order. `BTreeSet`
-/// iteration is sorted, so taking the members in order and pairing each with
-/// its successors guarantees `a < b`.
-pub(crate) fn pairs_of(students: &BTreeSet<StudentId>) -> Vec<(StudentId, StudentId)> {
-    let members: Vec<StudentId> = students.iter().copied().collect();
-    let mut pairs = Vec::new();
-    for (i, &a) in members.iter().enumerate() {
-        for &b in &members[i + 1..] {
-            pairs.push((a, b));
-        }
-    }
-    pairs
-}
-
 /// Turns a user request into the input both generators read: deduplicated
 /// specs, the (period, subject) pairs nobody is registered for, and the kept
 /// lists whose groupings already put mass on the objective.
@@ -280,6 +266,48 @@ pub(crate) mod tests {
             NonZeroU32::new(min).expect("non-zero")..=NonZeroU32::new(max).expect("non-zero"),
         )
         .expect("non-empty")
+    }
+
+    /// `count` distinct (period, subject) pairs, so a spec can be given a
+    /// multiplicity. Coverage is read honestly — a spec covering nothing
+    /// weighs nothing in the objective — so anything that exercises scoring
+    /// must supply pairs.
+    fn covered(spec: usize, count: usize) -> BTreeSet<(PeriodId, SubjectId)> {
+        (0..count as u64)
+            .map(|i| (period_id(1), subject_id(spec as u64 * 100 + i + 1)))
+            .collect()
+    }
+
+    /// A hand-built plan: `specs` are `(students, (min, max), use count)` and
+    /// `kept` are `(groups, use count)`. The specs must be feasible — an
+    /// unsatisfiable one has no place in a plan at all.
+    ///
+    /// The coverage is what the collision objective reads, so it is spelled
+    /// out rather than defaulted: a multiplicity-0 list is placed like any
+    /// other but weighs nothing.
+    pub(crate) fn plan_with_uses(
+        specs: &[(&[u64], (u32, u32), usize)],
+        kept: &[(&[&[u64]], usize)],
+    ) -> GenerationPlan {
+        GenerationPlan {
+            specs: specs
+                .iter()
+                .enumerate()
+                .map(|(i, &(students, (min, max), uses))| {
+                    let spec =
+                        GroupListSpec::new(set(students), range(min, max)).expect("feasible spec");
+                    (spec, covered(i, uses))
+                })
+                .collect(),
+            skipped: BTreeSet::new(),
+            kept_lists: kept
+                .iter()
+                .map(|&(groups, use_count)| KeptList {
+                    groups: groups.iter().map(|group| set(group)).collect(),
+                    use_count,
+                })
+                .collect(),
+        }
     }
 
     fn subject_with_range(min: u32, max: u32) -> Subject {

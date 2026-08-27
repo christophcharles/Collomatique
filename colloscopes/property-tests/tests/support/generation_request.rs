@@ -1,11 +1,10 @@
-//! The random `GenerationRequest` generator, shared by the walks that need
-//! one.
+//! The random `GenerationRequest` generator, for the walks that need one.
 //!
-//! It lives here rather than in either walk so that `property_build_groups`
-//! (plan → model → conversion) and `property_greedy_groups` (plan → greedy)
-//! cannot drift apart in what they consider a reachable request. Files under
-//! `tests/` subdirectories are not auto-discovered as test targets, so this
-//! one is pulled in with `#[path]` and needs no Cargo stanza.
+//! It lives here rather than inside `property_greedy_groups` so that a second
+//! walk over the generation path can draw the very same requests instead of
+//! growing its own idea of what is reachable. Files under `tests/`
+//! subdirectories are not auto-discovered as test targets, so this one is
+//! pulled in with `#[path]` and needs no Cargo stanza.
 
 use std::collections::BTreeSet;
 

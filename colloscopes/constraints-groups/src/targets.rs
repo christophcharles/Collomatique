@@ -1,9 +1,8 @@
 //! Group targets: the shape of a solution, fixed before any placement.
 //!
-//! Shared by both generators: the greedy fills these targets group by group
-//! ([`greedy::state`](crate::greedy)), and the model pins them as the exact
-//! group sizes ([`VarEnv::targets`](crate::vars::VarEnv::targets)), so the two
-//! always agree on what a solution looks like.
+//! The greedy fills these targets group by group, and never revisits them:
+//! how many groups a list has, and how big each of them is, is settled here
+//! before anybody is placed.
 
 use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use std::num::NonZeroU32;

@@ -355,8 +355,6 @@ dependencies = [
 name = "collomatique-constraints-groups"
 version = "0.1.0-alpha.2.99"
 dependencies = [
- "collomatique-ilp",
- "collomatique-ilp-modeler",
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "thiserror 1.0.69",
@@ -477,7 +475,6 @@ version = "0.1.0-alpha.2.99"
 dependencies = [
  "collomatique-constraints-colloscopes",
  "collomatique-constraints-groups",
- "collomatique-ilp",
  "collomatique-ops",
  "collomatique-state",
  "collomatique-state-colloscopes",

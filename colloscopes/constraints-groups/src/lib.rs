@@ -1,72 +1,42 @@
-//! Standalone group-list generation model.
+//! Standalone group-list generation.
 //!
-//! This crate builds an ILP model that prefills group lists before — and
-//! independently of — any colloscope resolution. The full design is the
-//! retired roadmap, pinned at
-//! `git show 5556784b:docs/plans/auto_group_lists_plan.md`. The model is
-//! indexed by deduplicated [`GroupListSpec`]s, not by subjects: the
-//! translation between document state and model lives here too
-//! ([`build_generation_plan`] on the way in, [`build_group_lists`] on the
-//! way out).
+//! This crate fills group lists before — and independently of — any
+//! colloscope resolution. It is indexed by deduplicated [`GroupListSpec`]s,
+//! not by subjects: subjects sharing the same student set and the same size
+//! range get one list between them. The translation from document state to
+//! that indexed form lives here too ([`build_generation_plan`]), and the
+//! generator's output is the payload
+//! `GroupListsUpdateOp::AddGeneratedGroupLists` takes.
 //!
-//! The model holds the base `StudentInGroup` binaries — the assignment matrix
-//! itself, one variable per (list, student, group), and the only variable the
-//! solver truly decides — the shape constraints of piece 8 (one group per
-//! student, and each group at its balanced target size), and the **collision
-//! objective**: maximize the total partner collision probability, which is the
-//! greedy's own score (`docs/plans/greedy_algorithm.md` §2).
-//! Squaring a partner distribution makes the objective quadratic, so two
-//! families of extras linearize it — [`ExtraVarName::Together`], the "these
-//! two share this group" site binary, and [`ExtraVarName::Coincide`], its
-//! pairwise product across two lists. All three sides of that — declaration,
-//! objective coefficients, warm-start valuation — read one enumeration
-//! (`pairs`), which is what keeps them in lockstep.
-//!
-//! The crate used to number *incremental epochs* over the specs (pieces 10, 12
-//! and 12bis), so the solve could be staggered along strict inclusion of the
-//! specs' student sets. Nothing seeds this model that way any more — the
-//! greedy below supplies the initial solution — so the epochs are gone; the
-//! pinned roadmap still describes them.
+//! [`greedy_group_lists`] is the whole generator. It maximizes the
+//! **collision objective**: the total partner collision probability — the
+//! chance that two of a student's grouping decisions point at the same person
+//! — each meeting weighted by `1 / (group size − 1)`, so a meeting in a big
+//! tutorial cannot buy the right to scatter someone's colle partners. The
+//! definition is `docs/plans/greedy_algorithm.md` §2, and the algorithm
+//! itself — a prefill phase that tiles whole groups out of single cohorts,
+//! then one joint placement per remaining student — is the rest of that
+//! document.
 //!
 //! The number of groups is *not* optimized: it is the closed-form minimum
-//! `⌈n / max_size⌉` ([`vars::VarEnv::group_count`]), imposed on the model.
-//! A student count the size range cannot split at all is rejected upfront
-//! by [`GroupListSpec::new`], so callers must build their specs through it
-//! — the config dialog does, before offering a subject for rebuild.
+//! `⌈n / max_size⌉`, and the sizes are the balanced targets
+//! ([`targets::balanced_targets`](targets)), fixed before any placement. A
+//! student count the size range cannot split at all is rejected upfront by
+//! [`GroupListSpec::new`], so callers must build their specs through it — the
+//! config dialog does, before offering a subject for rebuild.
 //!
-//! The crate also hosts the *greedy* generator ([`greedy_group_lists`]),
-//! which is the primary path: it reads the same [`GenerationPlan`] and
-//! returns the same output as [`build_group_lists`], in negligible time. The
-//! ILP above is the optional polish — a strict refinement rather than a second
-//! taste, since the two now maximize the same quantity: the model's objective
-//! at a placement is [`placement_objective`] of that placement, to the last
-//! digit. See `docs/plans/greedy_roadmap.md` and
-//! `docs/plans/greedy_algorithm.md`.
+//! An optional ILP polish over the same objective used to live here as a
+//! second generator (`docs/plans/greedy_roadmap.md`, point 3). It was retired:
+//! it cost a long solve to return a placement barely distinguishable from the
+//! greedy's, when it improved anything at all.
 
-mod builder;
-mod constraints;
-mod convert;
-mod extras;
-mod frozen;
 mod greedy;
-mod objective;
-mod pairs;
+mod mass;
 mod specs;
 mod targets;
-mod types;
-pub mod vars;
 
-pub use builder::{build_model, build_model_with_log};
-pub use convert::{build_group_lists, group_lists_to_warm_start};
-pub use frozen::FrozenPlacements;
-pub use greedy::{
-    GreedyOutcome, greedy_group_lists, greedy_group_lists_with_log, placement_objective,
-};
+pub use greedy::{greedy_group_lists, greedy_group_lists_with_log};
 pub use specs::{
     GenerationPlan, GenerationPlanError, GenerationRequest, GroupListSpec, GroupListSpecError,
     KeptList, build_generation_plan,
 };
-pub use types::{ConstraintDesc, ExtraVarName};
-pub use vars::{GroupListIdx, Var};
-
-pub type GroupListsModel = collomatique_ilp_modeler::Model<Var, ExtraVarName, ConstraintDesc>;
