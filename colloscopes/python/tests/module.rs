@@ -3926,11 +3926,11 @@ fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
 /// own values ride beside it, and so do the same fields as python saw them, so
 /// that a conversion wrong in both directions at once cannot cancel itself out.
 ///
-/// The rest is the other kinds this milestone's tests are made of: values
-/// written out by hand, the defaults pinned against the model's own, and the
-/// refusals with the sentence each one raises. The example carries both shapes
-/// — subjects that run colles and two that do not — which is what makes the
-/// `None` half of `interrogation` a real case here.
+/// The rest is the other kinds these tests are made of: values written out by
+/// hand, the defaults pinned against the model's own, and the refusals with
+/// the sentence each one raises. The example carries both shapes — subjects
+/// that run colles and two that do not — which is what makes the `None` half
+/// of `interrogation` a real case here.
 #[test]
 fn the_subject_values_carry_the_interrogation_out_and_back() {
     let dir = workspace("subject-values");
@@ -4748,10 +4748,10 @@ fn a_person_who_shared_nothing_reads_as_none() {
 /// comparison. Beside it the same fields are compared as python saw them, so
 /// that a conversion wrong in both directions at once cannot cancel itself out.
 ///
-/// The rest is the other four kinds this milestone's tests are made of: a value
-/// written out by hand, the defaults pinned against the model's own, the
-/// refusals with the sentence each one raises, and the entity field taking a
-/// handle and an id alike.
+/// The rest is the other four kinds these tests are made of: a value written
+/// out by hand, the defaults pinned against the model's own, the refusals with
+/// the sentence each one raises, and the entity field taking a handle and an
+/// id alike.
 #[test]
 fn the_people_values_carry_the_card_out_and_back() {
     let dir = workspace("people-values");
@@ -13395,13 +13395,13 @@ fn a_removed_entity_makes_its_referenced_by_raise() {
 
 /// A document exercising every section of the snapshot, written to `path`
 ///
-/// The completeness check of the whole milestone needs a document that has
-/// something in every section: both shapes of every optional field, stored
-/// rows in both junction tables, a filled colloscope, and non-default
-/// settings, balancing and export configuration. The ids are picked by hand
-/// the way `refs_document` does, every reference stays live, and every stored
-/// row keeps off the pairs its subject or its students exclude — so the
-/// document passes `Data::from_inner_data` on the way in.
+/// The completeness check needs a document that has something in every
+/// section: both shapes of every optional field, stored rows in both junction
+/// tables, a filled colloscope, and non-default settings, balancing and export
+/// configuration. The ids are picked by hand the way `refs_document` does,
+/// every reference stays live, and every stored row keeps off the pairs its
+/// subject or its students exclude — so the document passes
+/// `Data::from_inner_data` on the way in.
 fn snapshot_document(path: &Path) {
     use collomatique_state_colloscopes::assignments::Assignments;
     use collomatique_state_colloscopes::balancing::{Balancing, BalancingOptions};
@@ -13970,13 +13970,12 @@ fn snapshot_document(path: &Path) {
 
 /// The snapshot holds the whole document, section by section
 ///
-/// The tree `doc.snapshot()` hands out is the value milestone's payoff: the
-/// same conversion `to_data()` is, run over everything at once. Rust extracts
-/// the tree the script left behind and compares it with the document read
-/// straight from the model — the completeness check of the whole milestone in
-/// one assertion, since every section must come back exactly for the two to
-/// be equal. A field this document's own design forgot would fail here even
-/// if no test ever named it.
+/// The tree `doc.snapshot()` hands out is the same conversion `to_data()` is,
+/// run over everything at once. Rust extracts the tree the script left behind
+/// and compares it with the document read straight from the model — the whole
+/// completeness check in one assertion, since every section must come back
+/// exactly for the two to be equal. A field the tree forgot would fail here
+/// even if no test ever named it.
 #[test]
 fn the_snapshot_holds_the_whole_document() {
     let dir = workspace("snapshot");

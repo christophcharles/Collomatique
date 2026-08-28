@@ -1879,7 +1879,7 @@ fn global_config(site: Site<'_>, obj: &Bound<'_, PyAny>) -> PyResult<RawGlobalCo
 /// two of them that no entity lies behind at all: the whole configuration is
 /// pure value data, so nothing here resolves against the document, and the
 /// extraction cannot go stale — the views' `to_data()` is the only source of
-/// one of these in this milestone.
+/// one of these.
 pub struct ExportGlobalConfigData;
 
 impl Value for ExportGlobalConfigData {
