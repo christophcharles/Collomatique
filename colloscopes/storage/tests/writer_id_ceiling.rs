@@ -158,45 +158,45 @@ fn a_document_past_the_ceiling_is_rescued_by_compacting() {
     );
 }
 
-/// Loads `examples/bad_hogwarts.collomatique`
+/// Loads `tests/fixtures/near_ceiling_hogwarts.collomatique`
 ///
-/// That file is `hogwarts.collomatique` with one student — the one who
-/// held its largest id — moved to the last id the format allows. It
-/// exists so the interface's near-ceiling path can be exercised by hand:
-/// it opens like any other document, and the first entity created in it
-/// gets an id the file format cannot hold.
+/// That file is `examples/hogwarts.collomatique` with one student — the
+/// one who held its largest id — moved to the last id the format allows.
+/// It exists so the interface's near-ceiling path can be exercised by
+/// hand: it opens like any other document, and the first entity created
+/// in it gets an id the file format cannot hold.
 ///
-/// It is a *shipped* file, so nothing stops it from being resaved by the
-/// application one day, which would renumber it and quietly turn it into
-/// an ordinary example. The two tests below are what would notice.
-fn load_bad_hogwarts() -> Data {
+/// Nothing stops it from being resaved by the application one day, which
+/// would renumber it and quietly turn it into an ordinary document. The
+/// two tests below are what would notice.
+fn load_near_ceiling_fixture() -> Data {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../examples/bad_hogwarts.collomatique");
+        .join("tests/fixtures/near_ceiling_hogwarts.collomatique");
     let content = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read {}: {e}", path.display()));
-    let (inner, caveats) = deserialize_data(&content).expect("The example should decode");
-    assert!(caveats.is_empty(), "The example should load pristine");
+    let (inner, caveats) = deserialize_data(&content).expect("The fixture should decode");
+    assert!(caveats.is_empty(), "The fixture should load pristine");
     gate(inner)
 }
 
 #[test]
-fn the_near_ceiling_example_is_writable_as_shipped() {
+fn the_near_ceiling_fixture_is_writable_as_it_stands() {
     // At the ceiling, not past it: the file is an ordinary document that
     // opens and saves like any other. Only the *next* id is a problem.
-    let data = load_bad_hogwarts();
+    let data = load_near_ceiling_fixture();
 
     assert_eq!(check_encodable(data.get_inner_data()), Ok(()));
     assert!(serialize_data(data.get_inner_data()).is_ok());
 }
 
 #[test]
-fn one_edit_on_the_near_ceiling_example_passes_the_ceiling() {
+fn one_edit_on_the_near_ceiling_fixture_passes_the_ceiling() {
     // This is the file's whole purpose, and the exact id in the error is
     // what pins it: the issuer resumes just above the document's largest
     // id, so a first new entity numbered 2^63 proves the largest id in
-    // the file is exactly 2^63 - 1. A renumbered example would fail here
+    // the file is exactly 2^63 - 1. A renumbered fixture would fail here
     // rather than silently stop exercising anything.
-    let mut state = AppState::<_, String>::new(load_bad_hogwarts());
+    let mut state = AppState::<_, String>::new(load_near_ceiling_fixture());
     let result = state.apply(
         Op::Student(StudentOp::Add(Student::default())),
         "Add one student past the ceiling".to_string(),
