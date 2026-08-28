@@ -1,10 +1,10 @@
 //! Placement state and every score computation.
 //!
-//! The scoring rule of the design's §8: a candidate's score is always a
-//! **pure function of the current configuration**, recomputed from the
-//! placement tables. No running accumulator — its float drift could make two
-//! states each look better than the other, and the sweep of `pass.rs` relies
-//! on a strict `>` over a pure function to be unable to cycle.
+//! The scoring rule: a candidate's score is always a **pure function of the
+//! current configuration**, recomputed from the placement tables. No running
+//! accumulator — its float drift could make two states each look better than
+//! the other, and the sweep of `pass.rs` relies on a strict `>` over a pure
+//! function to be unable to cycle.
 
 use crate::mass::{pair_mass, plan_n_uses};
 use crate::specs::{GenerationPlan, KeptList};
@@ -18,11 +18,10 @@ use std::collections::{BTreeMap, BTreeSet};
 /// One rebuilt list under construction.
 struct ListState {
     /// How many (period, subject) pairs the list serves — the multiplicity
-    /// `k` of §2.1. Honestly `covered.len()`: a spec covering nothing (only
-    /// reachable in hand-built plans) weighs nothing, its students are still
-    /// placed.
+    /// `k`. Honestly `covered.len()`: a spec covering nothing (only reachable
+    /// in hand-built plans) weighs nothing, its students are still placed.
     multiplicity: usize,
-    /// Group targets, descending, fixed before any placement (§3).
+    /// Group targets, descending, fixed before any placement.
     targets: Vec<u32>,
     /// Current members, indexed like `targets`.
     fills: Vec<BTreeSet<StudentId>>,
@@ -41,8 +40,9 @@ pub(super) struct State<'a> {
     placements: BTreeMap<StudentId, BTreeMap<usize, usize>>,
     /// Prefill output: (student, spec) placements the greedy never revises.
     frozen: BTreeSet<(StudentId, usize)>,
-    /// `N_s` — *all* of s's list-uses, rebuilt and kept alike (the fixed-N
-    /// convention of §2.2). Its keys are the whole student universe.
+    /// `N_s` — *all* of s's list-uses, rebuilt and kept alike, so it is fixed
+    /// for a student across the whole run. Its keys are the whole student
+    /// universe.
     n_uses: BTreeMap<StudentId, usize>,
     /// The kept lists that weigh something. A zero-use list is inert and is
     /// dropped here, so it cannot split cohorts for nothing.
@@ -234,7 +234,7 @@ impl<'a> State<'a> {
     // --- scoring ---------------------------------------------------------
 
     /// The mass one meeting in `list` puts on each partner, for a group of
-    /// target `target`: `k / (N_s · (target − 1))` (§2.2), through the shared
+    /// target `target`: `k / (N_s · (target − 1))`, through the shared
     /// [`pair_mass`] the model's objective reads too.
     fn mass(&self, student: StudentId, list: usize, target: u32) -> f64 {
         pair_mass(
@@ -245,7 +245,7 @@ impl<'a> State<'a> {
     }
 
     /// Same, for a kept list. The partner count comes from the *actual* group
-    /// size (§2.1): prefilled lists are user-made and may be unbalanced.
+    /// size: prefilled lists are user-made and may be unbalanced.
     fn kept_mass(&self, student: StudentId, kept: usize, size: usize) -> f64 {
         pair_mass(self.kept[kept].use_count, self.n_uses(student), size)
     }
@@ -272,8 +272,8 @@ impl<'a> State<'a> {
     }
 
     /// The **exact global delta** of seating an out-of-list student in a
-    /// group (§7.4): only the student and the group's current occupants see
-    /// their collision probability move.
+    /// group: only the student and the group's current occupants see their
+    /// collision probability move.
     ///
     /// Without the occupants' terms, the newcomer could dilute an established
     /// pair's concentration for free. Prefilled and kept-list masses take
@@ -300,9 +300,9 @@ impl<'a> State<'a> {
         delta
     }
 
-    /// The whole objective: `Σ_s Σ_t P_s(t)²` (§2.3). Not used by the search
-    /// — the search works on deltas — but it is the instrument the objective
-    /// tests measure with, and the run's closing diagnostic (§9).
+    /// The whole objective: `Σ_s Σ_t P_s(t)²`. Not used by the search — the
+    /// search works on deltas — but it is the instrument the objective tests
+    /// measure with, and the run's closing diagnostic.
     pub(super) fn objective_value(&self) -> f64 {
         let mut total = 0.0;
         for student in self.universe() {

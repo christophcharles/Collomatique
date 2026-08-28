@@ -1,13 +1,13 @@
 //! The greedy pass: one joint placement per remaining student.
 //!
-//! Joint placement is not optional under this objective (§7.3): a first
-//! meeting contributes a negligible squared mass, so a list-by-list decision
-//! would settle almost everything on ties — only the joint view makes
-//! repetition visible.
+//! Joint placement is not optional under this objective: a first meeting
+//! contributes a negligible squared mass, so a list-by-list decision would
+//! settle almost everything on ties — only the joint view makes repetition
+//! visible.
 //!
-//! Deliberately absent (§7.6): lookahead — the student order is the whole
-//! lookahead budget — cross-student repair, and any revisiting of students
-//! already done. Unhappy with the result: send it to the ILP.
+//! Deliberately absent: lookahead — the student order is the whole lookahead
+//! budget — cross-student repair, and any revisiting of students already
+//! done.
 
 use super::state::State;
 use collomatique_state_colloscopes::StudentId;
@@ -15,9 +15,8 @@ use collomatique_state_colloscopes::StudentId;
 /// Chooses the student's group in every list of their profile not already
 /// fixed by prefill, deterministically, given the current state.
 ///
-/// This is §7.2's isolated subroutine: the boundary is settled so the
-/// strategy can be swapped if it ever proves slow; the sweep below is the
-/// first implementation.
+/// The strategy is isolated behind this call so it can be swapped if it ever
+/// proves slow; the sweep below is the first implementation.
 pub(super) fn place_student(state: &mut State, student: StudentId) {
     // First pass, spec order: the best free-seat group in each list.
     for list in state.unplaced_lists(student) {
@@ -27,9 +26,9 @@ pub(super) fn place_student(state: &mut State, student: StudentId) {
 
     // Revision sweeps to a fixpoint: take the student out of a list and
     // re-choose given every other current placement. A move requires a
-    // strict increase of a *pure function* of the configuration (§8), so no
-    // cycle is possible even in `f64`, and the score takes finitely many
-    // values, so this terminates.
+    // strict increase of a *pure function* of the configuration, so no cycle
+    // is possible even in `f64`, and the score takes finitely many values, so
+    // this terminates.
     let movable = state.movable_lists(student);
     let mut sweeps = 0usize;
     loop {
@@ -44,13 +43,13 @@ pub(super) fn place_student(state: &mut State, student: StudentId) {
             break;
         }
         sweeps += 1;
-        // A bug detector, not a limiter (§7.3).
+        // A bug detector, not a limiter.
         debug_assert!(sweeps < 1_000, "place_student sweep did not settle");
     }
 }
 
 /// The best group for a student out of `list`, scanning ascending and
-/// requiring strict improvement (§7.5).
+/// requiring strict improvement.
 ///
 /// Without an incumbent — a first placement — the lowest-indexed candidate
 /// wins exact ties; targets being sorted descending, ties fill the big groups

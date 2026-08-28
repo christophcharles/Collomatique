@@ -1,6 +1,6 @@
 //! Cohorts and the global processing order.
 //!
-//! A **cohort** is a maximal set of interchangeable students (§6.1). The key
+//! A **cohort** is a maximal set of interchangeable students. The key
 //! is not just the profile — the set of lists containing the student — but
 //! also the student's kept-list group memberships: two students in the same
 //! lists but in *different* groups of a kept list have different frozen
@@ -10,7 +10,7 @@
 //! for nothing.
 //!
 //! A pleasant consequence of the key: `N_s` is uniform inside a cohort, which
-//! is what makes the §7.1 tie-break "more list-uses" well defined per cohort.
+//! is what makes the tie-break "more list-uses" well defined per cohort.
 
 use super::state::State;
 use collomatique_state_colloscopes::StudentId;
@@ -19,16 +19,16 @@ use std::collections::{BTreeMap, BTreeSet};
 
 /// A set of interchangeable students, and the lists they must be placed in.
 pub(super) struct Cohort {
-    /// Ascending `StudentId` — the canonical member order (§6.3). Prefill
-    /// fills claimed groups with this same order in every list, which is what
+    /// Ascending `StudentId` — the canonical member order. Prefill fills
+    /// claimed groups with this same order in every list, which is what
     /// makes the blocks prefix-align across lists.
     pub(super) members: Vec<StudentId>,
     /// Spec indices whose student set contains the members.
     pub(super) profile: BTreeSet<usize>,
 }
 
-/// Cohorts in the global processing order of §7.1: rarest first — ascending
-/// cohort size, ties toward more list-uses, then ascending first member id.
+/// Cohorts in the global processing order: rarest first — ascending cohort
+/// size, ties toward more list-uses, then ascending first member id.
 ///
 /// Rationale: rare profiles have the fewest options for consistent partners
 /// and must commit while the space is empty; the "takes everything standard"

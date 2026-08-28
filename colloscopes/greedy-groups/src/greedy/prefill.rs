@@ -4,7 +4,7 @@
 //! together everywhere, nothing to improve locally — and it typically covers
 //! a large portion of the class. It is not guaranteed to be part of a global
 //! optimum: freezing the pure groups can force contrived placements on the
-//! rest. That is the greedy trade of §4; the escape is the optional ILP.
+//! rest. That is the greedy trade.
 
 use super::cohorts::Cohort;
 use super::state::State;
@@ -24,12 +24,12 @@ pub(super) fn prefill(state: &mut State, cohorts: &[Cohort]) {
     }
 }
 
-/// The best claim of §6.2: among the list's still-empty groups, take a set
-/// whose targets sum as high as possible **without exceeding** `budget`.
+/// The best claim: among the list's still-empty groups, take a set whose
+/// targets sum as high as possible **without exceeding** `budget`.
 ///
 /// Not a subset-sum search — groups of equal target are interchangeable, so
 /// only the counts matter, and a list's targets take at most the two values
-/// `q + 1` and `q` (§3). With `a` empty groups of the larger target and `b`
+/// `q + 1` and `q`. With `a` empty groups of the larger target and `b`
 /// of the smaller, the loop is `a + 1` iterations.
 ///
 /// The ascending loop with strict improvement implements the tie convention
@@ -81,7 +81,7 @@ fn best_claim(state: &State, list: usize, budget: usize) -> Claim {
 /// One cohort: claim, shrink to a fixpoint, then place.
 ///
 /// A student is prefilled **only if the claims cover them in every claiming
-/// list** (§6.3), otherwise they are entirely deferred to the greedy pass —
+/// list**, otherwise they are entirely deferred to the greedy pass —
 /// which can then place them jointly instead of leaving single-use orphan
 /// pairings behind. Two precisions make the rule workable:
 ///

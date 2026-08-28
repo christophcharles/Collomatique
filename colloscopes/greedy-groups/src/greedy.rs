@@ -1,8 +1,6 @@
 //! Greedy group-list generation — the primary generator.
 //!
-//! Design: `docs/plans/greedy_roadmap.md` (point 1) and
-//! `docs/plans/greedy_algorithm.md`; the `§n` references below point into the
-//! latter. One pass of prefill (whole groups tiled from single cohorts), then
+//! One pass of prefill (whole groups tiled from single cohorts), then
 //! one joint placement per remaining student, maximizing the total partner
 //! **collision probability** — the chance that two of a student's grouping
 //! decisions point at the same person, each meeting weighted by
@@ -74,7 +72,7 @@ pub fn greedy_group_lists_with_log(
     let t = Instant::now();
     prefill::prefill(&mut state, &cohorts);
     // The cohorts are rarest first and their members ascending: the same
-    // global order that drove prefill (§7.1). A student prefill placed in
+    // global order that drove prefill. A student prefill placed in
     // every list of their profile is done; one whose profile also holds
     // non-claiming lists still enters, and only the missing groups are
     // chosen. Placing one student never places another, so who is left can
@@ -111,8 +109,8 @@ pub fn greedy_group_lists_with_log(
         t.elapsed(),
     ));
 
-    // The §9 diagnostic: what the two phases actually scored, so two runs
-    // over the same plan can be compared line to line in the same log.
+    // What the two phases actually scored, so two runs over the same plan
+    // can be compared line to line in the same log.
     log(&format!(
         "[greedy] Objective value: {:.6}",
         state.objective_value(),

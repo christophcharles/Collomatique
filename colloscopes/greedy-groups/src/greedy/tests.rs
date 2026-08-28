@@ -31,7 +31,7 @@ fn memberships(
         .collect()
 }
 
-/// Every hard constraint of §3, checked without reusing `balanced_targets`:
+/// Every hard constraint, checked without reusing `balanced_targets`:
 /// one list per spec in plan order, the covered pairs carried through, the
 /// minimal group count, every student in exactly one group, sizes descending,
 /// inside the range and balanced within one.
@@ -217,9 +217,9 @@ fn trio_travels() {
 
 #[test]
 fn license_case() {
-    // The §2.4 scenario, scaled down: eight students, a tutorial in two
-    // groups of four, two colles in pairs. Each student has N = 3 uses, so
-    // a colle partner weighs 1/3 and a tutorial mate 1/9.
+    // Eight students, a tutorial in two groups of four, two colles in pairs.
+    // Each student has N = 3 uses, so a colle partner weighs 1/3 and a
+    // tutorial mate 1/9.
     let plan = plan(
         &[
             (&[1, 2, 3, 4, 5, 6, 7, 8], (4, 4), 1),
@@ -255,12 +255,12 @@ fn license_case() {
 
 #[test]
 fn prefill_exact_fit() {
-    // The §6.3 worked example: one list of five in groups of 2 to 3 →
-    // targets {3, 2}. A second list holds only 1 and 2, which splits the
-    // cohorts into {1, 2} and {3, 4, 5}. The pair cannot tile the 3-group
-    // and claims the 2-group; the trio then claims the 3-group. The earlier
-    // "purity + lowest index" design sent the pair into the 3-group and
-    // doomed the trio.
+    // One list of five in groups of 2 to 3 → targets {3, 2}. A second list
+    // holds only 1 and 2, which splits the cohorts into {1, 2} and
+    // {3, 4, 5}. The pair cannot tile the 3-group and claims the 2-group;
+    // the trio then claims the 3-group. Claiming the biggest group each
+    // cohort can fill, rather than the biggest one outright, is what keeps
+    // the trio from being doomed.
     let plan = plan(&[(&[1, 2, 3, 4, 5], (2, 3), 1), (&[1, 2], (2, 2), 1)], &[]);
     let lists = run(&plan);
     assert_valid(&plan, &lists);
@@ -392,7 +392,7 @@ fn size_one_corner() {
     let lists = run(&plan);
     assert_valid(&plan, &lists);
 
-    // Fixed N (§2.4): a further meeting with your best partner still beats
+    // Fixed N: a further meeting with your best partner still beats
     // the configuration where you sit alone. Nothing is renormalized away
     // when a use produces no partner, so "with your partner" stays strictly
     // better than "alone" instead of tying with it.
