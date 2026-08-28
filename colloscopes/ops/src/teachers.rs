@@ -261,7 +261,7 @@ mod tests {
     //! produced (rebuilt by replaying those very ops on the base), plus the
     //! whole error surface — the two prechecks the state layer answers, the
     //! dangling-subject scan the payload causes, and the no-interrogation
-    //! rejection that replaces a crash (D5).
+    //! rejection that replaces a crash.
 
     use super::*;
     use crate::test_utils::{fixes, hogwarts};
@@ -576,8 +576,7 @@ mod tests {
     /// live, so the op reaches the state layer and gets convicted — the map
     /// answers nothing, since the pair it would take out went back with the
     /// rolled-back op. The user must get a typed rejection out of that, not a
-    /// dead process (D5): this is the teacher half of the crash 3.3bis fixed
-    /// for balancing.
+    /// dead process: this is the teacher half of the crash fixed for balancing.
     #[test]
     fn a_subject_without_interrogations_cannot_be_taught() {
         let base = hogwarts();

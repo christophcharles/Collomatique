@@ -866,8 +866,8 @@ mod tests {
     /// not one: were the arm's comparison dropped, the fix would remove the
     /// slot, the retried update would find nothing at that id, and the engine
     /// would still restore the entry snapshot and answer the break it
-    /// remembered (design doc D4). Same error, same document. The one thing the
-    /// ops layer owns here is the scan below the engine, which is what the
+    /// remembered. Same error, same document. The one thing the ops layer owns
+    /// here is the scan below the engine, which is what the
     /// [Convergence::SlotOverflowsDay] arm of `UpdateSlot` reddens without.
     #[test]
     fn a_start_too_late_in_the_day_is_rejected_rather_than_repaired() {
@@ -1136,8 +1136,8 @@ mod tests {
     /// The move ops' error surface, all of it ops-level: both ends of the list
     /// refuse to go further, and a dead id is caught before any elementary op
     /// is issued. Each direction answers a dead id in its own error enum —
-    /// `MoveSlotDown` used to borrow `MoveSlotUpError::InvalidSlotId`, the wart
-    /// D14 removed.
+    /// `MoveSlotDown` used to borrow `MoveSlotUpError::InvalidSlotId`, a wart
+    /// since removed.
     #[test]
     fn the_moves_report_the_ends_of_the_list_and_a_dead_id() {
         let base = hogwarts();

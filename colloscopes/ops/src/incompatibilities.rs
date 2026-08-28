@@ -557,7 +557,7 @@ mod tests {
         assert_eq!(session.get_data(), base.get_data());
     }
 
-    /// Which break wins when a payload carries both is public API (D5): the old
+    /// Which break wins when a payload carries both is public API: the old
     /// validator checked the subject id before the week pattern id, and the two
     /// scans are copied in that order. The set the engine hands over holds both
     /// dangles at once, so only the scan order decides.

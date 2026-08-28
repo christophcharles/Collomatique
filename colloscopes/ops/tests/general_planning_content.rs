@@ -1,6 +1,6 @@
 //! Regression tests pinning the content-preservation contract of the
 //! composite general-planning ops after they were re-cut onto the `WeekOp`
-//! family (commit 3 of the WeekId split).
+//! family.
 //!
 //! Cutting a period must carry the tail weeks' colloscope cells *and*
 //! week-pattern bits into the new period — this is what lets a later step
@@ -9,13 +9,13 @@
 //! cut (the tail simply changes owner), so a week pattern is byte-identical
 //! across the cut and the moved colloscope cell reappears in the new period.
 //!
-//! The contract held across step 7's change of machinery: the same document was
-//! cut through the old cleaning path and through the cascade, against the same
+//! The contract held across the change of machinery: the same document was cut
+//! through the old cleaning path and through the cascade, against the same
 //! assertions, until the old path was deleted. Where the two parted company was
 //! the *merge* that follows, and deliberately: the old path unassigned the group
 //! list before moving the weeks and lost the colles with it, where the cascade
-//! moves the weeks first and keeps them (the step's first divergence, which is
-//! what the merge fixture below now pins).
+//! moves the weeks first and keeps them — which is what the merge fixture below
+//! now pins.
 
 use collomatique_ops::{CascadeWarning, GeneralPlanningUpdateOp, OpCategory, UpdateOp};
 use collomatique_state::{AppState, traits::Manager};

@@ -723,14 +723,14 @@ mod tests {
         assert_eq!(session.get_data(), base.get_data());
     }
 
-    /// Which break wins when a payload carries several is public API (D5): the
-    /// old validator checked the antecedent subject, then the consequent
-    /// subject, then the excluded periods, and the scans are copied in that
-    /// order, with the two interrogation convergences slotted between the
-    /// subject dangles and the period one — the same place
-    /// `PairedSlotsNotInSameSubject` sits among the slot-pairing scans. The set
-    /// the engine hands over holds every break at once, so only the scan order
-    /// decides, and every step of it is pinned below.
+    /// Which break wins when a payload carries several is public API: the old
+    /// validator checked the antecedent subject, then the consequent subject,
+    /// then the excluded periods, and the scans are copied in that order, with
+    /// the two interrogation convergences slotted between the subject dangles
+    /// and the period one — the same place `PairedSlotsNotInSameSubject` sits
+    /// among the slot-pairing scans. The set the engine hands over holds every
+    /// break at once, so only the scan order decides, and every step of it is
+    /// pinned below.
     #[test]
     fn a_payload_naming_several_ghosts_reports_them_in_the_old_order() {
         let (base, rule_id) = base_with_a_rule();

@@ -728,9 +728,8 @@ mod tests {
     //! colles of a coordinate die *before* the association that bounded them,
     //! because dropping the association is what makes them out of range and the
     //! engine lands a repair's own repairs first. One group at a time, which is
-    //! the case §3.13 of the plan looked at and deliberately left alone — here
-    //! the user asked for the list to go, so the colles going with it is no
-    //! surprise.
+    //! deliberate — here the user asked for the list to go, so the colles going
+    //! with it is no surprise.
 
     use super::*;
     use crate::test_utils::{fixes, hogwarts};

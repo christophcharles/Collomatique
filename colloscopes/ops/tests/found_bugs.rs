@@ -52,9 +52,9 @@ fn add_active_period(app: &mut AppState<Data, Desc>, weeks: usize) -> PeriodId {
 /// `old_week_count..week_count`, an always-empty range when shrinking
 /// (`week_count < old_week_count`), so the cleaning op never fired and the
 /// shrink hit `NotCompatibleSlotInColloscope` and panicked
-/// (`Unexpected error for UpdatePeriodWeekCount!`). Since step 7 the composite
-/// simply removes the doomed weeks and the cascade clears what hangs off them,
-/// which is what the fix list below reads back.
+/// (`Unexpected error for UpdatePeriodWeekCount!`). The composite now simply
+/// removes the doomed weeks and the cascade clears what hangs off them, which
+/// is what the fix list below reads back.
 #[test]
 fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
     let mut app_state = AppState::<_, Desc>::new(Data::new());

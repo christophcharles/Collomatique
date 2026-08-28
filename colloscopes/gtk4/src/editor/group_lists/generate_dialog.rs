@@ -91,8 +91,8 @@ impl Dialog {
     }
 
     /// The subjects eligible on a period, in document order: they must have interrogation
-    /// parameters (the roadmap's rule) and must not exclude the period. The group size range
-    /// comes along, since the eligibility filter is what proves it is there.
+    /// parameters and must not exclude the period. The group size range comes along, since
+    /// the eligibility filter is what proves it is there.
     fn eligible_subjects(
         &self,
         period_id: collomatique_state_colloscopes::PeriodId,

@@ -1,5 +1,5 @@
 //! The `Assign` op's public error surface, pinned across the address/content
-//! split of the pre-step-7 review.
+//! split.
 //!
 //! `AssignmentsUpdateOp::Assign` turns one student's membership into a whole-row
 //! `AssignmentOp::SetRow` and translates the state layer's rejection back into
