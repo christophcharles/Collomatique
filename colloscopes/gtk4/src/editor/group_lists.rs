@@ -125,14 +125,8 @@ impl Component for GroupLists {
                         },
                         gtk::Button {
                             add_css_class: "frame",
-                            // The feature is unfinished: it is flagged as a warning rather than
-                            // advertised as an accent, and the tooltip says why.
-                            add_css_class: "warning",
+                            add_css_class: "accent",
                             set_margin_all: 5,
-                            set_tooltip_text: Some(
-                                "Fonctionnalité en cours de développement : \
-                                 les listes produites peuvent être incorrectes ou incomplètes.",
-                            ),
                             adw::ButtonContent {
                                 set_icon_name: "system-run-symbolic",
                                 set_label: "Générer des listes automatiquement",

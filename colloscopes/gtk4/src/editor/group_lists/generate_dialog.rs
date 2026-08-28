@@ -304,9 +304,6 @@ impl SimpleComponent for Dialog {
             set_visible: !model.hidden,
             set_title: Some("Génération automatique de listes de groupes"),
             set_default_size: (1024, 576),
-            // Unfinished feature: GNOME's development-build striping on the header bar,
-            // as `run_python_script` does.
-            add_css_class: "devel",
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -339,11 +336,6 @@ impl SimpleComponent for Dialog {
                         },
                         connect_clicked => DialogInput::Accept,
                     },
-                },
-                add_top_bar = &adw::Banner {
-                    set_title: "Fonctionnalité en cours de développement : \
-                                les listes produites peuvent être incorrectes ou incomplètes.",
-                    set_revealed: true,
                 },
                 #[wrap(Some)]
                 set_content = &gtk::Box {
