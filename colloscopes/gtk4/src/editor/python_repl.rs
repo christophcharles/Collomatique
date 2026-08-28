@@ -196,7 +196,9 @@ impl Component for Window {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // A long-lived window: the transcript is capped rather than kept whole.
-        let debug_view = DebugView::builder().launch(Some(5000)).detach();
+        // High enough for a few `help()` calls, which run to five figures of
+        // lines each.
+        let debug_view = DebugView::builder().launch(Some(100000)).detach();
 
         let model = Window {
             hidden: true,
