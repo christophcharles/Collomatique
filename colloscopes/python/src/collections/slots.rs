@@ -19,14 +19,14 @@
 //! last two are the family's own pair: a slot has a position inside its
 //! subject, so it has a way of moving that no other family needs.
 //!
-//! This is the first family whose value is larger than what its ops carry
-//! (`docs/python/new_api_design.md` §2): a `SlotData` names its subject, and a
-//! slot cannot change subject — the model files it under that subject in the
-//! very list that gives it its position. So `add` *reads* the field, since
-//! `AddNewSlot` takes the subject beside the slot payload, and `update` refuses
-//! a value naming a different subject than the slot's own rather than dropping
-//! the field on the floor. A read-modify-write never meets that refusal:
-//! `to_data()` fills the field with the slot's own subject.
+//! This is the first family whose value is larger than what its ops carry: a
+//! `SlotData` names its subject, and a slot cannot change subject — the model
+//! files it under that subject in the very list that gives it its position.
+//! So `add` *reads* the field, since `AddNewSlot` takes the subject beside the
+//! slot payload, and `update` refuses a value naming a different subject than
+//! the slot's own rather than dropping the field on the floor. A
+//! read-modify-write never meets that refusal: `to_data()` fills the field
+//! with the slot's own subject.
 //!
 //! Removing a slot takes what stood in it: the colloscope cells written on it,
 //! and the slot pairing rules that related it to another slot. Every one of
@@ -174,8 +174,7 @@ impl Slots {
     /// for the cascade to repair: the answer's `warnings` is empty.
     fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5).
+        // an entity is resolved against this document, which borrows it to ask.
         let slot = SlotData::from_py(&self.doc, data)?;
 
         crate::results::created::<Slot>(
@@ -476,7 +475,7 @@ impl Slot {
     ///
     /// The subject is in the value although no slot op really carries it: what
     /// `to_data()` hands back is the slot, whole, which is what makes
-    /// `doc.snapshot()` buildable out of these classes (§2.0). It also means a
+    /// `doc.snapshot()` buildable out of these classes. It also means a
     /// read-modify-write never trips over the field that cannot change —
     /// `slot.to_data()` fills it with this slot's own subject.
     ///

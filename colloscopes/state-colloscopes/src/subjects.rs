@@ -185,9 +185,8 @@ pub enum SubjectPeriodicity {
         // The block list is *relational*, not a collection of independent
         // items: each block's `delay_in_weeks` is measured from the previous
         // block, so dropping or truncating blocks re-dates every block after
-        // it. The chain is therefore one composite value — an atom (plan
-        // step 6.5, decision 10). Even a strict truncation is incomparable,
-        // not below.
+        // it. The chain is therefore one composite value — an atom. Even a
+        // strict truncation is incomparable, not below.
         #[ord(atom)]
         blocks: Vec<WeekBlock>,
         /// Minimum of weeks between two interrogations for the same student
@@ -311,9 +310,9 @@ impl Subjects {
     }
 }
 
-/// Precondition errors of the forced subject ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber, op-target existence + `AddAfter`
-/// anchor ([Self::InvalidSubjectId]), and position bounds. `validate_subject`,
+/// Precondition errors of the forced subject ops — the carve-out subset. Kept:
+/// no-clobber, op-target existence + `AddAfter` anchor
+/// ([Self::InvalidSubjectId]), and position bounds. `validate_subject`,
 /// the Remove reference scans, the interrogations-off guards and the
 /// newly-excluded-period guards are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -336,8 +335,8 @@ impl crate::Data {
     ///
     /// Force-applies a subject op: carve-out guards kept (returned as
     /// [SubjectPrecheckError] — no-clobber, target existence, `AddAfter` anchor,
-    /// position bounds), invariant guards stripped (step-3 survey Table 1). May
-    /// leave the state invalid; the caller owns checking and rollback.
+    /// position bounds), invariant guards stripped. May leave the state
+    /// invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_subject(
         &mut self,
         subject_op: &AnnotatedSubjectOp,

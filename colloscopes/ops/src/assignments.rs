@@ -158,13 +158,12 @@ impl AssignmentsUpdateOp {
                             // sweep `SetRow`'s payload students in its precheck,
                             // so a dead student was reported *before* the op could
                             // land and no convergence break was ever visible
-                            // alongside it. The sweep moved to the FK net in the
-                            // pre-step-7 review (op *address* is prechecked, op
-                            // *content* belongs to the checker), which means both
-                            // kinds of break can now arrive in one set — e.g. a
-                            // dead student on a subject that does not run on the
-                            // period. Scanning FK-first keeps this public error
-                            // surface exactly what it was.
+                            // alongside it. The sweep moved to the FK net (op
+                            // *address* is prechecked, op *content* belongs to the
+                            // checker), which means both kinds of break can now
+                            // arrive in one set — e.g. a dead student on a subject
+                            // that does not run on the period. Scanning FK-first
+                            // keeps this public error surface exactly what it was.
                             //
                             // The two convergence scans then follow the old
                             // validator order (colloscope_params validate):
@@ -537,9 +536,9 @@ mod tests {
 
     /// Applies a setup op through the cascade and throws away whatever it had
     /// to repair. Excluding a student from a period, for instance, takes them
-    /// out of every row they were in — that is the students family's business
-    /// (commit 3.9), not this one's, and here it is only how the fixture gets
-    /// the document it wants to talk about.
+    /// out of every row they were in — that is the students family's business,
+    /// not this one's, and here it is only how the fixture gets the document it
+    /// wants to talk about.
     fn seed(state: &mut AppState<Data, Desc>, op: Op) {
         state
             .apply_cascade(op, (OpCategory::None, "Préparation".into()))
@@ -808,8 +807,8 @@ mod tests {
         assert_eq!(session.get_data(), base.get_data());
     }
 
-    /// Which break wins when a payload carries several is public API (D5), and
-    /// here it is more than a matter of taste: the dangling-student scan runs
+    /// Which break wins when a payload carries several is public API, and here
+    /// it is more than a matter of taste: the dangling-student scan runs
     /// *first* because the state layer used to settle that case in its precheck,
     /// before any convergence break was visible. Since the payload sweep moved
     /// to the FK net both kinds arrive in one set, and only the scan order keeps

@@ -48,8 +48,8 @@ pub mod incompats;
 pub mod invariants;
 pub mod non_empty_range;
 pub mod pairings;
-// Semantic pins for the document order (step 6.5). In-crate, because several
-// of the values they compare live behind private fields.
+// Semantic pins for the document order. In-crate, because several of the
+// values they compare live behind private fields.
 #[cfg(test)]
 mod partial_order_tests;
 pub mod periods;
@@ -75,8 +75,7 @@ pub use non_empty_range::{EmptyRangeError, NonEmptyRangeInclusive};
 pub use resolution::Fix;
 
 // Per-domain precheck error enums for [Data::force_apply] — the carve-out
-// subset of each domain's error surface (step-3 survey Table 2). Introduced in
-// step 4; this is the error vocabulary that survives step 5.
+// subset of each domain's error surface.
 pub use assignments::AssignmentPrecheckError;
 pub use balancing::BalancingPrecheckError;
 pub use colloscopes::ColloscopePrecheckError;
@@ -249,8 +248,8 @@ pub enum PrecheckError {
 }
 
 /// The unresolvable tier of the gate's error surface: bad op input. Both the
-/// carve-out prechecks (design doc §4) and the logic tier live here — an op
-/// whose payload would land logically impossible rows is an invalid op.
+/// carve-out prechecks and the logic tier live here — an op whose payload would
+/// land logically impossible rows is an invalid op.
 ///
 /// [InvalidOp::Logic] stays reachable only from data built outside this crate
 /// (`GlobalUpdate` payloads, decode): ordinary elementary ops cannot construct
@@ -270,7 +269,7 @@ pub enum InvalidOp {
 /// two-tier [collomatique_state::ApplyError] instantiated with this crate's
 /// vocabulary. [collomatique_state::ApplyError::InvalidOp] is bad op input
 /// (never resolvable); [collomatique_state::ApplyError::BrokenInvariants] is
-/// what the cascade resolves (at step 5 it is simply an error).
+/// what the cascade resolves.
 pub type Error = collomatique_state::ApplyError<InvalidOp, FixableInvariant>;
 
 /// Lets the gate keep writing `self.force_apply(op)?`.
@@ -513,12 +512,12 @@ impl Data {
 
 #[cfg(test)]
 mod force_apply_tests {
-    //! Step-4 commit 2.2 pins for [Data::force_apply], retargeted at step-5
-    //! R1.5: carve-out guards still fire (leaving the state unchanged),
-    //! stripped invariant guards let a forced op land an *invalid* state that
-    //! [InnerData::broken_invariants] reports, and a forced *valid* op is
-    //! byte-identical to the gated [Data::apply] (the standing anti-drift
-    //! pin on the thin copies). `tests/property_apply_gate.rs` generalises these.
+    //! Pins for [Data::force_apply]: carve-out guards still fire (leaving the
+    //! state unchanged), stripped invariant guards let a forced op land an
+    //! *invalid* state that [InnerData::broken_invariants] reports, and a forced
+    //! *valid* op is byte-identical to the gated [Data::apply] (the standing
+    //! anti-drift pin on the thin copies). `tests/property_apply_gate.rs`
+    //! generalises these.
 
     use crate::ids::{Id, PeriodId, StudentId, SubjectId, WeekPatternId};
     use crate::ops::{
@@ -688,8 +687,8 @@ mod force_apply_tests {
     #[test]
     fn forced_valid_week_add_equals_apply() {
         // Weeks exercise the copied helpers (`force_add_week` &c.), the highest
-        // drift-risk spot (F2). Build a period, then compare the two paths on a
-        // week AddFront.
+        // drift-risk spot. Build a period, then compare the two paths on a week
+        // AddFront.
         let mut data = Data::default();
         let period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
             AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
@@ -709,10 +708,10 @@ mod force_apply_tests {
 
 #[cfg(test)]
 mod apply_tests {
-    //! Step-5 commit 1 pins for [Data::apply]: the apply/check/rollback gate
-    //! rolls a broken landing back to a bit-identical pre-op state and reports it
-    //! precisely; a `GlobalUpdate` carrying logically impossible (duplicated-id)
-    //! data comes back as [InvalidOp::Logic], rolled back.
+    //! Pins for [Data::apply]: the apply/check/rollback gate rolls a broken
+    //! landing back to a bit-identical pre-op state and reports it precisely; a
+    //! `GlobalUpdate` carrying logically impossible (duplicated-id) data comes
+    //! back as [InvalidOp::Logic], rolled back.
 
     use crate::ids::{Id, PeriodId, StudentId, SubjectId, WeekPatternId};
     use crate::ops::{
@@ -869,8 +868,8 @@ mod apply_tests {
 
 #[cfg(test)]
 mod construction_boundary_tests {
-    //! Pins for the [Data] construction boundary — the decode trust boundary of
-    //! the design record's G.4. [Data::from_inner_data] is the one door through
+    //! Pins for the [Data] construction boundary — the decode trust boundary.
+    //! [Data::from_inner_data] is the one door through
     //! which data built *outside* this crate enters, so both of its rejection
     //! arms ([FromInnerDataError::Logic] and
     //! [FromInnerDataError::BrokenInvariants]) are load-bearing: a broken state

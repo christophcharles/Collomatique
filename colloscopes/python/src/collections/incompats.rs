@@ -125,8 +125,7 @@ impl Incompats {
     /// incompatibility can block slots for them.
     fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5).
+        // an entity is resolved against this document, which borrows it to ask.
         let incompat = IncompatData::from_py(&self.doc, data)?;
 
         crate::results::created::<Incompat>(

@@ -266,6 +266,18 @@ impl StrategyContext {
         }
     }
 
+    /// Write a line on the ambient echo sink, or drop it when the caller installed none — the
+    /// same fallback the solve methods make for a backend's output.
+    ///
+    /// For a strategy's *own* console output: what it decided before, between or around its
+    /// solves, which no solver and no worker would ever say. Lines carry their own terminator,
+    /// like the ones coming back from a subprocess.
+    pub fn echo(&self, line: String) {
+        if let Some(on_echo) = &self.on_echo {
+            on_echo(line);
+        }
+    }
+
     pub async fn solve(
         &self,
         desc: &ProblemDesc,
@@ -2192,6 +2204,7 @@ mod tests {
                     warm_start_config: None,
                     incremental_config: None,
                     fuzzy_config: Some(FuzzyConfig::default()),
+                    warm_start_incumbent: true,
                 };
 
                 let saw_fuzzy = Arc::new(Mutex::new(false));
@@ -2354,6 +2367,7 @@ mod tests {
                     warm_start_config: Some(WarmStartConfig::default()),
                     incremental_config: None,
                     fuzzy_config: None,
+                    warm_start_incumbent: true,
                 };
 
                 // Every WorkerAssigned event, in order: (worker, strategy name or None).
@@ -2431,5 +2445,214 @@ mod tests {
             idle_after_restart,
             "cancelled Default slot {first_slot} was never reported idle; assignments: {assignments:?}"
         );
+    }
+
+    /// A backend nothing may reach. The `warm_start_incumbent` tests below run a conductor with
+    /// every substrategy disabled, so no worker exists to call it — which is the point: adopting a
+    /// warm start must cost no solve at all.
+    struct UnusedBackend;
+
+    #[async_trait]
+    impl SolveBackend for UnusedBackend {
+        async fn solve_with_progress(
+            &self,
+            _desc: &ProblemDesc,
+            _opts: SolveConfig,
+            _on_progress: &(dyn Fn(SolveProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!("no substrategy is enabled, so nothing may solve")
+        }
+
+        async fn run_strategy_subprocess(
+            &self,
+            _model_desc: &ModelDesc,
+            _strategy: &StrategyKind,
+            _warm_start: Option<Vec<f64>>,
+            _payload: StrategyPayloadData,
+            _on_progress: &(dyn Fn(StrategyProgressData) -> bool + Send + Sync),
+            _on_echo: &(dyn Fn(String) + Send + Sync),
+        ) -> Result<RawSolveOutcome, StrategyError> {
+            unreachable!("no substrategy is enabled, so nothing may solve")
+        }
+    }
+
+    /// Two binaries under `x0 + x1 <= 1`, maximizing `x0 + 2 x1`: enough for a warm start to be
+    /// feasible or not, and to carry a distinguishable objective.
+    fn make_capped_model() -> collomatique_ilp_modeler::Model<usize, (), ()> {
+        use collomatique_ilp::LinExpr;
+        use collomatique_ilp_modeler::Var;
+
+        let vars: HashMap<usize, Variable> = [(0, Variable::binary()), (1, Variable::binary())]
+            .into_iter()
+            .collect();
+        let mut modeler: Modeler<'_, usize, (), (), (), ()> = Modeler::new(vars);
+        let x0 = LinExpr::var(Var::Base(0));
+        let x1 = LinExpr::var(Var::Base(1));
+        modeler.add_constraint((&x0 + &x1).leq(&LinExpr::constant(1.0)), ());
+        modeler.maximize(1.0, &x0 + 2.0 * &x1);
+        modeler.build(&()).unwrap()
+    }
+
+    /// The complete config for `[x0, x1]`, built the way the engine builds an incoming hint:
+    /// dense over the model's own variable order.
+    fn complete_config(
+        model: &collomatique_ilp_modeler::Model<usize, (), ()>,
+        values: [f64; 2],
+    ) -> ConfigData<InternalVar<usize, ()>> {
+        let (_, var_order) = model.problem().get_desc();
+        let raw: Vec<f64> = var_order
+            .iter()
+            .map(|v| match v {
+                InternalVar::Base(i) => values[*i],
+                _ => unreachable!("the model has base variables only"),
+            })
+            .collect();
+        collomatique_ilp::solution_to_config_data(&raw, &var_order)
+    }
+
+    /// What one `run_warm_start_check` saw: the conductor's outcome, the objective of every
+    /// conductor-level update it announced, and every line it echoed.
+    struct WarmStartCheck {
+        outcome: StrategyOutcome<InternalVar<usize, ()>>,
+        announced: Vec<f64>,
+        echoed: Vec<String>,
+    }
+
+    /// Run the conductor on `strategy` with `warm_start`, listening on both its channels.
+    async fn run_warm_start_check(
+        strategy: &ConductorStrategy,
+        warm_start: Option<ConfigData<InternalVar<usize, ()>>>,
+    ) -> WarmStartCheck {
+        let model = make_capped_model();
+
+        let echoed: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let echoed_cb = echoed.clone();
+        let ctx = StrategyContext::with_echo(
+            Arc::new(UnusedBackend),
+            Arc::new(move |line: String| echoed_cb.lock().unwrap().push(line)),
+        );
+
+        let announced: Arc<Mutex<Vec<f64>>> = Arc::new(Mutex::new(Vec::new()));
+        let announced_cb = announced.clone();
+        let on_progress = move |p: ConductorProgress<InternalVar<usize, ()>>| {
+            if let ConductorProgress::Conductor(status) = &p
+                && let Some(sol) = &status.best_solution
+            {
+                announced_cb.lock().unwrap().push(sol.objective);
+            }
+            true
+        };
+
+        let outcome = strategy
+            .run_with_callback(
+                &ctx,
+                &model,
+                warm_start,
+                ConductorPayload::default(),
+                &on_progress,
+            )
+            .await
+            .unwrap();
+        WarmStartCheck {
+            outcome,
+            announced: announced.lock().unwrap().clone(),
+            echoed: echoed.lock().unwrap().clone(),
+        }
+    }
+
+    /// A conductor with nothing enabled: whatever incumbent comes out can only be the warm start.
+    fn checking_conductor(warm_start_incumbent: bool) -> ConductorStrategy {
+        ConductorStrategy {
+            worker_count: std::num::NonZeroU32::new(1).unwrap(),
+            default_config: None,
+            warm_start_config: None,
+            incremental_config: None,
+            fuzzy_config: None,
+            warm_start_incumbent,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_feasible_warm_start_is_adopted_as_the_initial_incumbent() {
+        let model = make_capped_model();
+        // x1 alone: feasible, worth 2.
+        let hint = complete_config(&model, [0.0, 1.0]);
+
+        let check = run_warm_start_check(&checking_conductor(true), Some(hint.clone())).await;
+
+        assert_eq!(check.outcome.status, SolveStatus::Optimal);
+        assert_eq!(check.outcome.objective, Some(2.0));
+        assert_eq!(check.outcome.solution, Some(hint));
+        // And it was announced right away, so a UI shows an incumbent before any worker runs.
+        assert_eq!(check.announced, vec![2.0]);
+        assert_eq!(
+            check.echoed,
+            vec![
+                "supplied warm start is feasible (objective=2.0000): adopted as initial incumbent\n"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_infeasible_warm_start_is_not_adopted() {
+        let model = make_capped_model();
+        // Both variables at 1 breaks `x0 + x1 <= 1`.
+        let hint = complete_config(&model, [1.0, 1.0]);
+
+        let check = run_warm_start_check(&checking_conductor(true), Some(hint)).await;
+
+        assert_eq!(
+            check.outcome.status,
+            SolveStatus::Stopped(StopReason::Callback)
+        );
+        assert_eq!(check.outcome.solution, None);
+        assert!(check.announced.is_empty());
+        // Refused out loud: the caller hears why, instead of guessing from a missing incumbent.
+        assert_eq!(
+            check.echoed,
+            vec!["supplied warm start breaks a constraint: not adopted as incumbent\n"]
+        );
+    }
+
+    #[tokio::test]
+    async fn an_incomplete_warm_start_is_not_adopted() {
+        // A hint that does not value every variable cannot be evaluated at all, so it is refused
+        // just like an infeasible one — never half-adopted.
+        let hint = ConfigData::from([(InternalVar::Base(0usize), 1.0)]);
+
+        let check = run_warm_start_check(&checking_conductor(true), Some(hint)).await;
+
+        assert_eq!(
+            check.outcome.status,
+            SolveStatus::Stopped(StopReason::Callback)
+        );
+        assert_eq!(check.outcome.solution, None);
+        assert!(check.announced.is_empty());
+        // And said as the distinct mistake it is, not lumped in with an infeasible one.
+        assert_eq!(
+            check.echoed,
+            vec![
+                "supplied warm start does not value every variable of the model: not adopted as incumbent\n"
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn a_warm_start_is_ignored_when_the_option_is_off() {
+        let model = make_capped_model();
+        let hint = complete_config(&model, [0.0, 1.0]);
+
+        // The very hint the first test adopts, with the option off: it stays a plain hint.
+        let check = run_warm_start_check(&checking_conductor(false), Some(hint)).await;
+
+        assert_eq!(
+            check.outcome.status,
+            SolveStatus::Stopped(StopReason::Callback)
+        );
+        assert_eq!(check.outcome.solution, None);
+        assert!(check.announced.is_empty());
+        // Nothing was checked, so there is nothing to report either.
+        assert!(check.echoed.is_empty());
     }
 }

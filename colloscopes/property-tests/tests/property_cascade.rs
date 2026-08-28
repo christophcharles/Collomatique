@@ -13,8 +13,8 @@
 //!   exists. The engine holds the map to its contract in-flight: the precheck
 //!   and disowned-invariant panics, the strictly-below assertion in the
 //!   document order ([`ContentOrd`](collomatique_state::partial_order::ContentOrd))
-//!   after every landed fix (step 6.5 — deliberately *not* `PartialOrd`, whose
-//!   std container impls are lexicographic), and the no-progress ledger on
+//!   after every landed fix (deliberately *not* `PartialOrd`, whose std
+//!   container impls are lexicographic), and the no-progress ledger on
 //!   never-landing fix chains. Every fix a green walk lands has passed the
 //!   strictly-below assertion.
 //! * **`Ok` ⇒ honesty** — the landed state is fully valid, the target op is the
@@ -82,12 +82,19 @@ use collomatique_state_colloscopes::{Data, Error, InnerData, Op};
 
 use harness::{OpLog, RunConfig, RunStats};
 
-/// Deliberately wide while the migration is in flight (★ user ruling, July 28
-/// 2026): a cascade multiplies gate calls, but we would rather catch a map bug
-/// and wait a bit than tune the harness down before the map has stopped moving.
+// The five documents both walks start from.
+#[path = "support/start_points.rs"]
+mod start_points;
+
+/// Deliberately wide while the migration is in flight: a cascade multiplies
+/// gate calls, but we would rather catch a map bug and wait a bit than tune the
+/// harness down before the map has stopped moving.
 /// Below the two existing harnesses, which run 100 × 1000 each. Shrinking is a
 /// later decision, to be justified the way `property_ops.rs:32-34` justifies its
 /// own — not a knob to reach for the first time the suite feels slow.
+///
+/// `seeds` is the budget for the bootstrap start; the four big starts share
+/// the same again between them (`start_points::seeds_for`).
 const CONFIG: RunConfig = RunConfig {
     seeds: 50,
     ops_per_run: 500,
@@ -117,8 +124,13 @@ fn document_size(data: &Data) -> usize {
     data.get_inner_data().params.all_ids().count()
 }
 
-/// Cross-seed tallies for one property. `for_each_seed` takes a `Fn` closure, so
-/// these need interior mutability.
+/// Tallies for one property, across every (start, seed) pair.
+/// `for_each_start_and_seed` takes a `Fn` closure, so these need interior
+/// mutability. Only `assert_covered` reads them as guards, and it asks for at
+/// least one of each outcome, so more runs can only help. The document-size
+/// means in `report` are printed and never asserted; they now mix five starts
+/// of very different sizes, so read them as one number over the whole run and
+/// not as a picture of any single start.
 #[derive(Default)]
 struct Counters {
     landed: Cell<usize>,     // targets that landed
@@ -327,16 +339,18 @@ fn maybe_snapshot(rng: &mut ChaCha8Rng, data: &Data, snapshots: &mut Vec<InnerDa
     }
 }
 
-/// Property 1: cascading from the first op, off the bootstrap document.
+/// Property 1: cascading from the first op, off the starting document.
 #[test]
 fn cascade_never_panics_and_is_atomic() {
     let c = Counters::new();
 
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "cascade_never_panics_and_is_atomic",
         &CONFIG,
-        |rng, log, stats| {
-            let (state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (state, _) = start_points::open(start, rng);
             let mut data: Data = state.get_data().clone();
             assert_clean(&data);
             let handover = document_size(&data);
@@ -354,7 +368,7 @@ fn cascade_never_panics_and_is_atomic() {
     );
 
     c.assert_covered();
-    c.report("cascade fuzz (from bootstrap)");
+    c.report("cascade fuzz (from each start)");
 }
 
 /// Property 2: the same cascade walk, but handed a document the plain gate has
@@ -366,11 +380,13 @@ fn cascade_never_panics_and_is_atomic() {
 fn cascade_on_a_grown_document_never_panics() {
     let c = Counters::new();
 
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "cascade_on_a_grown_document_never_panics",
         &CONFIG,
-        |rng, log, stats| {
-            let (state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (state, _) = start_points::open(start, rng);
             let mut data: Data = state.get_data().clone();
             assert_clean(&data);
             let mut snapshots: Vec<InnerData> = vec![];
@@ -403,5 +419,5 @@ fn cascade_on_a_grown_document_never_panics() {
     );
 
     c.assert_covered();
-    c.report("cascade fuzz (grown first)");
+    c.report("cascade fuzz (each start, grown first)");
 }

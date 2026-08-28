@@ -901,6 +901,9 @@ impl Component for Colloscope {
                         self.strategy.clone(),
                         model,
                         payload,
+                        // No warm start here: the colloscope solve starts from
+                        // whatever the strategies find on their own.
+                        None,
                     ))
                     .unwrap();
             }

@@ -29,7 +29,7 @@ use collomatique_state_colloscopes::{Data, InnerData, Op};
 
 use harness::{OpLog, RunConfig};
 
-/// Smaller than the step-6 family harnesses: this property is about the shape
+/// Smaller than the cascade family harnesses: this property is about the shape
 /// of a document, not about a trajectory through the op space, so a handful of
 /// varied end states is what it needs.
 const CONFIG: RunConfig = RunConfig {

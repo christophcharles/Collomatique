@@ -86,9 +86,6 @@ impl BalancingUpdateOp {
                 // break — the rolled-back entry is not in the state, so there
                 // is nothing to repair — the target is convicted, and the
                 // `.expect` below kills the process on data-dependent input.
-                // The old `apply_no_cleaning` body still has that hole; it is
-                // deleted at commit 7 rather than fixed twice, and gtk4 cannot
-                // reach it (it only lists interrogated subjects).
                 if !interrogated {
                     return Err(
                         UpdateSubjectOptionsError::SubjectHasNoInterrogation(*subject_id).into(),

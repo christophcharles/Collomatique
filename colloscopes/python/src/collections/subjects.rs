@@ -22,15 +22,14 @@
 //! leaves: the enrolments, the colles already written on that period's weeks,
 //! and the group list it used there.
 //!
-//! The value is larger than what the ops carry (`docs/python/new_api_design.md`
-//! §2), the second family where that happens: a `SubjectData` holds the
-//! excluded periods, and no subject op does — the model keeps them beside the
-//! parameters and the ops carry the parameters alone. So rather than dropping
-//! the field on the floor, `add` refuses a value that excludes anything and
-//! `update` refuses one whose exclusions differ from the document's, both
-//! naming `set_period_status`, which is the op that moves them. A
-//! read-modify-write never meets the second refusal: `to_data()` fills the
-//! field with the subject's own exclusions.
+//! The value is larger than what the ops carry, the second family where that
+//! happens: a `SubjectData` holds the excluded periods, and no subject op
+//! does — the model keeps them beside the parameters and the ops carry the
+//! parameters alone. So rather than dropping the field on the floor, `add`
+//! refuses a value that excludes anything and `update` refuses one whose
+//! exclusions differ from the document's, both naming `set_period_status`,
+//! which is the op that moves them. A read-modify-write never meets the second
+//! refusal: `to_data()` fills the field with the subject's own exclusions.
 //!
 //! The family keeps two refusals for the model, and both reach a script as
 //! `SubjectsError`: a subject at either end of the list has nowhere left to
@@ -147,8 +146,7 @@ impl Subjects {
     /// empty.
     fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5).
+        // an entity is resolved against this document, which borrows it to ask.
         let subject = SubjectData::from_py(&self.doc, data)?;
 
         if !subject.excluded_periods.is_empty() {
@@ -505,7 +503,7 @@ impl Subject {
     ///
     /// The exclusions are in the value although no subject op carries them:
     /// what `to_data()` hands back is the subject, whole, which is what makes
-    /// `doc.snapshot()` buildable out of these classes (§2.0).
+    /// `doc.snapshot()` buildable out of these classes.
     ///
     /// A stale handle raises `StaleHandleError` like every other read.
     fn to_data<'py>(&self, py: Python<'py>) -> PyResult<Bound<'py, PyAny>> {

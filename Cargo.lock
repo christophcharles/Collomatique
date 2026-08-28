@@ -352,17 +352,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "collomatique-constraints-groups"
-version = "0.1.0-alpha.2.99"
-dependencies = [
- "collomatique-ilp",
- "collomatique-ilp-modeler",
- "collomatique-state-colloscopes",
- "collomatique-storage",
- "thiserror 1.0.69",
-]
-
-[[package]]
 name = "collomatique-constraints-rooms"
 version = "0.1.0-alpha.2.99"
 dependencies = [
@@ -374,6 +363,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "collomatique-greedy-groups"
+version = "0.1.0-alpha.2.99"
+dependencies = [
+ "collomatique-state-colloscopes",
+ "collomatique-storage",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "collomatique-gtk4"
 version = "0.1.0-alpha.2.99"
 dependencies = [
@@ -381,7 +379,7 @@ dependencies = [
  "chrono",
  "clap",
  "collomatique-constraints-colloscopes",
- "collomatique-constraints-groups",
+ "collomatique-greedy-groups",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
  "collomatique-mps",
@@ -476,11 +474,11 @@ name = "collomatique-property-tests"
 version = "0.1.0-alpha.2.99"
 dependencies = [
  "collomatique-constraints-colloscopes",
- "collomatique-constraints-groups",
- "collomatique-ilp",
+ "collomatique-greedy-groups",
  "collomatique-ops",
  "collomatique-state",
  "collomatique-state-colloscopes",
+ "collomatique-storage",
  "collomatique-testgen-colloscopes",
  "collomatique-time",
  "non-empty-string",
@@ -492,6 +490,7 @@ version = "0.1.0-alpha.2"
 dependencies = [
  "chrono",
  "collomatique-constraints-colloscopes",
+ "collomatique-greedy-groups",
  "collomatique-ilp",
  "collomatique-mps",
  "collomatique-ops",

@@ -2,7 +2,7 @@
 //!
 //! A script started from the GUI's script editor is *hosted*: the application
 //! hands it the document it has open, and takes one back if the script asks it
-//! to. `docs/python/new_api_design.md` §9.2 is the design.
+//! to.
 //!
 //! This crate knows nothing about how the two sides talk. The host is a trait
 //! whoever runs the interpreter implements — in the application that is the rpc

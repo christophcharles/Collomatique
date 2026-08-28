@@ -328,9 +328,9 @@ impl Week {
             return Ok(None);
         };
 
-        // The arm is written out rather than unwrapped because §6 of the design
-        // says a script never gets a panic. Reaching it takes a document with
-        // some hundred million weeks in it, so nothing about it is expected.
+        // The arm is written out rather than unwrapped because a script never
+        // gets a panic. Reaching it takes a document with some hundred million
+        // weeks in it, so nothing about it is expected.
         first_week
             .checked_add_days(Days::new(7 * index as u64))
             .map(Some)

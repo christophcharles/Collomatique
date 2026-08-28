@@ -14,8 +14,8 @@ assert all(isinstance(slot, collomatique.Slot) for slot in slot_list)
 
 # The walk is user order: the subjects as `doc.subjects` shows them, each
 # followed by its own slots in theirs. `subject.slots` is one of those groups,
-# and the walk is the groups laid end to end — the same walk the design's §4
-# example makes. The model keeps no single global slots order to mirror.
+# and the walk is the groups laid end to end. The model keeps no single global
+# slots order to mirror.
 by_subject = {subject: list(subject.slots) for subject in doc.subjects}
 assert [
     slot for subject in doc.subjects for slot in by_subject[subject]

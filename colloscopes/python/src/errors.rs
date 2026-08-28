@@ -1,13 +1,11 @@
 //! The exceptions the `collomatique` module raises
 //!
 //! Every one of them descends from [Error], so a script that only wants "the
-//! collomatique call failed" has one thing to catch. The tree below is the
-//! seed of the one described in `docs/python/new_api_design.md` §6: the design
-//! names `Error`, `NoOrigin` and `IdCeilingExceeded`, and leaves the ordinary
-//! ways reading and writing a file fail unnamed — hence [LoadError] and
-//! [SaveError].
+//! collomatique call failed" has one thing to catch. Under it sit [NoOrigin]
+//! and [IdCeilingExceeded], and [LoadError] and [SaveError] for the ordinary
+//! ways reading and writing a file fail.
 //!
-//! §6's per-family write errors (`SubjectsError`, `TeachersError`, …) are
+//! The per-family write errors (`SubjectsError`, `TeachersError`, …) are
 //! below, and they all subclass [UpdateError], so a script that catches the
 //! general one keeps catching all of them. They are not written out one by
 //! one: the class comes from the family name the model's own error carries,
@@ -71,6 +69,13 @@ create_exception!(
     ModelBuildError,
     Error,
     "The colloscope model could not be built."
+);
+
+create_exception!(
+    collomatique,
+    GroupListsGenerationError,
+    Error,
+    "A group-list generation request could not be turned into a plan."
 );
 
 create_exception!(
@@ -165,7 +170,7 @@ macro_rules! family_errors {
         ///
         /// `None` for a family `colloscopes/ops/` has grown since this list was written;
         /// the caller answers that with the base [UpdateError] rather than with
-        /// a panic (`docs/python/new_api_design.md` §6).
+        /// a panic.
         fn family_class<'py>(py: Python<'py>, family: &str) -> Option<Bound<'py, PyType>> {
             match family {
                 $(stringify!($family) => Some(py.get_type::<$class>()),)*
@@ -300,6 +305,10 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("UpdateError", py.get_type::<UpdateError>())?;
     m.add("ExportError", py.get_type::<ExportError>())?;
     m.add("ModelBuildError", py.get_type::<ModelBuildError>())?;
+    m.add(
+        "GroupListsGenerationError",
+        py.get_type::<GroupListsGenerationError>(),
+    )?;
     m.add("SolveError", py.get_type::<SolveError>())?;
     m.add("NoEngine", py.get_type::<NoEngine>())?;
     m.add("NothingToUndo", py.get_type::<NothingToUndo>())?;

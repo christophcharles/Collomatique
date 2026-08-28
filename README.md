@@ -139,7 +139,7 @@ Le projet est un workspace Rust rangé en trois groupes : `generic/` est la mach
 | `ops/` | Opérations de haut niveau sur le document, telles qu'un utilisateur les fait (interface graphique et Python) |
 | `storage/` | Lecture et écriture du fichier (JSON) ; le format est spécifié dans [`docs/file_format`](docs/file_format/file_format.md) |
 | `constraints-colloscopes/` | Traduction des règles du colloscope en modèle ILP : périodicités, appariements, équilibrage, structure d'emploi du temps |
-| `constraints-groups/` | Modèle ILP séparé pour le remplissage automatique des listes de groupes |
+| `greedy-groups/` | Remplissage automatique des listes de groupes : un algorithme glouton, sans solveur |
 | `settings/` | Ce qui relève de l'installation et de la personne, pas du document : version du build, réglages persistants |
 | `ui-text/` | Les mots employés par l'application pour parler de ses propres données, partagés entre l'interface et l'API Python |
 | `xlsx/` | Export du colloscope au format xlsx |

@@ -430,6 +430,14 @@ pub struct ConductorStrategy {
     /// Fill otherwise-idle workers with `FuzzyStrategy` exploration around the incumbent, tuned by
     /// the carried config. `None` disables fuzzy exploration entirely.
     pub fuzzy_config: Option<FuzzyConfig>,
+    /// Adopt an externally supplied warm start as the conductor's initial incumbent, when it holds
+    /// up: the conductor evaluates it against the model itself — no worker, no solver — and folds
+    /// it into its status if it is feasible.
+    ///
+    /// Inert when the caller supplies no warm start, and harmless when the supplied one is bad: a
+    /// hint that misses variables or breaks a constraint is simply not adopted. With `false` the
+    /// hint keeps its weaker role only, a per-worker MIP start (see `warm_start_for`).
+    pub warm_start_incumbent: bool,
 }
 
 impl Default for ConductorStrategy {
@@ -440,6 +448,9 @@ impl Default for ConductorStrategy {
             warm_start_config: Some(WarmStartConfig::default()),
             incremental_config: None,
             fuzzy_config: None,
+            // Costs nothing when no warm start is supplied, and a caller that supplies one wants
+            // it used: the check is a single evaluation against the model.
+            warm_start_incumbent: true,
         }
     }
 }
@@ -501,16 +512,8 @@ impl ConductorStrategy {
     /// provider to seed the default/fuzzy workers early. Warm-start is left off: incremental fills the
     /// same seeding role and usually gives a better starting point, so running both would be redundant.
     pub fn with_parallelism_defaults() -> Self {
-        let cores = std::thread::available_parallelism()
-            .map(|n| n.get())
-            .unwrap_or(1);
-        let workers = cores.div_ceil(2).clamp(1, 4);
-        let worker_count = u32::try_from(workers)
-            .ok()
-            .and_then(NonZeroU32::new)
-            .unwrap_or(NonZeroU32::MIN);
         Self {
-            worker_count,
+            worker_count: Self::parallelism_worker_count(),
             // The full branch-and-bound is what makes this a "complete" optimisation: it lets the
             // solve prove optimality (close the gap) rather than only hill-climb via fuzzy. Set
             // explicitly so it does not track `Default`, where it is off (a warm-start-only search).
@@ -526,16 +529,58 @@ impl ConductorStrategy {
         }
     }
 
+    /// Build a conductor for a solve that *starts* from a solution the caller already holds: the
+    /// worker count of [`with_parallelism_defaults`](Self::with_parallelism_defaults), the full
+    /// branch-and-bound to close the gap, and fuzzy exploration around the incumbent on the spare
+    /// slots. Both initial-solution providers are off on purpose: the supplied warm start *is* the
+    /// initial solution — [`warm_start_incumbent`](Self::warm_start_incumbent) adopts it directly —
+    /// so a warm-start or incremental worker would spend a whole slot rediscovering what the caller
+    /// already handed over.
+    ///
+    /// Only makes sense with a warm start actually supplied to the run; with none, nothing seeds
+    /// the fuzzy workers (which [`warnings`](Self::warnings) reports as `ColdFuzzy`).
+    pub fn with_parallelism_optimize_only() -> Self {
+        Self {
+            worker_count: Self::parallelism_worker_count(),
+            default_config: Some(DefaultConfig::default()),
+            // The supplied solution replaces both of them.
+            warm_start_config: None,
+            incremental_config: None,
+            fuzzy_config: Some(FuzzyConfig::default()),
+            // The whole point of this preset.
+            warm_start_incumbent: true,
+        }
+    }
+
+    /// Worker slots for the presets: roughly half the cores this machine reports, capped at 4, and
+    /// a single worker when the available parallelism cannot be determined.
+    fn parallelism_worker_count() -> NonZeroU32 {
+        let cores = std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(1);
+        let workers = cores.div_ceil(2).clamp(1, 4);
+        u32::try_from(workers)
+            .ok()
+            .and_then(NonZeroU32::new)
+            .unwrap_or(NonZeroU32::MIN)
+    }
+
     /// Misconfigurations detectable before running (see [`ConductorWarning`]). Returned as a set
     /// (ordered by the variants' declaration order) so a UI can flag any combination that would
     /// waste work or never terminate.
-    pub fn warnings(&self) -> BTreeSet<ConductorWarning> {
+    ///
+    /// `external_warm_start` says whether the run will be handed a ready-made solution as warm
+    /// start. Together with [`warm_start_incumbent`](Self::warm_start_incumbent) it provides the
+    /// initial incumbent just like the two seeding substrategies do, so the caller must say which
+    /// it is: the very same strategy warns differently with and without a supplied solution.
+    pub fn warnings(&self, external_warm_start: bool) -> BTreeSet<ConductorWarning> {
         let d = self.default_config.is_some();
         let w = self.warm_start_config.is_some();
         let f = self.fuzzy_config.is_some();
         let i = self.incremental_config.is_some();
-        // Both warm-start and incremental produce an initial incumbent for the optimisers to lean on.
-        let seed = w || i;
+        // Warm-start, incremental and an adopted external solution all produce an initial incumbent
+        // for the optimisers to lean on.
+        let seed = w || i || (external_warm_start && self.warm_start_incumbent);
         let wc = self.worker_count.get();
 
         let mut warnings = BTreeSet::new();
@@ -653,6 +698,16 @@ fn optimum_reached<V: UsableData + Send>(
     }
 }
 
+/// How many fuzzy attempts to queue now: one per slot that will still be idle once the queue
+/// drains. Counting the queued work is what makes this fire on the pass that drains the seeded
+/// queue — the pass that matters, since the loop blocks right after it.
+fn fuzzy_top_up_count(free: usize, queued: usize, has_incumbent: bool, solved: bool) -> usize {
+    if !has_incumbent || solved {
+        return 0;
+    }
+    free.saturating_sub(queued)
+}
+
 /// Fold a freshly reported Default incumbent objective into the tracked best, per sense.
 fn merge_default_obj(current: Option<f64>, candidate: f64, sense: ObjectiveSense) -> f64 {
     match current {
@@ -744,8 +799,10 @@ pub fn update_best_bound<V: UsableData + Send>(
 ///
 /// Prefer the conductor's current best solution once one has been found; until then fall
 /// back to the original `warm_start` hint passed into the conductor. The incoming hint is
-/// *only* a hint (possibly not a feasible solution), so it is never folded into
-/// `ConductorStatus` — it serves purely as this fallback.
+/// *only* a hint (possibly not a feasible solution), so it is not folded into
+/// `ConductorStatus` on its own — it serves purely as this fallback. The one door into the
+/// status is [`ConductorStrategy::warm_start_incumbent`], which folds it only after checking
+/// it against the model.
 fn warm_start_for<V: UsableData + Send>(
     status: &Mutex<ConductorStatus<V>>,
     fallback: &Option<ConfigData<V>>,
@@ -1116,6 +1173,41 @@ impl Strategy for ConductorStrategy {
             Mutex::new(Self::default_status::<InternalVar<B, E>>());
         let sense = model.problem().get_objective().get_sense();
 
+        // An externally supplied warm start is only a hint by default (a per-worker MIP start).
+        // When `warm_start_incumbent` is set, check it here and adopt it as the initial incumbent
+        // if it holds up: `solution_from_complete_data` builds it against the model and
+        // `is_feasible`/`eval` are plain evaluations, so this costs one pass over the constraints —
+        // no worker, no solver, no subprocess. A hint that misses a variable, breaks a bound or
+        // violates a constraint is not adopted, and stays the MIP-start fallback it always was.
+        //
+        // Each of the three outcomes says so on the context's echo sink: a refused hint is a
+        // caller-side mistake, and it would otherwise show up only as a missing incumbent.
+        if self.warm_start_incumbent
+            && let Some(hint) = &warm_start
+        {
+            match model.solution_from_complete_data(hint.clone()) {
+                Some(solution) if solution.is_feasible() => {
+                    let objective = solution.eval();
+                    ctx.echo(format!(
+                        "supplied warm start is feasible (objective={objective:.4}): adopted as initial incumbent\n"
+                    ));
+                    let snapshot = emit_if_changed(&status, |st| {
+                        update_best_solution(st, hint.clone(), objective, sense);
+                    });
+                    if let Some(s) = snapshot {
+                        on_progress(ConductorProgress::Conductor(s));
+                    }
+                }
+                Some(_) => ctx.echo(
+                    "supplied warm start breaks a constraint: not adopted as incumbent\n".to_owned(),
+                ),
+                None => ctx.echo(
+                    "supplied warm start does not value every variable of the model: not adopted as incumbent\n"
+                        .to_owned(),
+                ),
+            }
+        }
+
         // A fixed-size pool of worker slots (one busy flag per slot) and a queue of
         // substrategies waiting for a free slot. The slot index *is* the `worker_num`.
         // The queue is seeded from the toggles (warm-start first, default last); idle slots
@@ -1142,22 +1234,21 @@ impl Strategy for ConductorStrategy {
         > = FuturesUnordered::new();
 
         loop {
-            // Keep spare workers exploring around the incumbent: once the seeded queue is
-            // drained, a warm start exists, and we are not yet at a proven optimum, fill every
-            // idle slot with a fuzzy perturbation attempt. Fuzzy needs an incumbent, so this
-            // can only start after warm_start/default has produced one.
+            // Keep spare workers exploring around the incumbent: every slot the queue below will
+            // not use gets a fuzzy perturbation attempt, provided an incumbent exists and we are
+            // not yet at a proven optimum. Queued behind whatever is already there, so the fill
+            // still gives the seeded substrategies their slots first. Fuzzy needs an incumbent,
+            // so this starts either once warm_start/incremental/default has produced one, or
+            // straight away when the supplied warm start was adopted as one above.
             if let Some(fuzzy_cfg) = &self.fuzzy_config {
-                if queue.is_empty() {
-                    let free = slots.free_count();
-                    let (has_incumbent, solved) = {
-                        let st = status.lock().expect("conductor status mutex");
-                        (st.best_solution.is_some(), optimum_reached(&st, sense))
-                    };
-                    if free > 0 && has_incumbent && !solved {
-                        for _ in 0..free {
-                            queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy(fuzzy_cfg)));
-                        }
-                    }
+                let (has_incumbent, solved) = {
+                    let st = status.lock().expect("conductor status mutex");
+                    (st.best_solution.is_some(), optimum_reached(&st, sense))
+                };
+                let count =
+                    fuzzy_top_up_count(slots.free_count(), queue.len(), has_incumbent, solved);
+                for _ in 0..count {
+                    queue.push_back(StrategyKind::Fuzzy(self.fuzzy_substrategy(fuzzy_cfg)));
                 }
             }
 
@@ -1804,6 +1895,26 @@ mod tests {
         ));
     }
 
+    #[test]
+    fn fuzzy_fills_the_slots_the_queue_will_not_use() {
+        // The pass that matters: four slots, `Default` queued, nothing else. Three slots are
+        // left over and fuzzy must claim them now — the loop blocks right after this.
+        assert_eq!(fuzzy_top_up_count(4, 1, true, false), 3);
+        // A drained queue is the easy case.
+        assert_eq!(fuzzy_top_up_count(3, 0, true, false), 3);
+        // More queued than free: the fill uses every slot, so there is nothing to top up.
+        assert_eq!(fuzzy_top_up_count(1, 2, true, false), 0);
+        assert_eq!(fuzzy_top_up_count(0, 0, true, false), 0);
+    }
+
+    #[test]
+    fn fuzzy_needs_an_incumbent_and_an_open_gap() {
+        // Fuzzy perturbs an incumbent, so without one there is nothing to perturb.
+        assert_eq!(fuzzy_top_up_count(4, 0, false, false), 0);
+        // And once the gap is closed there is nothing left to improve.
+        assert_eq!(fuzzy_top_up_count(4, 0, true, true), 0);
+    }
+
     fn kinds(queue: &VecDeque<StrategyKind>) -> Vec<&'static str> {
         queue
             .iter()
@@ -1824,6 +1935,7 @@ mod tests {
             warm_start_config: w.then(WarmStartConfig::default),
             incremental_config: None,
             fuzzy_config: f.then(FuzzyConfig::default),
+            warm_start_incumbent: true,
         }
     }
 
@@ -1850,15 +1962,60 @@ mod tests {
     }
 
     #[test]
+    fn optimize_only_preset_leans_on_the_supplied_solution() {
+        let strategy = ConductorStrategy::with_parallelism_optimize_only();
+        // It optimises (branch-and-bound + fuzzy) but produces no initial solution of its own:
+        // the caller's warm start is the initial solution, and the check adopts it.
+        assert!(strategy.default_config.is_some());
+        assert!(strategy.fuzzy_config.is_some());
+        assert!(strategy.warm_start_config.is_none());
+        assert!(strategy.incremental_config.is_none());
+        assert!(strategy.warm_start_incumbent);
+        // Same sizing as the other preset: both follow this machine's core count.
+        assert_eq!(
+            strategy.worker_count,
+            ConductorStrategy::with_parallelism_defaults().worker_count
+        );
+    }
+
+    #[test]
+    fn warnings_treat_an_adopted_external_solution_as_a_seed() {
+        let strategy = ConductorStrategy::with_parallelism_optimize_only();
+        // Run alone, the preset has nothing to seed its fuzzy workers with.
+        assert!(
+            strategy
+                .warnings(false)
+                .contains(&ConductorWarning::ColdFuzzy)
+        );
+        // Handed a solution, it is seeded — that is what the preset is for.
+        assert!(
+            !strategy
+                .warnings(true)
+                .contains(&ConductorWarning::ColdFuzzy)
+        );
+        // But only because it is allowed to adopt it: a hint the conductor will not check stays a
+        // per-worker MIP start, which seeds nothing.
+        let ignored = ConductorStrategy {
+            warm_start_incumbent: false,
+            ..strategy
+        };
+        assert!(
+            ignored
+                .warnings(true)
+                .contains(&ConductorWarning::ColdFuzzy)
+        );
+    }
+
+    #[test]
     fn warnings_flag_no_strategy_and_no_seed() {
         // Nothing enabled at all.
         assert!(
             conductor(1, false, false, false)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::NoStrategyEnabled)
         );
         // Fuzzy only: enabled but nothing produces an incumbent to seed it.
-        let w = conductor(4, false, false, true).warnings();
+        let w = conductor(4, false, false, true).warnings(false);
         assert!(w.contains(&ConductorWarning::NoSeed));
         assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
         // NoSeed and ColdFuzzy are mutually exclusive (ColdFuzzy requires default).
@@ -1866,7 +2023,7 @@ mod tests {
         // Nothing runs: NoOptimizing does not pile on top of NoStrategyEnabled (it needs warm-start).
         assert!(
             !conductor(1, false, false, false)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::NoOptimizing)
         );
     }
@@ -1874,13 +2031,13 @@ mod tests {
     #[test]
     fn warnings_flag_no_optimizing() {
         // Warm-start only: a feasible search runs but nothing optimises it.
-        let w = conductor(1, false, true, false).warnings();
+        let w = conductor(1, false, true, false).warnings(false);
         assert!(w.contains(&ConductorWarning::NoOptimizing));
         assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
         // Default (branch-and-bound) does optimise, so NoOptimizing must not fire.
         assert!(
             !conductor(1, true, true, false)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::NoOptimizing)
         );
     }
@@ -1890,13 +2047,13 @@ mod tests {
         // One slot, default + fuzzy: default hogs it, fuzzy never gets an idle slot.
         assert!(
             conductor(1, true, true, true)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::StarvedFuzzy)
         );
         // Two slots leaves room for fuzzy: not starved.
         assert!(
             !conductor(2, true, true, true)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::StarvedFuzzy)
         );
     }
@@ -1906,13 +2063,13 @@ mod tests {
         // Warm-start seeds fuzzy but no default => no bound => never terminates.
         assert!(
             conductor(4, false, true, true)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::WontFinish)
         );
         // Fuzzy with default but no warm start => fuzzy only fires once default has gone far.
         assert!(
             conductor(4, true, false, true)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::ColdFuzzy)
         );
     }
@@ -1927,7 +2084,7 @@ mod tests {
         };
         assert!(
             !with_incremental
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::ColdFuzzy)
         );
         // Incremental-only: something runs (so not NoStrategyEnabled) but nothing optimises it.
@@ -1935,7 +2092,7 @@ mod tests {
             incremental_config: Some(IncrementalConfig::default()),
             ..conductor(1, false, false, false)
         };
-        let w = only_incremental.warnings();
+        let w = only_incremental.warnings(false);
         assert!(!w.contains(&ConductorWarning::NoStrategyEnabled));
         assert!(w.contains(&ConductorWarning::NoOptimizing));
     }
@@ -1948,13 +2105,13 @@ mod tests {
             ..conductor(4, true, true, false)
         };
         assert!(
-            both.warnings()
+            both.warnings(false)
                 .contains(&ConductorWarning::RedundantWarmStart)
         );
         // Either seeding provider alone is fine.
         assert!(
             !conductor(4, true, true, false)
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::RedundantWarmStart)
         );
         let only_incremental = ConductorStrategy {
@@ -1963,7 +2120,7 @@ mod tests {
         };
         assert!(
             !only_incremental
-                .warnings()
+                .warnings(false)
                 .contains(&ConductorWarning::RedundantWarmStart)
         );
     }
@@ -1972,7 +2129,7 @@ mod tests {
     fn warnings_are_clean_for_healthy_configs() {
         // Default only, or default + warm start, on a single worker: nothing to flag (barring an
         // impossibly small reported core count, which `OverwhelmedCpu` guards against separately).
-        let plain = conductor(1, true, false, false).warnings();
+        let plain = conductor(1, true, false, false).warnings(false);
         assert!(!plain.contains(&ConductorWarning::NoStrategyEnabled));
         assert!(!plain.contains(&ConductorWarning::StarvedFuzzy));
         assert!(!plain.contains(&ConductorWarning::WontFinish));
@@ -1987,13 +2144,13 @@ mod tests {
             let over = u32::try_from(cores.get() + 1).expect("core count + 1 fits in u32");
             assert!(
                 conductor(over, true, true, false)
-                    .warnings()
+                    .warnings(false)
                     .contains(&ConductorWarning::OverwhelmedCpu)
             );
             // One worker never oversubscribes a machine that reports at least one core.
             assert!(
                 !conductor(1, true, false, false)
-                    .warnings()
+                    .warnings(false)
                     .contains(&ConductorWarning::OverwhelmedCpu)
             );
         }

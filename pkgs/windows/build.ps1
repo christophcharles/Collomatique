@@ -28,15 +28,6 @@
 #
 # Nothing is written inside the repository. Everything goes under -OutRoot, which
 # is also where the staged application and the installer will be put later.
-#
-# How all this came to be the way it is -- what was tried and rejected, why the
-# dependencies come from three places, what a teacher's Python directory is for,
-# and the end-to-end acceptance run that is still owed -- is the retired
-# packaging roadmap, pinned at
-# `git show 7b5eea04:docs/win_packaging/roadmap.md`. Everything still load-
-# bearing was moved into the comments of this script, bootstrap.ps1 and
-# collomatique.iss before it was retired, so the roadmap is history rather than
-# reference. Read it before undoing something here that looks pointless.
 
 #Requires -Version 5.1
 
@@ -508,7 +499,7 @@ Show-Tool -Label 'pkgconf' `
 # reported rather than assumed. The port ships pip as a bundled wheel rather than
 # installed, so the pip line reads "printed nothing" until
 # `python -m ensurepip --upgrade` has been run once. Whether the shipped bundle
-# does that, and when, is a step-7 decision.
+# does that, and when, is still undecided.
 $VcpkgPython = Join-Path $Prefix 'tools\python3\python.exe'
 Show-Tool -Label 'python' -Path $VcpkgPython -Arguments @('--version')
 Show-Tool -Label 'python pip' -Path $VcpkgPython -Arguments @('-m', 'pip', '--version')

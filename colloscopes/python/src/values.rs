@@ -6,10 +6,10 @@
 //! rather than picking it apart field by field, and construction validates what
 //! the model validates.
 //!
-//! These are rust classes rather than the `.py` dataclasses of
-//! `docs/python/new_api_design.md` §2, for the reason `caveats.rs` already
-//! gives: that section's argument is about nested *mutable* copies, and it does
-//! not apply to a flat immutable value that only ever travels out of rust.
+//! These are rust classes rather than `.py` dataclasses, for the reason
+//! `caveats.rs` already gives: the argument for dataclasses is about nested
+//! *mutable* copies, and it does not apply to a flat immutable value that only
+//! ever travels out of rust.
 //!
 //! This module opens with the periodicity family, which is what the subjects
 //! need, [TimeSlot], which the incompatibilities hand out, the settings
@@ -111,9 +111,8 @@ impl Weekday {
 
 /// A `(min, max)` pair, inclusive at both ends
 ///
-/// The model's `NonEmptyRangeInclusive` never leaks as a class: a range reads as
-/// the tuple `docs/python/new_api_design.md` §14 already writes,
-/// `students_per_group=(2, 3)`.
+/// The model's `NonEmptyRangeInclusive` never leaks as a class: a range reads
+/// as a plain tuple, `students_per_group=(2, 3)`.
 pub(crate) type Range = (u32, u32);
 
 /// The range a model field holds
@@ -131,8 +130,8 @@ pub(crate) fn nonzero_range(bounds: &NonEmptyRangeInclusive<NonZeroU32>) -> Rang
 
 /// Checks a `(min, max)` a script wrote down
 ///
-/// The boundary of §6 applied one milestone early: a leaf value refuses
-/// nonsense when it is built, so step 3 can take these objects as they are.
+/// A leaf value refuses nonsense when it is built, so whatever takes these
+/// objects can take them as they are.
 fn checked_range(what: &str, bounds: Range) -> PyResult<Range> {
     let (min, max) = bounds;
     if min > max {
@@ -599,8 +598,8 @@ pub(crate) fn model_periodicity(obj: &Bound<'_, PyAny>) -> Option<SubjectPeriodi
 /// must not cross midnight into the next day — a window ending exactly at
 /// midnight is fine. A window that refuses to exist raises `ValueError`.
 ///
-/// It opts into extraction like [WeekBlock]: step 3's dataclasses will hold
-/// these values in their fields, and the write surface will pass them back in.
+/// It opts into extraction like [WeekBlock]: the dataclasses hold these values
+/// in their fields, and the write surface passes them back in.
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TimeSlot {
@@ -780,7 +779,7 @@ impl Enforcement {
 /// The value is a plain count, and nothing about the range is checked at
 /// construction: the model's per-week fields take zero, and the at-least-one
 /// rule on `max_interrogations_per_day` is the model's own, enforced where the
-/// model stores that field — step 3 refuses a zero there, not here.
+/// model stores that field — a zero is refused there, not here.
 ///
 /// [Limits]: crate::collections::settings::Limits
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
@@ -924,8 +923,8 @@ impl Orientation {
 ///
 /// Construction validates what the model's own channels hold: each of the
 /// three is 0-255, and a channel outside that raises `ValueError`. It opts
-/// into extraction like [Limit], so step 3's dataclasses can hold it in their
-/// fields and pass it back in.
+/// into extraction like [Limit], so the dataclasses can hold it in their fields
+/// and pass it back in.
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Color {

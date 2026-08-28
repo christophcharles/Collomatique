@@ -18,9 +18,10 @@ collomatique-state = { path = "../../generic/state" }
 collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
 collomatique-ops = { path = "../../colloscopes/ops" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
-collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
-collomatique-ilp = { path = "../../generic/ilp" }
+collomatique-greedy-groups = { path = "../../colloscopes/greedy-groups" }
 collomatique-time = { path = "../../generic/time" }
+# `fixture_starts` reads and writes the walk-start documents.
+collomatique-storage = { path = "../../colloscopes/storage" }
 # `property_update_ops` builds note payloads directly.
 non-empty-string = { workspace = true, features = ["serde"] }
 
@@ -30,6 +31,14 @@ non-empty-string = { workspace = true, features = ["serde"] }
 # `required-features` to a whole directory, so every target is spelled out.
 [features]
 fuzz = []
+
+# Not a walk, but gated with them on purpose: the fixtures it guards are read
+# by the walks and by nothing else, so the guard is worth exactly as much as
+# the walks are, and `cargo test` stays untouched.
+[[test]]
+name = "fixture_starts"
+path = "tests/fixture_starts.rs"
+required-features = ["fuzz"]
 
 [[test]]
 name = "property_apply_gate"
@@ -42,8 +51,8 @@ path = "tests/property_build_colloscopes.rs"
 required-features = ["fuzz"]
 
 [[test]]
-name = "property_build_groups"
-path = "tests/property_build_groups.rs"
+name = "property_greedy_groups"
+path = "tests/property_greedy_groups.rs"
 required-features = ["fuzz"]
 
 [[test]]

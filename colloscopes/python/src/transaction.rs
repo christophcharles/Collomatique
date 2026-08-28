@@ -1,9 +1,9 @@
 //! Grouping a block of writes into one undo slot
 //!
-//! Reached as `doc.transaction(label)`, and meant to be used as a `with` block
-//! (`docs/python/new_api_design.md` §5). The nesting is done by
-//! `collomatique_state::SessionStack`; this file is only the one-shot object
-//! that opens a session on the way in and closes it on the way out.
+//! Reached as `doc.transaction(label)`, and meant to be used as a `with`
+//! block. The nesting is done by `collomatique_state::SessionStack`; this file
+//! is only the one-shot object that opens a session on the way in and closes
+//! it on the way out.
 
 use pyo3::prelude::*;
 

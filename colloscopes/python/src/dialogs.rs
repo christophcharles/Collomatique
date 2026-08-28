@@ -1,9 +1,8 @@
 //! The file choosers a script can put on the screen
 //!
-//! `docs/python/new_api_design.md` §9.3 is the design. The short version is that
-//! file selection is the one dialog every script needs — an import script that
-//! cannot ask for its csv is a script with a path written into it — and that
-//! files and folders are *all* this buys. Message boxes are `zenity` under the
+//! File selection is the one dialog every script needs — an import script that
+//! cannot ask for its csv is a script with a path written into it — and files
+//! and folders are *all* this buys. Message boxes are `zenity` under the
 //! portal backend, and a run in a sandbox has no reason to hold an external
 //! binary; they stay `tkinter`'s job, as text entry and list choice already do.
 //!

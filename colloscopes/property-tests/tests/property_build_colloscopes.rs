@@ -115,6 +115,15 @@ fn build_and_check(rng: &mut ChaCha8Rng, inner: &InnerData) {
 
 /// Along random valid-op walks, building the constraint model must neither
 /// panic nor return `Err` for any reachable state.
+///
+/// **This walk keeps the bootstrap start alone**, where the six others in this
+/// package run from five documents (`support/start_points.rs`). The colloscope
+/// model grows much faster than the document does: from hogwarts, one seed of
+/// this walk took 196.6 s against 1.46 s for all fifteen, so a full run would
+/// be about **49 minutes for a single start**. No seed count rescues that —
+/// the cost is per probe. The coverage it would buy is bought instead by
+/// `constraints-colloscopes/tests/examples_build.rs`, which builds this same
+/// model against every file in `examples/`, hogwarts included.
 #[test]
 fn model_builds_never_panic_along_random_walks() {
     harness::for_each_seed(

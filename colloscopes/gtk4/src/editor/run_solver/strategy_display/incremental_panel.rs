@@ -22,7 +22,7 @@ pub enum IncrementalPanelInput {
 }
 
 /// The step currently in progress: either one of the staggered epochs (0-based `seq`) or the
-/// final reconstruction ("calcul du coût"). Used to detect step transitions so epoch durations
+/// final reconstruction ("calcul de l'objectif"). Used to detect step transitions so epoch durations
 /// can be finalized and the per-step timer restarted.
 #[derive(Clone, Copy, PartialEq)]
 enum Step {
@@ -96,7 +96,7 @@ impl SimpleComponent for IncrementalPanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Coût obtenu : ",
+                    set_label: "Objectif obtenu : ",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {
@@ -241,7 +241,7 @@ impl IncrementalPanel {
             Some(IncrementalProgressData::ReconstructionStarted { total })
             | Some(IncrementalProgressData::Reconstruction { total, .. })
             | Some(IncrementalProgressData::Done { total, .. }) => {
-                format!("{}/{} (calcul du coût)", total + 1, total + 1)
+                format!("{}/{} (calcul de l'objectif)", total + 1, total + 1)
             }
             _ => match self.last_epoch {
                 Some((epoch, total, _)) => {

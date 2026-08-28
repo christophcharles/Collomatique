@@ -1,5 +1,5 @@
 //! The document order: building blocks, the [ContentOrd] trait and the
-//! [ContentIdentity] marker (design doc §8, step 6.5).
+//! [ContentIdentity] marker.
 //!
 //! The standard library's `PartialOrd`/`Ord` on containers is lexicographic
 //! and is NOT what a removal-shaped order needs (removing an element can
@@ -15,8 +15,8 @@ use std::num::{NonZeroU32, NonZeroU64};
 
 use crate::tables::{Key, OrderedKey, OrderedTable, Table};
 
-/// The document order: a partial order over *content* (design doc §8,
-/// step 6.5, and ruling D5.1 — content, not the meaning it denotes).
+/// The document order: a partial order over *content* — not over the meaning
+/// that content denotes.
 ///
 /// This is the order of the cascade's monotonicity contract: the order is
 /// well-founded, and every resolution-map fix must land strictly below the
@@ -316,7 +316,7 @@ impl<K: Ord + ContentIdentity, V: ContentOrd> ContentOrd for BTreeMap<K, V> {
 /// field demands an explicit `#[ord(...)]` attribute instead of silently
 /// getting a wrong rule. Where identity is positional, use
 /// `#[ord(with = vec_prefix)]`; where the list is a relational chain,
-/// `#[ord(atom)]` (the identity criterion of the step-6.5 plan, §2).
+/// `#[ord(atom)]`.
 impl<T: ContentOrd + ContentIdentity> ContentOrd for Vec<T> {
     fn content_cmp(&self, other: &Self) -> Option<Ordering> {
         subsequence(self, other)

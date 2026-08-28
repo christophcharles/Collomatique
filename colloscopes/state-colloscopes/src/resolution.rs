@@ -1,6 +1,6 @@
 //! Resolution map: one repair step per broken invariant.
 //!
-//! This is the colloscope side of the step-6 cascade. The engine
+//! This is the colloscope side of the cascade. The engine
 //! ([collomatique_state::apply_cascade]) applies a target op; when the
 //! apply/check/rollback gate rejects it on broken invariants, the engine picks
 //! the canonically-first one and asks this map to repair it, then retries.

@@ -296,9 +296,10 @@ fn extracted_all<V: collomatique_python::data::Value>(
 
 /// How extracting one value the script built was refused
 ///
-/// The exception's class name and its message, both of them: the refusals of
-/// §2.4 are `ValueError`s that name the class and the field, and a test that
-/// only checked the class would not notice a message naming the wrong field.
+/// The exception's class name and its message, both of them: an extraction
+/// refusal is a `ValueError` that names the class and the field, and a test
+/// that only checked the class would not notice a message naming the wrong
+/// field.
 fn refused<V: collomatique_python::data::Value>(
     globals: &Py<PyDict>,
     name: &str,
@@ -985,8 +986,8 @@ impl collomatique_python::Host for FakeHost {
 /// alone: what crosses is the document, so a send that carried the right date
 /// on the wrong colloscope would be caught. The count is part of the test —
 /// three sends and no fourth — because a send happening on its own is exactly
-/// what `docs/python/new_api_design.md` §9.2 refuses, and the script's undo at
-/// the end would be the one to produce it.
+/// what the handoff refuses, and the script's undo at the end would be the one
+/// to produce it.
 #[test]
 fn a_hosted_script_is_handed_a_document_and_sends_one_back() {
     let dir = workspace("hosted");
@@ -1475,12 +1476,12 @@ fn ids_compare_hash_and_order_but_do_nothing_else() {
 /// a period and every week in it in one blow, which is what makes both handle
 /// kinds stale at once.
 ///
-/// The second half is where the whole of §2.2 is pinned: `.id`, `==` and `hash`
-/// keep working because they never read the state, every reading attribute
-/// raises `StaleHandleError`, the repr says `(périmé)` instead of raising, and
-/// the mapping conventions answer `None` / `False` / `KeyError`. The walk
-/// started before the removal is in there too, for the promise that iteration
-/// snapshots ids and mints handles as it goes.
+/// The second half is where a stale handle's whole contract is pinned: `.id`,
+/// `==` and `hash` keep working because they never read the state, every
+/// reading attribute raises `StaleHandleError`, the repr says `(périmé)`
+/// instead of raising, and the mapping conventions answer `None` / `False` /
+/// `KeyError`. The walk started before the removal is in there too, for the
+/// promise that iteration snapshots ids and mints handles as it goes.
 #[test]
 fn a_removed_period_makes_its_handles_stale() {
     let dir = workspace("stale");
@@ -1523,11 +1524,11 @@ fn a_removed_period_makes_its_handles_stale() {
 
 /// A refused write names its family, its op and its case
 ///
-/// The typed update errors of `docs/python/new_api_design.md` §6, end to end:
-/// the class comes from the family, and the three attributes from the two
-/// levels under it. None of it is written out variant by variant — the mapping
-/// is walked off the model's own serde shape — so this test is what says the
-/// walk finds the same thing the model put there.
+/// The typed update errors, end to end: the class comes from the family, and
+/// the three attributes from the two levels under it. None of it is written
+/// out variant by variant — the mapping is walked off the model's own serde
+/// shape — so this test is what says the walk finds the same thing the model
+/// put there.
 ///
 /// The four refusals cover what the walk has to get right: two families, so the
 /// class table is exercised rather than assumed; a case carrying one id, which
@@ -1645,10 +1646,10 @@ fn a_refused_write_names_its_family_its_op_and_its_case() {
 
 /// A cascade hands back every repair it made, and what needed it
 ///
-/// The piece §5 promises beyond the sentence: `kind` and `details` are the
-/// repair as structured data — the model's own name for it and its coordinates,
-/// as ids — and `parent` is the repair that needed this one, so the warning list
-/// reads as the tree it came from.
+/// The piece a warning carries beyond the sentence: `kind` and `details` are
+/// the repair as structured data — the model's own name for it and its
+/// coordinates, as ids — and `parent` is the repair that needed this one, so
+/// the warning list reads as the tree it came from.
 ///
 /// The write is applied from here rather than from the script because no python
 /// mutator cascades yet: the two first-week ops are the whole write surface.
@@ -3925,11 +3926,11 @@ fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
 /// own values ride beside it, and so do the same fields as python saw them, so
 /// that a conversion wrong in both directions at once cannot cancel itself out.
 ///
-/// The rest is the other kinds this milestone's tests are made of: values
-/// written out by hand, the defaults pinned against the model's own, and the
-/// refusals with the sentence each one raises. The example carries both shapes
-/// — subjects that run colles and two that do not — which is what makes the
-/// `None` half of `interrogation` a real case here.
+/// The rest is the other kinds these tests are made of: values written out by
+/// hand, the defaults pinned against the model's own, and the refusals with
+/// the sentence each one raises. The example carries both shapes — subjects
+/// that run colles and two that do not — which is what makes the `None` half
+/// of `interrogation` a real case here.
 #[test]
 fn the_subject_values_carry_the_interrogation_out_and_back() {
     let dir = workspace("subject-values");
@@ -4157,8 +4158,7 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
 /// The example holds two of the four kinds and excludes no period from any
 /// subject, so this is
 /// [the_four_periodicities_read_back_value_by_value]'s document again — the one
-/// place where `SubjectData.excluded_periods`, the field §2.0 of the design is
-/// about, has something in it to carry.
+/// place where `SubjectData.excluded_periods` has something in it to carry.
 ///
 /// Both halves are here: the round trip, which says a periodicity read out of a
 /// document goes back in as the same one, and four values written from scratch
@@ -4748,10 +4748,10 @@ fn a_person_who_shared_nothing_reads_as_none() {
 /// comparison. Beside it the same fields are compared as python saw them, so
 /// that a conversion wrong in both directions at once cannot cancel itself out.
 ///
-/// The rest is the other four kinds this milestone's tests are made of: a value
-/// written out by hand, the defaults pinned against the model's own, the
-/// refusals with the sentence each one raises, and the entity field taking a
-/// handle and an id alike.
+/// The rest is the other four kinds these tests are made of: a value written
+/// out by hand, the defaults pinned against the model's own, the refusals with
+/// the sentence each one raises, and the entity field taking a handle and an
+/// id alike.
 #[test]
 fn the_people_values_carry_the_card_out_and_back() {
     let dir = workspace("people-values");
@@ -5295,7 +5295,7 @@ fn week_pattern_document(path: &Path) {
 /// patterns nowhere near each other: that is what lets the script hold an id
 /// that is a perfectly good `WeekPatternId` and still names nothing where it is
 /// asked — a lookup and an argument, side by side, answering the two different
-/// ways §2.4 says they must.
+/// ways they must.
 #[test]
 fn a_pattern_excludes_no_week_every_week_or_the_ones_it_names() {
     let dir = workspace("exclusions");
@@ -5331,12 +5331,12 @@ fn a_pattern_excludes_no_week_every_week_or_the_ones_it_names() {
 /// — so they come from rust, between the two halves: one week pattern goes, and
 /// one whole period goes with every week in it.
 ///
-/// The point is the divergence §2.4 asks for. The model is forgiving about a
-/// reference it cannot resolve: `is_week_active` answers `false` for a week it
-/// does not hold, and treats a pattern it does not hold as excluding nothing.
-/// Those are the two answers pinned here on the model's side — and the script's
-/// side is that python gives neither, because an argument naming nothing was
-/// malformed before it had an answer.
+/// The point is the divergence between the two sides. The model is forgiving
+/// about a reference it cannot resolve: `is_week_active` answers `false` for a
+/// week it does not hold, and treats a pattern it does not hold as excluding
+/// nothing. Those are the two answers pinned here on the model's side — and
+/// the script's side is that python gives neither, because an argument naming
+/// nothing was malformed before it had an answer.
 #[test]
 fn a_removed_week_or_pattern_makes_is_week_active_raise() {
     use collomatique_state_colloscopes::ids::Id as _;
@@ -5590,11 +5590,11 @@ fn the_slots_read_back_with_the_cells_they_can_fill() {
 /// once cannot cancel itself out; the entities among them are named by their
 /// place in the walk they belong to, since an id means nothing written down.
 ///
-/// The rest is the other kinds this milestone's tests are made of: values
-/// written out by hand, entity fields taking a handle and an id alike, and the
-/// refusals with the sentence each one raises. Neither model type has a
-/// `Default`, so there is no default to pin here — what §2.5 of the design
-/// asks for is a pin per class whose model has one.
+/// The rest is the other kinds these tests are made of: values written out by
+/// hand, entity fields taking a handle and an id alike, and the refusals with
+/// the sentence each one raises. Neither model type has a `Default`, so there
+/// is no default to pin here — a class whose model has one gets that pin
+/// instead.
 #[test]
 fn the_pattern_and_slot_values_carry_the_start_time_out_and_back() {
     let dir = workspace("slot-values");
@@ -6163,7 +6163,7 @@ fn the_week_values_round_trip_and_name_their_period() {
     );
 
     // The handle-or-id pair extracts to the same week, though the two python
-    // objects do not compare equal — the wart §2.3 records.
+    // objects do not compare equal — the wart.
     assert_eq!(
         extracted::<WeekData>(&globals, "week_by_handle"),
         extracted::<WeekData>(&globals, "week_by_id")
@@ -6525,7 +6525,7 @@ fn the_assignments_read_back_row_by_row() {
 /// the dangling rows away (`colloscopes/ops/src/subjects.rs`), which is what makes the
 /// address dead rather than empty.
 ///
-/// The second half pins §3.7's wrinkle: the address is an *argument*, so a
+/// The second half pins the wrinkle: the address is an *argument*, so a
 /// dead one raises `StaleHandleError` where the total read's empty frozenset
 /// would have read as « nobody assigned ». And the survivors read exactly as
 /// before, because what went was the subject, not the table.
@@ -6585,14 +6585,13 @@ fn a_removed_address_makes_the_assignments_read_raise() {
 /// with the same document read straight from the model — the names, the
 /// subjects, and every busy window of every incompatibility: the day, the time
 /// and the duration of the model's `SlotWithDuration`. The windows also pin the
-/// read half of the `TimeSlot` value: the `from_model` conversion of §2.6.
+/// read half of the `TimeSlot` value: its `from_model` conversion.
 ///
 /// The example carries six incompatibilities across two subjects, one with a
 /// single busy window, all bound to no week pattern — enough to pin the walk,
 /// every field, and the `None` shape of `week_pattern`. An incompatibility
-/// that carries a pattern stays out of this commit's tests: no fixture has
-/// one, and the `Some` shape needs a synthetic document, which commit 13
-/// builds.
+/// that carries a pattern stays out of these tests: no fixture has one, and
+/// the `Some` shape needs a synthetic document.
 #[test]
 fn the_incompats_read_back_slot_by_slot() {
     let dir = workspace("incompats");
@@ -6688,7 +6687,7 @@ fn the_incompats_read_back_slot_by_slot() {
 
 /// Constructing a `TimeSlot` validates what the model's own window type does
 ///
-/// The whole point of a leaf value (§2.6): a script names the window it
+/// The whole point of a leaf value: a script names the window it
 /// expects and compares it, and a window the model would refuse to build
 /// refuses to exist here too. The script builds the valid shapes — the plain
 /// window, and the one ending exactly at midnight, which the model's
@@ -7208,6 +7207,453 @@ fn group_lists_document(path: &Path) {
     let content = collomatique_storage::serialize_data(data.get_inner_data())
         .expect("the fixture's ids are far below the file-format ceiling");
     std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// A document written here, holding every shape a generation has to answer to
+///
+/// [group_lists_document] cannot carry this one: it has no assignment rows at
+/// all, so every pair a request named would be skipped, and other scripts pin
+/// its contents exactly. This one is built for the generation instead, and
+/// every part of it earns its place:
+///
+/// - **Sortilèges** and **Métamorphose**, both running colles in groups of two
+///   to three, are what the happy path rebuilds. On period 1 the same five
+///   students take both, so the two pairs share one spec and come out as a
+///   *single* list — the dedup, which is why the door names the lists itself.
+/// - On period 2 Sortilèges is down to four students, which is a spec of its
+///   own: without that, all three pairs would dedup into one and the fixture
+///   could not tell dedup from coincidence.
+/// - **Métamorphose on period 2** has no assignment row, so a request naming
+///   it lands in `skipped` rather than raising.
+/// - **Botanique** runs no interrogations: it is out of the default request
+///   altogether, and naming it is one of the refusals.
+/// - **Potions** asks for groups of exactly four, which five students cannot
+///   fill — the infeasible pair the default request offers anyway, exactly as
+///   the application's dialog does.
+/// - « Maisons » is prefilled and serves (period 1, Sortilèges), so the
+///   default keeps it and landing the generation overwrites its association
+///   without deleting it. « Automatique » is the automatic list a request may
+///   not keep.
+fn generation_document(path: &Path) {
+    use collomatique_state_colloscopes::assignments::Assignments;
+    use collomatique_state_colloscopes::group_lists::{
+        GroupList, GroupListFilling, GroupListParameters, GroupLists, PrefilledGroup,
+    };
+    use collomatique_state_colloscopes::ids::Id as _;
+    use collomatique_state_colloscopes::students::{Student, Students};
+    use collomatique_state_colloscopes::subjects::Subjects;
+    use collomatique_state_colloscopes::{
+        Data, GroupListId, InnerData, PeriodId, StudentId, Subject, SubjectId,
+        SubjectInterrogationParameters, SubjectParameters, SubjectPeriodicity,
+    };
+
+    // Ids nothing else in this document issues, like [group_lists_document]'s.
+    let period = |n: u64| unsafe { PeriodId::new(n) };
+    let subject = |n: u64| unsafe { SubjectId::new(n) };
+    let student = |n: u64| unsafe { StudentId::new(n) };
+    let group_list = |n: u64| unsafe { GroupListId::new(n) };
+
+    let periods = vec![period(1), period(2)];
+
+    let colles = |name: &str, sizes: (u32, u32)| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: Some(SubjectInterrogationParameters {
+                students_per_group: nonzero_range(sizes),
+                groups_per_interrogation: nonzero_range((1, 1)),
+                duration: collomatique_time::NonZeroMinutes::new(60).expect("an hour is a while"),
+                take_duration_into_account: true,
+                periodicity: SubjectPeriodicity::ExactlyPeriodic {
+                    periodicity_in_weeks: NonZeroU32::new(1).expect("one is not zero"),
+                },
+            }),
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    // The one subject that runs no colles, and so needs no group list.
+    let lectures = |name: &str| Subject {
+        parameters: SubjectParameters {
+            name: name.to_owned(),
+            interrogation_parameters: None,
+        },
+        excluded_periods: BTreeSet::new(),
+    };
+    // Display order, which is the order a coverage label enumerates.
+    let subjects = vec![
+        (subject(11), colles("Sortilèges", (2, 3))),
+        (subject(12), colles("Métamorphose", (2, 3))),
+        (subject(13), lectures("Botanique")),
+        (subject(14), colles("Potions", (4, 4))),
+    ];
+
+    let named_student = |firstname: &str, surname: &str| Student {
+        desc: person(firstname, surname, None, None),
+        excluded_periods: BTreeSet::new(),
+    };
+    let students = vec![
+        (student(31), named_student("Harry", "Potter")),
+        (student(32), named_student("Hermione", "Granger")),
+        (student(33), named_student("Ron", "Weasley")),
+        (student(34), named_student("Neville", "Londubat")),
+        (student(35), named_student("Luna", "Lovegood")),
+    ];
+
+    let everyone = BTreeSet::from([
+        student(31),
+        student(32),
+        student(33),
+        student(34),
+        student(35),
+    ]);
+    // Luna does not take Sortilèges on the second period, which is what makes
+    // that pair a spec of its own.
+    let without_luna = BTreeSet::from([student(31), student(32), student(33), student(34)]);
+
+    // Two groups of two, and Luna in none of them — a prefilled list's
+    // privilege, and beside the point here: what matters is that it is
+    // prefilled, so the default keeps it and the generator may respect it.
+    let prefilled = GroupList::new(
+        GroupListParameters {
+            name: "Maisons".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![None, None],
+        },
+        GroupListFilling::Prefilled {
+            groups: vec![
+                PrefilledGroup {
+                    students: BTreeSet::from([student(31), student(32)]),
+                },
+                PrefilledGroup {
+                    students: BTreeSet::from([student(33), student(34)]),
+                },
+            ],
+        },
+    )
+    .expect("the prefilled groups match the names and share no student");
+
+    // Associated to nothing: a list nobody uses is an ordinary document, and
+    // this one is here to be refused as a kept list.
+    let automatic = GroupList::new(
+        GroupListParameters {
+            name: "Automatique".to_owned(),
+            students_per_group: nonzero_range((2, 3)),
+            group_names: vec![None, None],
+        },
+        GroupListFilling::Automatic {
+            excluded_students: BTreeSet::new(),
+        },
+    )
+    .expect("an automatic list is always internally consistent");
+
+    let mut inner_data = InnerData::default();
+    inner_data.params.periods =
+        collomatique_state_colloscopes::periods::Periods::from_ordered_ids(None, periods)
+            .expect("the fixture names each period once");
+    inner_data.params.subjects = Subjects {
+        ordered_subject_list: subjects
+            .try_into()
+            .expect("the fixture names each subject once"),
+    };
+    let student_count = students.len();
+    inner_data.params.students = Students {
+        student_map: students.into_iter().collect(),
+    };
+    assert_eq!(
+        inner_data.params.students.student_map.len(),
+        student_count,
+        "the fixture names each student once"
+    );
+
+    inner_data.params.assignments = Assignments {
+        map: [
+            ((period(1), subject(11)), everyone.clone()),
+            ((period(1), subject(12)), everyone.clone()),
+            ((period(1), subject(14)), everyone),
+            ((period(2), subject(11)), without_luna),
+        ]
+        .into_iter()
+        .collect(),
+    };
+
+    inner_data.params.group_lists = GroupLists {
+        group_list_map: [(group_list(51), prefilled), (group_list(52), automatic)]
+            .into_iter()
+            .collect(),
+        subjects_associations: [((period(1), subject(11)), group_list(51))]
+            .into_iter()
+            .collect(),
+    };
+
+    let data = Data::from_inner_data(inner_data).expect("the fixture should be a valid document");
+    let content = collomatique_storage::serialize_data(data.get_inner_data())
+        .expect("the fixture's ids are far below the file-format ceiling");
+    std::fs::write(path, content).expect("the fixture should be writable");
+}
+
+/// The generation fixture, read the way the two generation tests need it
+///
+/// The ids of the entities the scripts name, found by name and by position so
+/// that the fixture may renumber without either test noticing, plus the label
+/// the scripts identify a `(period, subject)` pair by — the period's place in
+/// the document and the subject's name, since an id itself does not cross back.
+struct GenerationFixture {
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
+    periods: Vec<collomatique_state_colloscopes::PeriodId>,
+    subjects: BTreeMap<String, collomatique_state_colloscopes::SubjectId>,
+    group_lists: BTreeMap<String, collomatique_state_colloscopes::GroupListId>,
+}
+
+impl GenerationFixture {
+    fn read(path: &Path) -> GenerationFixture {
+        let params = reload(path).get_inner_data().params.clone();
+
+        let periods = params.periods.period_ids().collect();
+        let subjects = params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .map(|(id, subject)| (subject.parameters.name.clone(), id))
+            .collect();
+        let group_lists = params
+            .group_lists
+            .group_list_map
+            .iter()
+            .map(|(id, group_list)| (group_list.params().name.clone(), id))
+            .collect();
+
+        GenerationFixture {
+            params,
+            periods,
+            subjects,
+            group_lists,
+        }
+    }
+
+    fn subject(&self, name: &str) -> collomatique_state_colloscopes::SubjectId {
+        *self
+            .subjects
+            .get(name)
+            .unwrap_or_else(|| panic!("the fixture holds a subject named {name}"))
+    }
+
+    fn group_list(&self, name: &str) -> collomatique_state_colloscopes::GroupListId {
+        *self
+            .group_lists
+            .get(name)
+            .unwrap_or_else(|| panic!("the fixture holds a group list named {name}"))
+    }
+
+    /// The label the scripts name one pair by
+    fn label(
+        &self,
+        (period, subject): (
+            collomatique_state_colloscopes::PeriodId,
+            collomatique_state_colloscopes::SubjectId,
+        ),
+    ) -> String {
+        let position = self
+            .params
+            .periods
+            .find_period_position(period)
+            .expect("the pair names a period of this document");
+        let name = &self
+            .params
+            .subjects
+            .find_subject(subject)
+            .expect("the pair names a subject of this document")
+            .parameters
+            .name;
+
+        format!("{position}:{name}")
+    }
+
+    fn labels(
+        &self,
+        pairs: &BTreeSet<(
+            collomatique_state_colloscopes::PeriodId,
+            collomatique_state_colloscopes::SubjectId,
+        )>,
+    ) -> Vec<String> {
+        let mut labels: Vec<String> = pairs.iter().map(|&pair| self.label(pair)).collect();
+        labels.sort();
+        labels
+    }
+}
+
+/// A generation, from the default request to the lists it lands
+///
+/// The script drives the three doors — `default_generation_request`,
+/// `generate_group_lists`, `group_lists.add_generated` — and asserts for itself
+/// what it can see: the dedup, the skipped pair, the group sizes, that a
+/// generation writes nothing, that the rename survives to the document, and
+/// that one `undo()` takes all of it back.
+///
+/// What it cannot decide on its own is whether this is really the
+/// application's generation. So rust runs the same three calls on the same
+/// file — the shared default, the same plan, the same greedy, the same
+/// coverage labels — and compares the answers pair for pair. A door that
+/// reimplemented any of it would part company here.
+#[test]
+fn a_generation_runs_from_the_default_request_to_the_landed_lists() {
+    use collomatique_greedy_groups::{
+        GenerationRequest, build_generation_plan, default_generation_request, greedy_group_lists,
+    };
+
+    let dir = workspace("group-lists-generate");
+    let source = dir.join("generation.collomatique");
+    generation_document(&source);
+
+    let globals = run(include_str!("scripts/group_lists_generate.py"), |globals| {
+        globals.set_item("source", &source)?;
+        Ok(())
+    });
+
+    // The script writes nothing back, so the file still holds the fixture the
+    // script read — and the comparison below is against that same document.
+    let fixture = GenerationFixture::read(&source);
+    let params = &fixture.params;
+
+    // The default is the application's, not a second one written for scripts.
+    let default = default_generation_request(params);
+    assert_eq!(
+        global::<Vec<String>>(&globals, "default_pair_labels"),
+        fixture.labels(&default.rebuild)
+    );
+    let mut kept: Vec<String> = default
+        .kept_lists
+        .iter()
+        .map(|id| {
+            params
+                .group_lists
+                .group_list_map
+                .get(id)
+                .expect("the default keeps lists of this document")
+                .params()
+                .name
+                .clone()
+        })
+        .collect();
+    kept.sort();
+    assert_eq!(global::<Vec<String>>(&globals, "default_kept_names"), kept);
+
+    // The fixture is only worth generating on if it has something to say: the
+    // default offers a pair no list can be built for, and holds back the one
+    // « Maisons » already serves.
+    let sortileges = fixture.subject("Sortilèges");
+    let metamorphose = fixture.subject("Métamorphose");
+    let (p1, p2) = (fixture.periods[0], fixture.periods[1]);
+    assert!(default.rebuild.contains(&(p1, fixture.subject("Potions"))));
+    assert!(!default.rebuild.contains(&(p1, sortileges)));
+
+    // The request the script built by hand, and the generation it ran.
+    let request = GenerationRequest {
+        rebuild: BTreeSet::from([
+            (p1, sortileges),
+            (p1, metamorphose),
+            (p2, sortileges),
+            (p2, metamorphose),
+        ]),
+        kept_lists: BTreeSet::from([fixture.group_list("Maisons")]),
+    };
+    let plan = build_generation_plan(params, &request).expect("the request is a buildable one");
+
+    assert_eq!(
+        global::<Vec<String>>(&globals, "skipped_labels"),
+        fixture.labels(&plan.skipped)
+    );
+
+    // Two specs for three buildable pairs, which is the dedup the script pins
+    // from the other side.
+    assert_eq!(plan.specs.len(), 2);
+
+    let names: Vec<String> = plan
+        .specs
+        .iter()
+        .map(|(_spec, covered)| {
+            collomatique_ui_text::rendering::coverage_label(
+                &params.periods,
+                &params.subjects,
+                covered,
+            )
+        })
+        .collect();
+    assert_eq!(global::<Vec<String>>(&globals, "entry_names"), names);
+
+    let entries = greedy_group_lists(&plan, &names);
+    let sizes: Vec<Vec<usize>> = entries
+        .iter()
+        .map(|(group_list, _covered)| {
+            let mut sizes: Vec<usize> = match group_list.filling() {
+                collomatique_state_colloscopes::group_lists::GroupListFilling::Prefilled {
+                    groups,
+                } => groups.iter().map(|group| group.students.len()).collect(),
+                _ => panic!("the generator only ever builds prefilled lists"),
+            };
+            sizes.sort();
+            sizes
+        })
+        .collect();
+    assert_eq!(global::<Vec<Vec<usize>>>(&globals, "entry_sizes"), sizes);
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// Each way a generation can be refused, and the door that refuses it
+///
+/// The script asks for every one of them and keeps the sentence it met. Rust
+/// pins the three the plan raises against the generator's own `Display`, which
+/// is what says the door forwards the message rather than writing one of its
+/// own; the boundary's and the write's the script pins itself, since those are
+/// this module's own sentences and it can read them whole.
+#[test]
+fn a_generation_names_the_door_that_refused_it() {
+    use collomatique_greedy_groups::{GenerationPlanError, GroupListSpecError};
+
+    let dir = workspace("group-lists-generate-errors");
+    let source = dir.join("generation.collomatique");
+    generation_document(&source);
+
+    let globals = run(
+        include_str!("scripts/group_lists_generate_errors.py"),
+        |globals| {
+            globals.set_item("source", &source)?;
+            Ok(())
+        },
+    );
+
+    let fixture = GenerationFixture::read(&source);
+    let messages = global::<BTreeMap<String, String>>(&globals, "messages");
+
+    let sentence = |name: &str| {
+        messages
+            .get(name)
+            .unwrap_or_else(|| panic!("the script meets the `{name}` refusal"))
+            .clone()
+    };
+
+    assert_eq!(
+        sentence("no_interrogations"),
+        GenerationPlanError::SubjectWithoutInterrogations(fixture.subject("Botanique")).to_string()
+    );
+    assert_eq!(
+        sentence("kept_not_prefilled"),
+        GenerationPlanError::KeptListNotPrefilled(fixture.group_list("Automatique")).to_string()
+    );
+    assert_eq!(
+        sentence("unsatisfiable_size"),
+        GenerationPlanError::InvalidSpec(
+            fixture.periods[0],
+            fixture.subject("Potions"),
+            GroupListSpecError::UnsatisfiableSize {
+                students: 5,
+                min: NonZeroU32::new(4).expect("four is not zero"),
+                max: NonZeroU32::new(4).expect("four is not zero"),
+            },
+        )
+        .to_string()
+    );
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
 /// The group lists read back, list by list
@@ -7911,8 +8357,9 @@ fn a_removed_group_list_stales_the_values_that_name_it() {
 /// The group lists are added, rewritten, associated and removed from python
 ///
 /// The twelfth family of the ops mirror: `doc.group_lists` gains `add`,
-/// `update` and `remove` for the lists themselves, and `set_association` and
-/// `duplicate_previous_period` for the table beside them. An `update` carries
+/// `update`, `remove` and `remove_all` for the lists themselves, and
+/// `set_association`, `duplicate_previous_period` and `clear_associations` for
+/// the table beside them. An `update` carries
 /// the whole list, parameters and filling together, because that is what the op
 /// carries — so a filling that changes shape is an ordinary rewrite here.
 ///
@@ -8048,7 +8495,7 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
         .find(|period| **period != cell_period)
         .expect("the example has more than one period");
 
-    // The french labels the six operations carry, so that the script's undo
+    // The french labels the eight operations carry, so that the script's undo
     // assertions pin the operations' own names and not merely some strings.
     // Only the variant — and, for the association, whether it names a list — is
     // read, so the payloads below are the nearest ones to hand.
@@ -8073,6 +8520,8 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
         None,
     ));
     let duplicate_label = label(GroupListsUpdateOp::DuplicatePreviousPeriod(cell_period));
+    let remove_all_label = label(GroupListsUpdateOp::DeleteAllGroupLists);
+    let clear_label = label(GroupListsUpdateOp::ClearPeriodAssociations(cell_period));
 
     // The list the second stage reads: the served one, automatic and otherwise
     // untouched, so that it can hold a placement row at all.
@@ -8105,6 +8554,8 @@ fn group_lists_are_added_rewritten_associated_and_removed() {
             globals.set_item("assign_label", &assign_label)?;
             globals.set_item("unassign_label", &unassign_label)?;
             globals.set_item("duplicate_label", &duplicate_label)?;
+            globals.set_item("remove_all_label", &remove_all_label)?;
+            globals.set_item("clear_label", &clear_label)?;
             Ok(())
         },
         |py, globals| {
@@ -11924,7 +12375,7 @@ fn the_export_configuration_comes_back_detached() {
     );
 
     // The defaults: every section the model's own — the six section-level
-    // builders of §3.9, the three per-student-groups constructors included,
+    // builders, the three per-student-groups constructors included,
     // and the whole tree — pinned so the python side cannot drift.
     assert_eq!(
         extracted::<ExportGlobalConfigData>(&globals, "defaults_global"),
@@ -12943,13 +13394,13 @@ fn a_removed_entity_makes_its_referenced_by_raise() {
 
 /// A document exercising every section of the snapshot, written to `path`
 ///
-/// The completeness check of the whole milestone needs a document that has
-/// something in every section: both shapes of every optional field, stored
-/// rows in both junction tables, a filled colloscope, and non-default
-/// settings, balancing and export configuration. The ids are picked by hand
-/// the way `refs_document` does, every reference stays live, and every stored
-/// row keeps off the pairs its subject or its students exclude — so the
-/// document passes `Data::from_inner_data` on the way in.
+/// The completeness check needs a document that has something in every
+/// section: both shapes of every optional field, stored rows in both junction
+/// tables, a filled colloscope, and non-default settings, balancing and export
+/// configuration. The ids are picked by hand the way `refs_document` does,
+/// every reference stays live, and every stored row keeps off the pairs its
+/// subject or its students exclude — so the document passes
+/// `Data::from_inner_data` on the way in.
 fn snapshot_document(path: &Path) {
     use collomatique_state_colloscopes::assignments::Assignments;
     use collomatique_state_colloscopes::balancing::{Balancing, BalancingOptions};
@@ -13518,13 +13969,12 @@ fn snapshot_document(path: &Path) {
 
 /// The snapshot holds the whole document, section by section
 ///
-/// The tree `doc.snapshot()` hands out is the value milestone's payoff: the
-/// same conversion `to_data()` is, run over everything at once. Rust extracts
-/// the tree the script left behind and compares it with the document read
-/// straight from the model — the completeness check of the whole milestone in
-/// one assertion, since every section must come back exactly for the two to
-/// be equal. A field this document's own design forgot would fail here even
-/// if no test ever named it.
+/// The tree `doc.snapshot()` hands out is the same conversion `to_data()` is,
+/// run over everything at once. Rust extracts the tree the script left behind
+/// and compares it with the document read straight from the model — the whole
+/// completeness check in one assertion, since every section must come back
+/// exactly for the two to be equal. A field the tree forgot would fail here
+/// even if no test ever named it.
 #[test]
 fn the_snapshot_holds_the_whole_document() {
     let dir = workspace("snapshot");
@@ -13545,7 +13995,7 @@ fn the_snapshot_holds_the_whole_document() {
     assert_eq!(extracted::<DocumentData>(&globals, "tree"), *inner);
 
     // The handle- and id-keyed spellings of one tree extract to the same
-    // document — the §2.3 rule at tree scale.
+    // document — the handle-or-id rule at tree scale.
     assert_eq!(
         extracted::<DocumentData>(&globals, "by_handles"),
         extracted::<DocumentData>(&globals, "by_ids"),
@@ -13656,7 +14106,7 @@ fn the_snapshot_holds_the_whole_document() {
 
 /// A whole tree goes back in, as one step
 ///
-/// The coarse door of §8. The script's own assertions cover the shape of the
+/// The coarse door. The script's own assertions cover the shape of the
 /// call — the undo slot, the empty warnings, the refusals — and rust holds the
 /// two halves a script cannot see: that the document it saved really is the
 /// tree it handed over, field for field, and that a refused tree names *every*
@@ -13776,7 +14226,7 @@ fn a_document_exports_to_a_spreadsheet() {
 /// The solve configuration crosses the boundary whole, and refuses what means
 /// nothing
 ///
-/// The vocabulary of §10, extracted the way `build_colloscope_model` will
+/// The whole vocabulary, extracted the way `build_colloscope_model` will
 /// extract it. The document is the two-filling fixture because both shapes are
 /// needed here: the automatic list is what a config speaks about, and naming
 /// the prefilled one is one of the three refusals this class makes.
@@ -14033,7 +14483,7 @@ fn refused_strategy(globals: &Py<PyDict>, name: &str) -> (String, String) {
 /// The conductor strategy crosses the boundary whole, and refuses what means
 /// nothing
 ///
-/// The vocabulary of §13, extracted the way `model.solve` will extract it. No
+/// The whole vocabulary, extracted the way `model.solve` will extract it. No
 /// document is opened: a strategy says how a solve is run and names no entity,
 /// which is exactly why this family is the one that is not a `Value`.
 #[test]
@@ -14064,6 +14514,7 @@ fn the_conductor_strategy_crosses_the_boundary() {
             warm_start_config: Some(WarmStartConfig::default()),
             incremental_config: Some(IncrementalConfig::default()),
             fuzzy_config: Some(FuzzyConfig::default()),
+            warm_start_incumbent: true,
         }
     );
 
@@ -14102,6 +14553,9 @@ fn the_conductor_strategy_crosses_the_boundary() {
             time_limit: TimeLimit::none(),
             incumbent_time_limit: seconds(7),
         }),
+        // The one field the presets never exercise the other way round, so the
+        // spelled-out strategy is where the non-default value is read.
+        warm_start_incumbent: false,
     };
     assert_eq!(strategy(&globals, "spelled_out"), spelled_out);
 
@@ -14259,7 +14713,8 @@ fn the_conductor_warnings_are_preflight() {
     assert_eq!(
         global::<Vec<String>>(&globals, "optimize_names"),
         optimize
-            .warnings()
+            // As the script sees them: no solution is handed to a scripted solve.
+            .warnings(false)
             .into_iter()
             .map(named)
             .collect::<Vec<_>>(),

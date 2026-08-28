@@ -171,9 +171,9 @@ impl ExportConfig {
     /// section as it stands, to hand back with one field changed.
     fn set_global(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5). No value of this family names
-        // one, but the order is the boundary's and not each value's.
+        // an entity is resolved against this document, which borrows it to ask.
+        // No value of this family names one, but the order is the boundary's
+        // and not each value's.
         let config = ExportGlobalConfigData::from_py(&self.doc, data)?;
 
         self.write(

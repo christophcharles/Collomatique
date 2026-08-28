@@ -76,12 +76,10 @@ impl Students {
     }
 }
 
-/// Precondition errors of the forced student ops — the carve-out subset
-/// (step-3 survey Table 2, pinned `git show 26d88024:docs/plans/plan_step_3.md`).
+/// Precondition errors of the forced student ops — the carve-out subset.
 ///
-/// This is the error surface that survives step 5: [crate::Data::force_apply]
-/// keeps only the transition/input guards (no-clobber, op-target existence) and
-/// strips every invariant guard.
+/// [crate::Data::force_apply] keeps only the transition/input guards
+/// (no-clobber, op-target existence) and strips every invariant guard.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum StudentPrecheckError {
     /// A student id is invalid
@@ -97,8 +95,8 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies a student op: carve-out guards kept (returned as
-    /// [StudentPrecheckError]), invariant guards stripped (step-3 survey Table 1).
-    /// May leave the state invalid; the caller owns checking and rollback.
+    /// [StudentPrecheckError]), invariant guards stripped. May leave the state
+    /// invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_student(
         &mut self,
         student_op: &AnnotatedStudentOp,

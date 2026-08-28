@@ -57,6 +57,7 @@ use collomatique_state_colloscopes::{
     GroupListId, IncompatId, PairingRuleId, PeriodId, SlotId, SlotPairingRuleId, StudentId,
     SubjectId, TeacherId, WeekId, WeekPatternId,
 };
+use std::collections::BTreeSet;
 
 use thiserror::Error;
 
@@ -392,18 +393,63 @@ pub fn join_french(items: &[String]) -> String {
     }
 }
 
+/// What one generated group list covers — « Sortilèges (période 1) »,
+/// « Sortilèges et Métamorphose (périodes 1 et 2) » — and therefore its
+/// default name: distinct specs cover disjoint pair sets, so these labels
+/// are unique. Subjects come out in document display order, periods as their
+/// 1-based positions in it.
+///
+/// The two exceptions to the module's rules, both because this is a *name*
+/// and not material for a caller's sentence. It carries its own noun
+/// («période»), being complete on its own; and it is infallible, because it
+/// renders a *set* by filtering the two tables — an id the tables do not hold
+/// is simply not printed, and the pairs come out of a generation plan built
+/// against these very parameters, where every id holds.
+pub fn coverage_label(
+    periods: &Periods,
+    subjects: &Subjects,
+    covered: &BTreeSet<(PeriodId, SubjectId)>,
+) -> String {
+    let subject_ids: BTreeSet<SubjectId> = covered.iter().map(|&(_, subject)| subject).collect();
+    let period_ids: BTreeSet<PeriodId> = covered.iter().map(|&(period, _)| period).collect();
+
+    let subject_names: Vec<String> = subjects
+        .ordered_subject_list
+        .iter()
+        .filter(|(id, _subject)| subject_ids.contains(id))
+        .map(|(_id, subject)| subject.parameters.name.clone())
+        .collect();
+
+    // Periods have no name: the 1-based position is what the whole UI shows.
+    let period_positions: Vec<String> = periods
+        .period_ids()
+        .enumerate()
+        .filter(|(_pos, id)| period_ids.contains(id))
+        .map(|(pos, _id)| (pos + 1).to_string())
+        .collect();
+
+    let period_part = if period_positions.len() == 1 {
+        format!("période {}", period_positions[0])
+    } else {
+        format!("périodes {}", join_french(&period_positions))
+    };
+
+    format!("{} ({})", join_french(&subject_names), period_part)
+}
+
 #[cfg(test)]
 mod tests {
-    //! The two branchy leaves of this module.
+    //! The three branchy leaves of this module.
     //!
     //! Everything else here is one lookup and one `format!`, and the property
     //! walk (`tests/property_update_ops.rs`) drives all of them at full width
     //! through the warning texts — what it cannot do is *choose* the shapes,
-    //! and these two have shapes worth choosing. [join_french] has three, and
+    //! and these three have shapes worth choosing. [join_french] has three, and
     //! [render_period] has six: a period spanning several weeks, a period
     //! spanning one (the singular « semaine {n} »), and an empty one (« (vide) »,
     //! which must win over everything else), each with and without a document
-    //! start date.
+    //! start date. [coverage_label] has the singular and the plural of
+    //! « période », and an ordering of its own to keep.
     //!
     //! Deliberately no French text pins beyond these: with typed ids a
     //! cross-field mix-up does not compile, and pinning wording would only
@@ -413,7 +459,10 @@ mod tests {
     use collomatique_state::AppState;
     use collomatique_state::traits::Manager;
     use collomatique_state_colloscopes::colloscope_params::Parameters;
-    use collomatique_state_colloscopes::{Data, NewId, Op, PeriodOp, WeekOp, weeks::WeekDesc};
+    use collomatique_state_colloscopes::subjects::{Subject, SubjectParameters};
+    use collomatique_state_colloscopes::{
+        Data, NewId, Op, PeriodOp, SubjectOp, WeekOp, weeks::WeekDesc,
+    };
 
     /// A stand-in for `collomatique_ops`'s description types
     ///
@@ -475,6 +524,35 @@ mod tests {
         (state.get_data().clone(), periods)
     }
 
+    /// Two named subjects over the periods of [three_periods], returned in
+    /// document display order.
+    ///
+    /// They are added back to front, so that display order and id order
+    /// disagree: a [coverage_label] built from the ids alone would answer
+    /// « Métamorphose et Sortilèges ».
+    fn periods_and_subjects() -> (Data, Vec<PeriodId>, Vec<SubjectId>) {
+        let (data, periods) = three_periods(None);
+        let mut state = AppState::<_, Desc>::new(data);
+
+        let mut subjects = Vec::new();
+        for name in ["Métamorphose", "Sortilèges"] {
+            let subject = Subject {
+                parameters: SubjectParameters {
+                    name: name.to_string(),
+                    ..Default::default()
+                },
+                ..Default::default()
+            };
+            match state.apply(Op::Subject(SubjectOp::AddAfter(None, subject)), desc()) {
+                Ok(Some(NewId::SubjectId(id))) => subjects.push(id),
+                other => panic!("adding a subject should return a subject id, got {other:?}"),
+            }
+        }
+        subjects.reverse();
+
+        (state.get_data().clone(), periods, subjects)
+    }
+
     /// Monday 31 August 2026 — the document's first week.
     fn start_date() -> collomatique_time::WeekStart {
         collomatique_time::WeekStart::new(
@@ -533,6 +611,41 @@ mod tests {
         assert_eq!(
             render_period(&params.periods, &params.weeks, periods[2]),
             Ok("3 (vide)".to_string())
+        );
+    }
+
+    #[test]
+    fn coverage_label_of_a_single_pair_is_singular() {
+        let (data, periods, subjects) = periods_and_subjects();
+        let params = params(&data);
+
+        assert_eq!(
+            coverage_label(
+                &params.periods,
+                &params.subjects,
+                &BTreeSet::from([(periods[0], subjects[0])]),
+            ),
+            "Sortilèges (période 1)",
+        );
+    }
+
+    #[test]
+    fn coverage_label_enumerates_both_halves_in_document_order() {
+        let (data, periods, subjects) = periods_and_subjects();
+        let params = params(&data);
+
+        // Both subjects on both of the first two periods: four pairs, each
+        // half enumerated once, and the plural of « période ».
+        let covered = BTreeSet::from([
+            (periods[1], subjects[1]),
+            (periods[0], subjects[0]),
+            (periods[0], subjects[1]),
+            (periods[1], subjects[0]),
+        ]);
+
+        assert_eq!(
+            coverage_label(&params.periods, &params.subjects, &covered),
+            "Sortilèges et Métamorphose (périodes 1 et 2)",
         );
     }
 

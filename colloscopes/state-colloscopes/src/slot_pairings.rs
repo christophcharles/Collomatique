@@ -244,8 +244,8 @@ impl<'a> JoinedSlotPairingRule<'a> {
     }
 }
 
-/// Precondition errors of the forced slot-pairing ops — the carve-out subset
-/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
+/// Precondition errors of the forced slot-pairing ops — the carve-out subset.
+/// Only no-clobber and op-target existence survive;
 /// `validate_slot_pairing_rule` is stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum SlotPairingPrecheckError {
@@ -259,9 +259,8 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies a slot pairing op: carve-out guards kept (returned
-    /// as [SlotPairingPrecheckError]), invariant guards stripped (step-3 survey
-    /// Table 1). May leave the state invalid; the caller owns checking and
-    /// rollback.
+    /// as [SlotPairingPrecheckError]), invariant guards stripped. May leave the
+    /// state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_slot_pairing(
         &mut self,
         slot_pairing_op: &AnnotatedSlotPairingOp,

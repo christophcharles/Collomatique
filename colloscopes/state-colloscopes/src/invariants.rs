@@ -1,7 +1,7 @@
 //! Invariant vocabulary for the precise whole-model checker.
 //!
 //! This module defines *what can be broken*, in three kinds, classified
-//! mechanically (plan §3, pinned at `git show 49b4f77d:docs/plans/plan_step_2.md`):
+//! mechanically:
 //!
 //! - [FixableInvariant::DanglingFk] — the edge is in the refs registry
 //!   ([crate::InnerData::for_each_reference]) and its target id does not
@@ -48,8 +48,7 @@
 //! row is downstream data, so clearing one cannot invalidate an association.
 //!
 //! That is a judgement about this pair, and about the sentences it produces —
-//! not a principle the rest of the order was derived from. Every other
-//! placement is as it was declared at step 6.
+//! not a principle the rest of the order was derived from.
 //!
 //! The checker ([crate::InnerData]`::broken_invariants`) lives here too, in
 //! three layers: the logic-error sweep (layer A, the `Err` path), the
@@ -57,10 +56,10 @@
 //! last two together forming the `Ok` payload. Layer C skips a predicate
 //! whenever an FK *lookup it needs to read data* fails (the matching layer-B
 //! [FixableInvariant::DanglingFk] already reports that dangle); an id used only
-//! as a compared value does not gate. Where the old first-error checker
-//! fail-fasts, layer C accumulates, so every broken row surfaces.
+//! as a compared value does not gate. Layer C accumulates, so every broken row
+//! surfaces.
 //!
-//! ## Deliberate non-checks (confirmed in the step-3 completeness audit)
+//! ## Deliberate non-checks
 //!
 //! - An [crate::incompats::Incompatibility]'s subject is *not* required to run
 //!   interrogations (see the `subject_id` field docs for why) — the one
@@ -170,8 +169,8 @@ pub enum LogicError {
 }
 
 /// A predicate over *existing* edges that legitimate ops can break indirectly —
-/// see the module docs for the classification rule. The step-6 cascade resolves
-/// these lossily (clear the now-invalid data). Every predicate skips when a
+/// see the module docs for the classification rule. The cascade resolves these
+/// lossily (clear the now-invalid data). Every predicate skips when a
 /// prerequisite reference dangles: the [FixableInvariant::DanglingFk] entry
 /// already reports that.
 ///
@@ -267,8 +266,8 @@ pub enum Convergence {
 }
 
 /// A broken invariant the *data* is responsible for — the `Ok` payload of the
-/// checker. Fixed by removing or clearing the referencing data; the step-6
-/// cascade's resolution map is total over this type, so every consumer matches
+/// checker. Fixed by removing or clearing the referencing data; the cascade's
+/// resolution map is total over this type, so every consumer matches
 /// both variants exhaustively (no variant is "the panicking one").
 ///
 /// [FixableInvariant::DanglingFk] is declared first so that when a row is both
@@ -316,9 +315,9 @@ impl crate::InnerData {
     /// elementary op can reach (see [LogicError] for the classification rule).
     /// Each check is decidable from a row's own value (or, for the duplicate-id
     /// sweep, whole-document id uniqueness), so no reference-resolution guard is
-    /// needed and the sweep is exhaustive: unlike the old first-error checker,
-    /// every broken row is reported, and both prefill predicates can fire on the
-    /// same group list. A non-empty result short-circuits [Self::broken_invariants]
+    /// needed and the sweep is exhaustive: every broken row is reported, and
+    /// both prefill predicates can fire on the same group list. A non-empty
+    /// result short-circuits [Self::broken_invariants]
     /// as `Err` — a logic error undermines the meaningfulness of the fixable sweep.
     fn logic_errors(&self) -> BTreeSet<LogicError> {
         let mut errors = BTreeSet::new();
@@ -478,9 +477,8 @@ impl crate::InnerData {
     /// it needs to *read data* fails: the matching [FixableInvariant::DanglingFk]
     /// entry already reports that dangle, so layers B and C coexist. An id used
     /// only as a *compared value* does not gate — e.g. the teacher-teaches check
-    /// runs even when the slot's subject id dangles. Unlike the old first-error
-    /// checker this sweep accumulates: every broken row (and every true
-    /// predicate on a row) is reported.
+    /// runs even when the slot's subject id dangles. This sweep accumulates:
+    /// every broken row (and every true predicate on a row) is reported.
     fn convergence_breaks(&self) -> BTreeSet<Convergence> {
         let mut out = BTreeSet::new();
         let params = &self.params;
@@ -569,9 +567,7 @@ impl crate::InnerData {
         }
 
         // ---- Association rows: the subject runs interrogations and is not
-        // excluded on the period. Mirrors what the retired
-        // `check_group_lists_data_consistency` checked; both predicates
-        // accumulate (the old checker stopped at the first).
+        // excluded on the period. Both predicates accumulate.
         for ((period_id, subject_id), _group_list_id) in
             params.group_lists.subjects_associations.iter()
         {
@@ -674,8 +670,8 @@ impl crate::InnerData {
                 ));
             }
 
-            // A dangling week pattern counts as "no exclusion" (`is_week_active`),
-            // matching the old checker; layer B reports the dangle itself.
+            // A dangling week pattern counts as "no exclusion"
+            // (`is_week_active`); layer B reports the dangle itself.
             if period.is_some()
                 && let Some((_, slot_desc)) = slot
                 && !params.is_week_active(week_id, slot_desc.week_pattern)
@@ -683,9 +679,8 @@ impl crate::InnerData {
                 out.insert(Convergence::InterrogationOnInactiveWeek(slot_id, week_id));
             }
 
-            // Group-number bound. A missing association means bound 0 (the old
-            // code's `.unwrap_or(0)`); an association to a *dangling* group
-            // list is skipped — the old code `.expect`ed it live, we cannot.
+            // Group-number bound. A missing association means bound 0; an
+            // association to a *dangling* group list is skipped.
             if let (Some(period_id), Some((subject_id, _))) = (period, slot) {
                 let bound = match params
                     .group_lists
@@ -789,9 +784,7 @@ pub(crate) mod tests {
     }
 
     /// Shorthand for [crate::InnerData::broken_invariants]: every fixture below
-    /// asserts on the checker through this wrapper. (Until step-5 R1.5 it also
-    /// ran the old-vs-new differential on each fixture's state; the old checker
-    /// retired with step 5.)
+    /// asserts on the checker through this wrapper.
     fn broken_invariants(
         data: &InnerData,
     ) -> Result<BTreeSet<FixableInvariant>, BTreeSet<LogicError>> {
@@ -959,7 +952,7 @@ pub(crate) mod tests {
     #[test]
     fn dangling_slots_in_slot_pairing_yield_distinct_sites() {
         // Both parts forged: the antecedent and consequent slots dangle at
-        // *distinct* sites (D6 — the two-sided row doubles as a site-split pin).
+        // *distinct* sites — the two-sided row doubles as a site-split pin.
         let mut data = InnerData::default();
         let rule = unsafe { SlotPairingRuleId::new(1) };
         let slot_a = unsafe { SlotId::new(2) };
@@ -1251,8 +1244,8 @@ pub(crate) mod tests {
 
     #[test]
     fn btreeset_first_picks_the_precise_fix() {
-        // The §2.3 rationale: a row both dangling and convergence-broken —
-        // min() must surface the row-removal fix.
+        // A row both dangling and convergence-broken — min() must surface the
+        // row-removal fix.
         let dangling = FixableInvariant::DanglingFk(Reference::GroupList {
             target: unsafe { GroupListId::new(1) },
             site: GroupListRefSite::ColloscopeGroupListKey,
@@ -2050,7 +2043,7 @@ pub(crate) mod tests {
     #[test]
     fn association_row_accumulates_both_breaks() {
         // Off subject that *also* excludes the period: both association
-        // predicates fire (the old checker stopped at the first).
+        // predicates fire.
         let mut data = InnerData::default();
         let period = unsafe { PeriodId::new(1) };
         let week = unsafe { WeekId::new(2) };
@@ -2674,13 +2667,11 @@ pub(crate) mod tests {
 
     // ---- Stage 7: per-site dangling coverage ----
     //
-    // One single-corruption fixture per DanglingFk site not already exercised by
-    // a stage-3/5 fixture, each pinning the exact new-checker output. (Until
-    // step-5 R1.5 these fixtures also pinned the old checker's first error per
-    // site — the operational proof of the legacy-bridge tables; that half
-    // retired with the old checker.) `Period@WeekPeriodFk` became representable
-    // when the force path dropped the `PeriodStillHasWeeks` guard, so it has a
-    // fixture (`dangling_period_from_forced_removal_is_reported`).
+    // One single-corruption fixture per DanglingFk site not already exercised
+    // by a stage-3/5 fixture, each pinning the exact checker output.
+    // `Period@WeekPeriodFk` became representable when the force path dropped the
+    // `PeriodStillHasWeeks` guard, so it has a fixture
+    // (`dangling_period_from_forced_removal_is_reported`).
 
     /// Asserts that `data` has exactly the one dangling reference `reference`.
     #[track_caller]

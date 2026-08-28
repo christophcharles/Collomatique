@@ -1,11 +1,10 @@
 //! Running a solve, as a script drives it
 //!
-//! §13 of `docs/python/new_api_design.md` is the design. What lives here is
-//! everything about *running* a solve rather than about the document a solve
-//! recomputes: the two presets the strategy's classmethods answer, the
-//! warnings a strategy is looked over for before it is handed to anything, and
-//! the run itself — the handle on a live engine, what it reports while it
-//! works, and what it produced when it is over.
+//! What lives here is everything about *running* a solve rather than about the
+//! document a solve recomputes: the two presets the strategy's classmethods
+//! answer, the warnings a strategy is looked over for before it is handed to
+//! anything, and the run itself — the handle on a live engine, what it reports
+//! while it works, and what it produced when it is over.
 //!
 //! The strategy value itself is in `data.rs`, with the other value classes —
 //! it is written in python, like all of them, and this module only says what
@@ -161,7 +160,10 @@ fn _conductor_warnings<'py>(
     PyTuple::new(
         py,
         strategy
-            .warnings()
+            // A script's solve never hands the conductor a ready-made solution to start from
+            // (`StrategySubprocess::spawn` below passes no warm start), so the warnings are the
+            // ones of a strategy running on its own.
+            .warnings(false)
             .into_iter()
             .map(ConductorWarning::from_model),
     )

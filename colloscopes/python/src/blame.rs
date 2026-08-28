@@ -7,12 +7,11 @@
 //!
 //! A violation is **not** a structured mirror of the model's own constraint
 //! descriptions. Publishing those would make the internal vocabulary of
-//! `constraints-colloscopes` public API — the same reason §10.2 of
-//! `docs/python/new_api_design.md` keeps the model itself opaque — and a
-//! rename over there would then break scripts. What crosses is a severity a
-//! script can compare and sort on, and a sentence it can print.
+//! `constraints-colloscopes` public API — the same reason the model itself is
+//! opaque — and a rename over there would then break scripts. What crosses is
+//! a severity a script can compare and sort on, and a sentence it can print.
 //!
-//! Both classes are rust classes rather than the `.py` dataclasses of §2, for
+//! Both classes are rust classes rather than `.py` dataclasses, for
 //! [crate::caveats]'s reason: they are flat, immutable, and only ever travel
 //! *out* of rust.
 

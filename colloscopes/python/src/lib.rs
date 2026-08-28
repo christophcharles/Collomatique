@@ -1,9 +1,7 @@
 //! The `collomatique` python module
 //!
-//! This crate is the new scripting API described in
-//! `docs/python/new_api_design.md`. Running an interpreter is
-//! `collomatique-python-runner`'s job; this crate only defines what the module
-//! contains.
+//! Running an interpreter is `collomatique-python-runner`'s job; this crate
+//! only defines what the module contains.
 
 use pyo3::prelude::*;
 
@@ -15,6 +13,7 @@ pub mod dialogs;
 pub mod document;
 pub mod engine;
 pub mod errors;
+pub mod generation;
 pub mod handles;
 pub mod host;
 pub mod ids;
@@ -47,6 +46,7 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
     data::register(m)?;
     dialogs::register(m)?;
     errors::register(m)?;
+    generation::register(m)?;
     host::register(m)?;
     ids::register(m)?;
     model::register(m)?;

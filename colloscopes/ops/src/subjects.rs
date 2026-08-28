@@ -809,14 +809,13 @@ mod tests {
         );
     }
 
-    /// The step's second divergence from the old world. A Potions colle lasts
-    /// an hour today; stretched to five and a half, the one starting at 19:00
-    /// would run past midnight — `Convergence::SlotOverflowsDay`. The slot is
-    /// pre-existing material, so the map answers with
-    /// [Fix::DeleteOverflowingSlot] (its own meaning: « il déborderait sur le
-    /// jour suivant », not a plain deletion) and the update lands. The old body
-    /// had no answer for it at all and died on `.expect("All data should be
-    /// valid at this point")`.
+    /// A divergence from the old world. A Potions colle lasts an hour today;
+    /// stretched to five and a half, the one starting at 19:00 would run past
+    /// midnight — `Convergence::SlotOverflowsDay`. The slot is pre-existing
+    /// material, so the map answers with [Fix::DeleteOverflowingSlot] (its own
+    /// meaning: « il déborderait sur le jour suivant », not a plain deletion)
+    /// and the update lands. The old body had no answer for it at all and died
+    /// on `.expect("All data should be valid at this point")`.
     ///
     /// The three other Potions slots start early enough to fit, which is what
     /// makes this a choice rather than a sweep.

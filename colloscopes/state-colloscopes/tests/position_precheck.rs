@@ -5,8 +5,7 @@
 //! their entity's `PositionOutOfBounds`. When the op is *doubly* bad — a
 //! dangling target **and** an impossible position — the diagnostic the user
 //! needs is the dangling target: the position is meaningless for an entity
-//! that is not there. These tests pin that order for each entity (the subject
-//! op had it backwards until the pre-step-7 review unified the family).
+//! that is not there. These tests pin that order for each entity.
 
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{

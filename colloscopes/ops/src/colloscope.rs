@@ -95,11 +95,10 @@ pub enum UpdateColloscopeGroupListError {
     /// in it and holds no row for it.
     ///
     /// A restored error, not a new one: the old checked apply rejected such a
-    /// write outright (as the overloaded [Self::InvalidGroupListId]) until
-    /// step 4's `force_apply` copies dropped the guard by design, after which
-    /// the condition became a plain invariant break that nothing in `colloscopes/ops/`
-    /// named — so the op panicked instead. Emitted by `apply_to_session` only;
-    /// the old `apply_no_cleaning` keeps the panic and dies with it.
+    /// write outright (as the overloaded [Self::InvalidGroupListId]) until the
+    /// `force_apply` copies dropped the guard by design, after which the
+    /// condition became a plain invariant break that nothing in
+    /// `colloscopes/ops/` named — so the op panicked instead.
     #[error("group list {0:?} is prefilled and has no colloscope row")]
     PrefilledGroupListInColloscope(collomatique_state_colloscopes::GroupListId),
 }
@@ -233,9 +232,9 @@ impl ColloscopeUpdateOp {
                                 // leaves no row to clear, so it answers nothing
                                 // and the target is convicted. Until this scan
                                 // the break reached the catch-all below and the
-                                // op died there; it is the guard step 4 dropped
-                                // from `force_apply_colloscope`, restored here
-                                // under a name of its own (D5's growth rule).
+                                // op died there; it is the guard
+                                // `force_apply_colloscope` dropped, restored
+                                // here under a name of its own.
                                 for inv in set {
                                     if let FixableInvariant::Convergence(
                                         Convergence::ColloscopeGroupListPrefilled(group_list),
@@ -278,10 +277,10 @@ impl ColloscopeUpdateOp {
                                     }
                                 }
                                 // The four scans above cover every break a
-                                // SetGroupList can cause, so this is the
-                                // instrument H.2 describes rather than a hole:
-                                // reaching it means the checker grew a case the
-                                // vocabulary has no word for.
+                                // SetGroupList can cause, so this is an
+                                // instrument rather than a hole: reaching it
+                                // means the checker grew a case the vocabulary
+                                // has no word for.
                                 panic!("Unexpected invariant breaks during UpdateColloscopeGroupList: {set:?}");
                             }
                             _ => panic!("Unexpected error during UpdateColloscopeGroupList: {e:?}"),
@@ -613,10 +612,10 @@ impl ColloscopeUpdateOp {
                                         }
                                     }
                                     // The four scans above cover every break a
-                                    // SetGroupList can cause, so this is the
-                                    // instrument H.2 describes rather than a
-                                    // hole: reaching it means the checker grew a
-                                    // case the vocabulary has no word for.
+                                    // SetGroupList can cause, so this is an
+                                    // instrument rather than a hole: reaching it
+                                    // means the checker grew a case the
+                                    // vocabulary has no word for.
                                     panic!("Unexpected invariant breaks during InstallColloscope group-list write: {set:?}");
                                 }
                                 _ => panic!("Unexpected error during InstallColloscope group-list write: {e:?}"),
@@ -1136,14 +1135,6 @@ mod tests {
     /// colloscope to store, so a row aimed at one is refused — and refused
     /// *first*, before any of the three placement scans, since the placements
     /// are beside the point once the target is the wrong kind of list.
-    ///
-    /// This is where the old world's guard sat, in both bodies that had one
-    /// (`git show 56510199^:state-colloscopes/src/colloscopes.rs`, ~`:361` and
-    /// `:206`), and `colloscopes/ops/` used to translate it — as the overloaded
-    /// `InvalidGroupListId`, but translate it. Step 4's `force_apply` copies
-    /// dropped the guard by design and the condition became a plain invariant
-    /// break that no scan named, so the op has panicked ever since. The pin
-    /// restores the answer with a name of its own.
     ///
     /// Hogwarts's own two lists are both prefilled, so no setup is needed:
     /// « Liste principale » is the shape this is about.

@@ -28,7 +28,7 @@ use crate::periods::Periods;
 /// Row-key *liveness* (the period exists) is deliberately not part of these
 /// `LogicError`s: a row keyed by a removed period is the op-reachable dangling
 /// state, reported as `DanglingFk` through the per-week `WeekPeriodFk` sites
-/// and repaired by the cascade (design doc Appendix F.4).
+/// and repaired by the cascade.
 ///
 /// All mutation goes through the compound `pub(crate)` helpers below so no
 /// call site can desynchronize the two structures. The fields are private:
@@ -520,12 +520,12 @@ impl Weeks {
     }
 }
 
-/// Precondition errors of the forced week ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber, op-target existence
+/// Precondition errors of the forced week ops — the carve-out subset. Kept:
+/// no-clobber, op-target existence
 /// ([Self::InvalidWeekId]), destination-period existence for add/move
 /// ([Self::InvalidPeriodId]), and position bounds. The Remove reference scans,
-/// the Update silencing guard, and both `WeekMove` semantic guards (the F2
-/// inline re-implementations) are stripped.
+/// the Update silencing guard, and both `WeekMove` semantic guards (the inline
+/// re-implementations) are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum WeekPrecheckError {
     /// A period id is invalid
@@ -554,9 +554,8 @@ impl crate::Data {
     ///
     /// Force-applies a week op: carve-out guards kept (returned as
     /// [WeekPrecheckError] — no-clobber, target existence, destination-period
-    /// existence, position bounds), invariant guards stripped (step-3 survey
-    /// Table 1). May leave the state invalid; the caller owns checking and
-    /// rollback.
+    /// existence, position bounds), invariant guards stripped. May leave the
+    /// state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_week(
         &mut self,
         week_op: &AnnotatedWeekOp,
@@ -687,7 +686,7 @@ impl crate::Data {
 
     /// Force-applies a week move: target existence, destination-period
     /// existence and position bounds kept; both `WeekMove` semantic guards (the
-    /// F2 inline re-implementations) stripped.
+    /// inline re-implementations) stripped.
     fn force_move_week(
         &mut self,
         week_id: WeekId,
@@ -729,7 +728,7 @@ impl crate::Data {
         }
 
         // stripped: the per-row colloscope compatibility guard (subject-runs +
-        // group-bound, the F2 inline re-implementations)
+        // group-bound, the inline re-implementations)
 
         self.inner_data
             .params

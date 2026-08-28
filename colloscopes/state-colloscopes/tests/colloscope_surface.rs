@@ -1,4 +1,4 @@
-//! Tests for the sparse colloscope surface (1d prep, commit D0).
+//! Tests for the sparse colloscope surface.
 //!
 //! The surface (`Colloscope::interrogation` / `iter` / `group_list` / the
 //! `set_*` writers) presents the *canonical sparse view* over the dense

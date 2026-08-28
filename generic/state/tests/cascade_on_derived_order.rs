@@ -2,9 +2,8 @@
 //!
 //! `derive_content_ord.rs` checks what the macro generates. This file checks
 //! that a derived order actually drives [apply_cascade] — the derive, the
-//! container blankets, the `Fixable` bound and (once commit 5 lands) the
-//! in-loop strictly-below check working together, with no
-//! `state-colloscopes` involvement.
+//! container blankets, the `Fixable` bound and the in-loop strictly-below
+//! check working together, with no `state-colloscopes` involvement.
 //!
 //! The toy is deliberately isomorphic to `QuoteData` in
 //! `generic/state/src/test_utils.rs`, so the expected cascade behavior is already
@@ -166,12 +165,9 @@ impl Fixable for LibraryData {
 
 /// The same data with a *growing* resolution map: it "fixes" a dangling book
 /// by inventing the missing author. Every op it returns lands strictly
-/// **above** the pre-fix state, which is exactly the violation step 6.5
-/// exists to catch — without the in-loop check it is an infinite loop, not a
-/// failure.
-///
-/// Commit 5 adds the panic test that drives it; the type lives here from
-/// commit 2 so both commits touch one file.
+/// **above** the pre-fix state, which is exactly the violation the in-loop
+/// strictly-below check exists to catch — without it this is an infinite
+/// loop, not a failure.
 #[derive(Clone, Debug, PartialEq, Eq, ContentOrd)]
 struct GrowingLibraryData {
     inner: LibraryData,
@@ -246,8 +242,8 @@ fn a_cascade_repairs_through_a_derived_order() {
 
 #[test]
 fn every_landed_fix_is_strictly_below_its_pre_fix_state() {
-    // The obligation the engine will assert in-flight (commit 5), checked
-    // here by hand on the states the honest map actually walks through.
+    // The obligation the engine asserts in-flight, checked here by hand on
+    // the states the honest map actually walks through.
     let start = library(&[1], &[(10, 1), (20, 1)]);
     let after_first_fix = library(&[1], &[(20, 1)]);
     let after_second_fix = library(&[1], &[]);
@@ -261,7 +257,7 @@ fn the_growing_maps_answer_lands_strictly_above() {
     // A state the gate would never commit — built by hand, because
     // `fix_invariant` only reads it. The growing map answers `AddAuthor`,
     // and applying that lands *above* the pre-fix state: the violation the
-    // in-loop check catches once commit 5 lands.
+    // in-loop check catches.
     let dangling = GrowingLibraryData {
         inner: library(&[], &[(10, 1)]),
     };

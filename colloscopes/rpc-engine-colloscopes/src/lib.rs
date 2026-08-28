@@ -56,9 +56,8 @@ fn run_python_script(script: String) -> Result<(), anyhow::Error> {
         Some(collomatique_python_runner::EngineExe::Current),
     )?;
 
-    // Nothing is sent back here: a script sends when it says so
-    // (`docs/python/new_api_design.md` §9.2), through the `send` of `RpcHost`
-    // above.
+    // Nothing is sent back here: a script sends when it says so, through the
+    // `send` of `RpcHost` above.
     Ok(())
 }
 

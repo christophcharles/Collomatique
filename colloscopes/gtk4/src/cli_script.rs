@@ -4,11 +4,10 @@
 //! positional `[FILE]` (or `--new`) names the document the script is hosted
 //! with, the way the GUI's script editor hosts the open document: the script
 //! reads it through `current_document()` and hands one back through
-//! `send_to_host` — or `doc.save()` with no path, which is the same thing
-//! (`docs/python/new_api_design.md` §9.2). `--out` is where the held document
-//! goes when the script ends well; it may name the file that was opened, and
-//! then overwrites it — the user typed the path, the same consent rule as
-//! naming a path from python.
+//! `send_to_host` — or `doc.save()` with no path, which is the same thing.
+//! `--out` is where the held document goes when the script ends well; it may
+//! name the file that was opened, and then overwrites it — the user typed the
+//! path, the same consent rule as naming a path from python.
 //!
 //! `RpcHost` in `colloscopes/rpc-engine-colloscopes/src/lib.rs` is this same
 //! shape over a pipe; here both ends are this process, so `send` just replaces

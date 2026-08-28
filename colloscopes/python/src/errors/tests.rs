@@ -26,7 +26,7 @@ fn wrapping<'py>(py: Python<'py>, name: &str, inner: Bound<'py, PyAny>) -> Bound
 /// A family `colloscopes/ops/` grows later still reaches the script, on the base class
 ///
 /// The one case no script can produce, because producing it needs a family the
-/// model does not have. It is also the whole of §6's structural promise: the
+/// model does not have. It is also the whole of the structural promise: the
 /// three levels are read off the shape, so only the *class* falls back — the
 /// op, the case and the details come through unchanged.
 #[test]

@@ -326,6 +326,17 @@ colloscope, export config).
 | Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (`InstallColloscope`, §11.1) |
 | ExportConfig (11) | `doc.export_config.set_global(...)`, `.set_colloscope_enabled(bool)` / `_config(...)`, `.set_all_groups_enabled/_config`, `.set_prefilled_groups_enabled/_config`, `.set_automatic_groups_enabled/_config`, `.set_per_group_list_enabled/_config` |
 
+> **Added since**, on the `greedy_group_lists` branch (`e99f861b`, `42fd5a74`):
+> `group_lists.remove_all()` and `group_lists.clear_associations(period)`,
+> mirroring the two new ops `DeleteAllGroupLists` and `ClearPeriodAssociations`.
+> The GroupLists row counts neither, and neither does the total above it.
+>
+> And `group_lists.add_generated(entries)`, mirroring
+> `AddGeneratedGroupLists` — the landing door of the generation §10 describes,
+> fed by `doc.generate_group_lists` and `doc.default_generation_request`. It
+> mints a list per entry and reports no id back, so it answers a plain
+> `OpResult` rather than the `AddResult` of `add`.
+
 No elementary `Op` is exposed. The cascade architecture makes raw elementary access
 unsafe to hand out (`force_apply` fixes nothing by design), and ops + the coarse
 door (§8) already cover everything.
@@ -799,12 +810,48 @@ dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
 - Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
   `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
 
-**Group-list generation stays out of the API.** The feature itself is not settled
-yet, so there is no shape to mirror and the API does not invent one: no
-generation request, no objective weights, no `doc.generate_group_lists`, and no
-`group_lists.add_generated` landing door. Scripts get the colloscope solve, and
-nothing else of the solver. When the feature settles, its API is designed against
-whatever it has become by then.
+**Group-list generation is in**, settled once the generator was. It stayed out
+while there was no shape to mirror — the feature was still an ILP with objective
+weights of its own — and it is mirrored now that the greedy answers in
+milliseconds and the GUI drives it directly. Three doors, and the document is
+touched only by the last of them:
+
+- `doc.default_generation_request()` hands back a `GroupListsGenerationRequest`
+  — `rebuild`, a set of `(period, subject)` pairs, and `kept_lists`, the
+  prefilled lists the generator must respect. It is the selection the
+  application's own generate dialog opens with, built by the very function that
+  dialog calls (`greedy_groups::default_generation_request`), so the two cannot
+  drift. It says nothing about what will work: a pair whose students the group
+  sizes cannot split is offered here exactly as the dialog offers it.
+- `doc.generate_group_lists(request, *, on_log=None)` builds the lists and
+  writes nothing. Synchronous — the greedy is milliseconds on a whole class, so
+  there is no run to wait on and nothing to stop — and `on_log` follows
+  `build_colloscope_model`'s contract, one line at a time, the first raising
+  callback winning with no result handed back. What comes back is a
+  `GroupListsGenerationResult`: `entries`, the lists paired with the
+  coordinates each must serve, and `skipped`, the requested pairs nobody is
+  registered for, which is a report and not a refusal.
+- `doc.group_lists.add_generated(entries)` lands them, one op and one undo slot.
+  It reads its argument structurally, so entries a script built by hand land
+  through the same door.
+
+There is **no `names` parameter**, and there cannot be one: pairs sharing a
+student set and a size range share a single list, so how many names a caller
+would owe is not knowable until the plan exists. The lists come out carrying the
+coverage labels the application's naming dialog seeds its own rows with —
+« Sortilèges (période 1) », « Sortilèges et Métamorphose (périodes 1 et 2) » —
+which live in `ui-text` because two front ends now print them. Renaming is
+editing `.name` on the returned values before landing them.
+
+`GroupListsGenerationError` is what a request the plan will not build raises,
+carrying the generator's own sentence: a subject that runs no interrogations, a
+kept list that is not prefilled, a class the group sizes cannot split. It is not
+under `UpdateError` — nothing was written and no op was refused, the request
+itself is what could not be made sense of. A reference the document does not
+hold is refused earlier still, by the argument convention of §2.3.
+
+There are no objective weights to expose. The greedy maximizes one fixed
+objective, and the retired ILP that had tunable ones is not coming back.
 
 ### 10.1 The colloscope solve config
 

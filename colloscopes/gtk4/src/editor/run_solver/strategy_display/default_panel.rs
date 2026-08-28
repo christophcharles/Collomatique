@@ -39,7 +39,7 @@ impl SimpleComponent for DefaultPanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Meilleur coût trouvé : ",
+                    set_label: "Meilleur objectif trouvé : ",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {
@@ -50,7 +50,7 @@ impl SimpleComponent for DefaultPanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Meilleur coût possible : ",
+                    set_label: "Meilleur objectif possible : ",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {

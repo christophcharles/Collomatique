@@ -1,10 +1,10 @@
-//! Semantic pins for the document order (step-6.5 commit 3, plan §7.5).
+//! Semantic pins for the document order.
 //!
 //! These tests check the *order*, not the machinery. `generic/state/` already owns the
 //! machinery: `generic/state/src/partial_order.rs` pins the building blocks and
 //! `generic/state/tests/derive_content_ord.rs` pins what the derive generates. What is
-//! left — and what only this crate can say — is whether the rules the plan's
-//! §3 tables chose are actually the rules the colloscope types now carry.
+//! left — and what only this crate can say — is which ordering rule each
+//! colloscope type actually carries.
 //!
 //! Every test has the same shape: build a value and a twin that differs in one
 //! deliberate way, call `content_cmp`, and assert the exact `Option<Ordering>`.
@@ -244,7 +244,7 @@ fn default_is_below_a_populated_document() {
     // every atom (settings, balancing, export config) stays at its default and
     // only entities were added. A sanity pin, deliberately *not* the universal
     // claim that `default()` is below everything: the order has many minimal
-    // elements (plan §4.4).
+    // elements.
     let mut data = Data::default();
     let the_period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
         AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,
@@ -343,7 +343,7 @@ fn middle_removal_in_an_ordered_list_is_strictly_below() {
 
 #[test]
 fn excluded_period_drop_is_strictly_below() {
-    // D5.1 in one assertion. Dropping an exclusion *widens* what the subject
+    // The pin in one assertion. Dropping an exclusion *widens* what the subject
     // denotes (it now runs on one more period), but the document holds one
     // element less — and the order reads the content, never the meaning.
     let mut wide = Subject::default();
@@ -453,8 +453,8 @@ fn association_retarget_is_incomparable() {
 fn incompat_slot_window_removal_is_strictly_below() {
     // A time window *is* its value: nothing points at it by position, so
     // dropping one anywhere in the list is removing content. This holds
-    // because the order pre-exists the resolution map (decision 8) — no fix
-    // touches this field today.
+    // because the order pre-exists the resolution map — no fix touches this
+    // field today.
     let three = incompatibility(vec![time_window(8), time_window(10), time_window(14)]);
     let without_middle = incompatibility(vec![time_window(8), time_window(14)]);
     assert_eq!(
@@ -468,7 +468,7 @@ fn incompat_slot_window_removal_is_strictly_below() {
     assert_eq!(three.content_cmp(&modified), None);
 }
 
-// ---- The relational chain (★ decision 10) ----
+// ---- The relational chain ----
 
 #[test]
 fn periodicity_blocks_are_one_atom() {
@@ -506,7 +506,7 @@ fn periodicity_blocks_are_one_atom() {
     );
 }
 
-// ---- Position-borne identity inside a Vec (decision 11) ----
+// ---- Position-borne identity inside a Vec ----
 
 #[test]
 fn group_list_prefilled_minus_student_is_strictly_below() {
@@ -610,7 +610,7 @@ fn colloscope_cell_trim_is_strictly_below() {
     );
 }
 
-// ---- The configuration records (decision 13) ----
+// ---- The configuration records ----
 
 #[test]
 fn config_values_are_atoms() {

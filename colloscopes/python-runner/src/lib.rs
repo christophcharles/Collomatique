@@ -51,13 +51,11 @@ pub fn initialize() {
 
 /// Runs one script, hosted or not
 ///
-/// `host` is the application a hosted script talks to
-/// (`docs/python/new_api_design.md` §9.2). `engine` is the collomatique binary
-/// the script's solves re-execute, when the caller is in a position to know one
-/// (`docs/python/new_api_design.md` §10) — a script may still name its own, or
-/// the environment may. Both are `None` for a script that runs on its own, and
-/// both are cleared afterwards, so a second run in the same process starts
-/// clean.
+/// `host` is the application a hosted script talks to. `engine` is the
+/// collomatique binary the script's solves re-execute, when the caller is in a
+/// position to know one — a script may still name its own, or the environment
+/// may. Both are `None` for a script that runs on its own, and both are cleared
+/// afterwards, so a second run in the same process starts clean.
 pub fn run_python_script(
     script: String,
     host: Option<Arc<dyn Host>>,

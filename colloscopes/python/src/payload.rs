@@ -5,9 +5,8 @@
 //! externally-tagged enums, and both derive `Serialize`. So the walk over them
 //! is a serde [Serializer] whose output is python objects rather than text:
 //! serde already knows the shape, and asking it means nothing here names a
-//! variant. That is §6's constraint (`docs/python/new_api_design.md`): a case
-//! added in `colloscopes/ops/`, or a repair added in `colloscopes/state-colloscopes/`, reaches a script
-//! on its own.
+//! variant. So a case added in `colloscopes/ops/`, or a repair added in
+//! `colloscopes/state-colloscopes/`, reaches a script on its own.
 //!
 //! What comes out:
 //!
@@ -72,8 +71,8 @@ const REBUILT: &str = "rebuilt";
 /// redundant on purpose, and `ops::warning_text` renders all its sentences
 /// without reading one. Showing it would also put the model's storage shape in
 /// front of a script: a rebuilt `GroupList` is its private serde mirror, a
-/// rebuilt `WeekPattern` is the exclusion set it is stored as, and §2 built the
-/// `*Data` classes to keep those out of sight. A script that wants what the
+/// rebuilt `WeekPattern` is the exclusion set it is stored as, and the `*Data`
+/// classes exist to keep those out of sight. A script that wants what the
 /// entity holds now reads it off the document the write just left.
 ///
 /// Dropped here by name rather than skipped in `state-colloscopes`, so that a

@@ -129,13 +129,13 @@ pub enum QuoteOp {
     /// Sets (or overwrites) a quote row. The author is *not* prechecked:
     /// a dangling author is an invariant break, which is the point.
     SetQuote { quote: u64, author: u64 },
-    /// Removes a quote row. Removing an absent quote is a perfect no-op
-    /// (G.2 precedent), whose inverse is itself.
+    /// Removes a quote row. Removing an absent quote is a perfect no-op, whose
+    /// inverse is itself.
     RemoveQuote(u64),
     /// Rewrites an existing quote's author. Unlike [QuoteOp::SetQuote] the
     /// quote must exist (precheck) — which is what lets a cascade fix consume
     /// the target's own target and drive the retried target into `InvalidOp`
-    /// with a remembered break (the D4 conviction route).
+    /// with a remembered break (the conviction route).
     UpdateQuote { quote: u64, author: u64 },
     /// Sets (or overwrites) a note row. The commented quote is *not*
     /// prechecked — the [QuoteOp::SetQuote] mirror one level down.
@@ -308,8 +308,8 @@ impl Fixable for QuoteData {
 
     fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<QuoteFix> {
         match invariant {
-            // Presence of the removable material (design doc §5): Some only if
-            // the quote row actually exists in the current state.
+            // Presence of the removable material: Some only if the quote row
+            // actually exists in the current state.
             QuoteInvariant::DanglingQuoteAuthor(quote) => self
                 .quotes
                 .contains_key(quote)
@@ -350,10 +350,10 @@ impl ContentOrd for QuoteData {
 
 /// The way an [EvilQuoteData] map misbehaves.
 ///
-/// The two step-6.5 modes ([EvilMode::CreateAuthor] and
-/// [EvilMode::ReauthorExisting]) violate the contract while *resolving* the
-/// invariant: before the in-flight document-order check they would have led
-/// the cascade to a quiet, creative `Ok`. Now they panic.
+/// [EvilMode::CreateAuthor] and [EvilMode::ReauthorExisting] violate the
+/// contract while *resolving* the invariant: without the in-flight
+/// document-order check they would lead the cascade to a quiet, creative
+/// `Ok`. With it they panic.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvilMode {
     /// Always "fixes" by removing the invariant's own quote, even when it is

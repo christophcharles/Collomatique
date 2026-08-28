@@ -7,22 +7,15 @@ use relm4::{adw, gtk};
 
 use collomatique_ops::GroupListsUpdateOp;
 
-use crate::editor::run_solver;
-
-/// The solver dialog instantiated for the group-list generation ILP model. In phase A the
-/// extra-variable and constraint-description spaces are uninhabited (the model is trivial);
-/// pieces 7-8 populate them without touching this instantiation.
-type SolverDialog = run_solver::Dialog<
-    collomatique_constraints_groups::Var,
-    collomatique_constraints_groups::ExtraVarName,
-    collomatique_constraints_groups::ConstraintDesc,
->;
-
-/// Flattened variable of the group-list generation model (the solve path's ILP variable).
-type GroupsInternalVar = collomatique_ilp_modeler::InternalVar<
-    collomatique_constraints_groups::Var,
-    collomatique_constraints_groups::ExtraVarName,
->;
+/// One generated list: the sealed group list and the `(period, subject)` pairs it must be
+/// associated to — the payload `GroupListsUpdateOp::AddGeneratedGroupLists` takes.
+type GeneratedList = (
+    collomatique_state_colloscopes::group_lists::GroupList,
+    std::collections::BTreeSet<(
+        collomatique_state_colloscopes::PeriodId,
+        collomatique_state_colloscopes::SubjectId,
+    )>,
+);
 
 mod associations_display;
 mod edit_dialog;
@@ -33,33 +26,24 @@ mod naming_dialog;
 #[derive(Debug)]
 pub enum GroupListsInput {
     Update(collomatique_state_colloscopes::colloscope_params::Parameters),
-    /// A new document was loaded: forget the last-used solver strategy, objective weights and
-    /// canonical group size.
-    ResetGenerationConfig,
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
+    /// Removes every group list the document holds, in one operation.
+    DeleteAllGroupLists,
     AddGroupList,
     GroupListSelected(collomatique_state_colloscopes::group_lists::GroupList),
 
     /// "Générer des listes automatiquement" was clicked.
     GenerateClicked,
     GenerationConfigAccepted(
-        collomatique_constraints_groups::GenerationRequest,
-        collomatique_strategies::ConductorStrategy,
-        collomatique_constraints_groups::ObjectiveWeights,
+        collomatique_greedy_groups::GenerationRequest,
         collomatique_state_colloscopes::colloscope_params::Parameters,
     ),
     GenerationConfigCancelled,
-    GenerationNamingAccepted(
-        collomatique_constraints_groups::GenerationPlan,
-        Vec<String>,
-        collomatique_constraints_groups::GroupListsModel,
-        collomatique_strategies::ConductorPayload<collomatique_constraints_groups::Var>,
-    ),
+    /// The greedy answer was validated as it stands: it is the result.
+    GenerationNamingAccepted(Vec<GeneratedList>),
     GenerationNamingCancelled,
-    /// The solver dialog was validated with a solution.
-    GenerationSolveResult(collomatique_ilp::ConfigData<GroupsInternalVar>),
     /// A dialog of this panel just closed. The panel hosts no window of its
     /// own, so it passes the request up to the editor.
     PresentParent,
@@ -90,29 +74,6 @@ pub struct GroupLists {
     edit_dialog: Controller<edit_dialog::Dialog>,
     generate_dialog: Controller<generate_dialog::Dialog>,
     naming_dialog: Controller<naming_dialog::Dialog>,
-    run_solver_dialog: Controller<SolverDialog>,
-
-    /// The last-validated solver strategy, so the generation dialog reopens on the user's last
-    /// choice instead of resetting. Reset to the parallel default on a new document, exactly as
-    /// the colloscope page does with its own strategy.
-    strategy: collomatique_strategies::ConductorStrategy,
-
-    /// The last-validated objective weights, reopened-on like the strategy.
-    /// Reset to the group-dominant default on a new document.
-    weights: collomatique_constraints_groups::ObjectiveWeights,
-
-    /// The last-validated canonical group-size override, travelling with the
-    /// weights: `None` (the default, and the reset value) elects the size
-    /// from the document instead.
-    canonical_range:
-        Option<collomatique_state_colloscopes::NonEmptyRangeInclusive<std::num::NonZeroU32>>,
-
-    /// The generation plan and the user-chosen list names, held across the
-    /// solve: written when the naming dialog validates, consumed when the
-    /// solver dialog returns a solution. A leftover value after a cancelled
-    /// solve is harmless — the next naming validation overwrites it, and
-    /// nothing else reads it.
-    pending_generation: Option<(collomatique_constraints_groups::GenerationPlan, Vec<String>)>,
 
     selection_reason: GroupListSelectionReason,
 }
@@ -147,20 +108,25 @@ impl Component for GroupLists {
                             set_label: "Listes de groupes",
                             set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
                         },
+                        gtk::Button {
+                            #[watch]
+                            set_sensitive: !model.params.group_lists.group_list_map.is_empty(),
+                            set_icon_name: "edit-delete-symbolic",
+                            add_css_class: "flat",
+                            // Not the colloscope panel's "Effacer les listes de groupes", which
+                            // empties the placements inside automatic lists: this one removes the
+                            // lists themselves.
+                            set_tooltip_text: Some("Supprimer toutes les listes de groupes"),
+                            connect_clicked => GroupListsInput::DeleteAllGroupLists,
+                        },
                         gtk::Box {
                             set_hexpand: true,
                             set_orientation: gtk::Orientation::Horizontal,
                         },
                         gtk::Button {
                             add_css_class: "frame",
-                            // The feature is unfinished: it is flagged as a warning rather than
-                            // advertised as an accent, and the tooltip says why.
-                            add_css_class: "warning",
+                            add_css_class: "accent",
                             set_margin_all: 5,
-                            set_tooltip_text: Some(
-                                "Fonctionnalité en cours de développement : \
-                                 les listes produites peuvent être incorrectes ou incomplètes.",
-                            ),
                             adw::ButtonContent {
                                 set_icon_name: "system-run-symbolic",
                                 set_label: "Générer des listes automatiquement",
@@ -235,6 +201,11 @@ impl Component for GroupLists {
                         period_id,
                     ))
                 }
+                associations_display::PeriodEntryOutput::ClearAssociations(period_id) => {
+                    GroupListsOutput::UpdateOp(GroupListsUpdateOp::ClearPeriodAssociations(
+                        period_id,
+                    ))
+                }
             });
 
         let edit_dialog = edit_dialog::Dialog::builder()
@@ -251,8 +222,8 @@ impl Component for GroupLists {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                generate_dialog::DialogOutput::Accepted(request, strategy, weights, params) => {
-                    GroupListsInput::GenerationConfigAccepted(request, strategy, weights, params)
+                generate_dialog::DialogOutput::Accepted(request, params) => {
+                    GroupListsInput::GenerationConfigAccepted(request, params)
                 }
                 generate_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationConfigCancelled
@@ -264,26 +235,13 @@ impl Component for GroupLists {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                naming_dialog::DialogOutput::Accepted(plan, names, model, payload) => {
-                    GroupListsInput::GenerationNamingAccepted(plan, names, model, payload)
+                naming_dialog::DialogOutput::Accepted(entries) => {
+                    GroupListsInput::GenerationNamingAccepted(entries)
                 }
                 naming_dialog::DialogOutput::Cancelled => {
                     GroupListsInput::GenerationNamingCancelled
                 }
                 naming_dialog::DialogOutput::PresentParent => GroupListsInput::PresentParent,
-            });
-
-        let run_solver_dialog = SolverDialog::builder()
-            .transient_for(&root)
-            .launch(run_solver::DialogSettings {
-                title: "Génération des listes de groupes".to_string(),
-                cancel_warning: "Les listes de groupes générées seront perdues.".to_string(),
-            })
-            .forward(sender.input_sender(), |msg| match msg {
-                run_solver::DialogOutput::NewConfig(config) => {
-                    GroupListsInput::GenerationSolveResult(config)
-                }
-                run_solver::DialogOutput::PresentParent => GroupListsInput::PresentParent,
             });
 
         let model = GroupLists {
@@ -293,11 +251,6 @@ impl Component for GroupLists {
             edit_dialog,
             generate_dialog,
             naming_dialog,
-            run_solver_dialog,
-            strategy: collomatique_strategies::ConductorStrategy::with_parallelism_defaults(),
-            weights: collomatique_constraints_groups::ObjectiveWeights::default(),
-            canonical_range: None,
-            pending_generation: None,
             selection_reason: GroupListSelectionReason::New,
         };
 
@@ -316,79 +269,36 @@ impl Component for GroupLists {
                 self.update_group_list_entries();
                 self.update_period_entries();
             }
-            GroupListsInput::ResetGenerationConfig => {
-                self.strategy =
-                    collomatique_strategies::ConductorStrategy::with_parallelism_defaults();
-                self.weights = collomatique_constraints_groups::ObjectiveWeights::default();
-                self.canonical_range = None;
-            }
             GroupListsInput::GenerateClicked => {
                 // The dialog is modal, so the parameters it is configured against stay valid until
                 // it hands them back on `Accepted`.
                 self.generate_dialog
                     .sender()
-                    .send(generate_dialog::DialogInput::Show(
-                        self.strategy.clone(),
-                        self.weights,
-                        self.canonical_range.clone(),
-                        self.params.clone(),
-                    ))
+                    .send(generate_dialog::DialogInput::Show(self.params.clone()))
                     .unwrap();
             }
-            GroupListsInput::GenerationConfigAccepted(request, strategy, weights, params) => {
-                // Persist the strategy and the weights so the dialog reopens on the last choice.
-                // The canonical size travels inside the request, so it is read back from there
-                // rather than echoed separately.
-                self.strategy = strategy;
-                self.weights = weights;
-                self.canonical_range = request.canonical_range.clone();
-                // Hand the request to the naming/build dialog against the parameters the config
-                // dialog echoed back, so the plan and the model are built from exactly what the
-                // user configured against.
+            GroupListsInput::GenerationConfigAccepted(request, params) => {
+                // Hand the request to the naming dialog against the parameters the config dialog
+                // echoed back, so the plan and the greedy run from exactly what the user
+                // configured against.
                 self.naming_dialog
                     .sender()
-                    .send(naming_dialog::DialogInput::Show(request, weights, params))
+                    .send(naming_dialog::DialogInput::Show(request, params))
                     .unwrap();
             }
             GroupListsInput::GenerationConfigCancelled => {
                 // The generation was abandoned before it started; nothing to undo.
             }
-            GroupListsInput::GenerationNamingAccepted(plan, names, model, payload) => {
-                // Launch the solver on the freshly built model, with the page's persisted
-                // strategy. The plan and the names are held until the solver returns a
-                // solution, which is converted against exactly this plan.
-                self.pending_generation = Some((plan, names));
-                self.run_solver_dialog
-                    .sender()
-                    .send(run_solver::DialogInput::Run(
-                        self.strategy.clone(),
-                        model,
-                        payload,
-                    ))
-                    .unwrap();
-            }
-            GroupListsInput::GenerationNamingCancelled => {
-                // The generation was abandoned at the naming step; nothing to undo.
-            }
-            GroupListsInput::GenerationSolveResult(config) => {
-                let (plan, names) = self
-                    .pending_generation
-                    .take()
-                    .expect("a solve result implies a pending generation");
-                // The solved config is over the flattened model's variables; strip it down
-                // to base variables, which is all the conversion needs (the colloscope page
-                // does the same on its own solve result).
-                let base_config = config.filter_transmute(|var| match var {
-                    collomatique_ilp_modeler::InternalVar::Base(b) => Some(b.clone()),
-                    _ => None,
-                });
-                let entries =
-                    collomatique_constraints_groups::build_group_lists(&plan, &names, &base_config);
+            GroupListsInput::GenerationNamingAccepted(entries) => {
+                // The greedy answer is the result: no model, no solver, straight to the op.
                 sender
                     .output(GroupListsOutput::UpdateOp(
                         GroupListsUpdateOp::AddGeneratedGroupLists(entries),
                     ))
                     .unwrap();
+            }
+            GroupListsInput::GenerationNamingCancelled => {
+                // The generation was abandoned at the naming step; nothing to undo.
             }
             GroupListsInput::AddGroupList => {
                 self.selection_reason = GroupListSelectionReason::New;
@@ -434,6 +344,13 @@ impl Component for GroupLists {
                 sender
                     .output(GroupListsOutput::UpdateOp(
                         GroupListsUpdateOp::DeleteGroupList(id),
+                    ))
+                    .unwrap();
+            }
+            GroupListsInput::DeleteAllGroupLists => {
+                sender
+                    .output(GroupListsOutput::UpdateOp(
+                        GroupListsUpdateOp::DeleteAllGroupLists,
                     ))
                     .unwrap();
             }

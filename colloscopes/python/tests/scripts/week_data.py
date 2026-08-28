@@ -89,9 +89,8 @@ assert _same_class is collomatique.WeekData
 assert collomatique.WeekData.__module__ == "collomatique"
 
 # A field that names an entity takes a handle or an id, interchangeably, and
-# the two values below extract to the same week and — this is the wart §2.3
-# records — do not compare equal, because a dataclass stores what it was
-# given.
+# the two values below extract to the same week and — this is the wart — do
+# not compare equal, because a dataclass stores what it was given.
 first_period = first.period
 week_by_handle = collomatique.WeekData(first_period)
 week_by_id = collomatique.WeekData(first_period.id)

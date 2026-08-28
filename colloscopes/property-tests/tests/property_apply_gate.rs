@@ -1,12 +1,8 @@
 //! Property fuzz over the apply/check/rollback gate ([`Data::apply`]).
 //!
-//! This is the step-5 successor of `differential_force_apply.rs`. The old file
-//! *differential-fuzzed* `force_apply` against the two checkers to earn trust in
-//! the new checker; that job is done, and the old checker retired with step 5.
-//! What survives is the randomized coverage of the exact primitive production
-//! now runs on: the gate `apply` = snapshot + `force_apply` +
-//! `broken_invariants` + rollback. This file re-expresses the same walk-and-probe
-//! shape as *properties of the gate alone*:
+//! Randomized coverage of the exact primitive production runs on: the gate
+//! `apply` = snapshot + `force_apply` + `broken_invariants` + rollback. The
+//! walk-and-probe shape is expressed as *properties of the gate alone*:
 //!
 //! * **atomicity** — every `Err` arm (precheck, logic, invariants) leaves the
 //!   state bit-identical to before the op, and carries a non-empty error set on
@@ -45,7 +41,13 @@ use collomatique_state_colloscopes::{Data, Error, InnerData, InvalidOp};
 
 use harness::RunConfig;
 
-/// House scale, matching `property_ops.rs`.
+// The five documents the walk starts from.
+#[path = "support/start_points.rs"]
+mod start_points;
+
+/// House scale, matching `property_ops.rs`. `seeds` is the budget for the
+/// bootstrap start; the four big starts share the same again between them
+/// (`start_points::seeds_for`).
 const CONFIG: RunConfig = RunConfig {
     seeds: 100,
     ops_per_run: 1000,
@@ -89,8 +91,10 @@ fn aims_at_the_checker(kind: CorruptionKind) -> bool {
 /// honesty on the resulting (usually rejected) op.
 #[test]
 fn apply_gate_is_atomic_and_honest() {
-    // Cross-seed honesty counters (interior mutability: `for_each_seed` takes a
-    // `Fn` closure).
+    // Cross-run honesty counters, over every (start, seed) pair (interior
+    // mutability: `for_each_start_and_seed` takes a `Fn` closure). They count
+    // outcomes and ask for at least one of each, so running more starts can
+    // only make them easier to satisfy — none of them is a fraction or a mean.
     let landed = Cell::new(0usize); // probes that returned Ok
     let rejected = Cell::new(0usize); // probes that returned Err (rolled back)
     let attempted: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
@@ -102,11 +106,13 @@ fn apply_gate_is_atomic_and_honest() {
     let broken_by_kind: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
     let logic_seen = Cell::new(0usize);
 
-    harness::for_each_seed(
+    harness::for_each_start_and_seed(
         "apply_gate_is_atomic_and_honest",
         &CONFIG,
-        |rng, log, stats| {
-            let (state, _) = harness::bootstrap(rng);
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (state, _) = start_points::open(start, rng);
             let mut data: Data = state.get_data().clone();
             let mut inner_snapshots: Vec<InnerData> = vec![];
             let mut since_probe = 0usize;
@@ -190,8 +196,8 @@ fn apply_gate_is_atomic_and_honest() {
                             Ok(BTreeSet::new()),
                             "apply returned Ok but the state is not fully valid",
                         );
-                        // The returned reverse restores the pre-state exactly (the
-                        // clean-landing reverse pin, carried over from step 4).
+                        // The returned reverse restores the pre-state exactly
+                        // (the clean-landing reverse pin).
                         let mut redo = data.clone();
                         redo.force_apply(&reverse)
                             .expect("reverse of a gated op must apply");
@@ -199,13 +205,10 @@ fn apply_gate_is_atomic_and_honest() {
                             redo.get_inner_data() == snapshot.get_inner_data(),
                             "reverse of a gated op must restore the pre-state",
                         );
-                        // ForceValid needs no special arm: without the old checker
-                        // there is no "hidden repair" to detect here (the gate only
-                        // ever lands fully-valid states, asserted just above). A
-                        // valid landing is honest whether it changed state or was a
-                        // perfect no-op. (The migration-window canary guarded
-                        // force-path drift until it retired with the old world
-                        // at R1.)
+                        // ForceValid needs no special arm: the gate only ever
+                        // lands fully-valid states, asserted just above, and a
+                        // valid landing is honest whether it changed state or
+                        // was a perfect no-op.
                     }
                 }
 

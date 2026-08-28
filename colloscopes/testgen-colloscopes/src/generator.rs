@@ -1167,8 +1167,7 @@ fn gen_global_update(
 }
 
 // ============================================================================
-// Gate-property fuzz: the corruption generator (born as the step-4
-// differential fuzz)
+// Gate-property fuzz: the corruption generator
 // ============================================================================
 
 /// Probe kinds for the gate-property fuzz (`property_apply_gate.rs`).

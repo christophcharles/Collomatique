@@ -1,9 +1,10 @@
 import collomatique
 
 # `source` is a throwaway copy of a real colloscope, `target` is where the
-# script leaves the document for rust to read back, and the six labels are the
+# script leaves the document for rust to read back, and the eight labels are the
 # french names `ops` gives this family's operations — handed in from rust so
-# that this pins the operations' own labels and not merely some strings.
+# that this pins the operations' own labels and not merely some strings. The
+# last two are the second stage's business.
 # `served_index` is the place, in the group lists' own order, of the list that
 # exactly one subject uses, and on every period.
 #
