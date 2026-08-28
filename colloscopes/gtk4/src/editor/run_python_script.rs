@@ -346,6 +346,12 @@ impl Component for Dialog {
                             }
                         }
                     }
+                    CmdMsg::App(AppCmdMsg::ReadLine { .. })
+                    | CmdMsg::App(AppCmdMsg::ReplaceData { .. }) => {
+                        self.send_response(ResultMsg::GlobalError(String::from(
+                            "cette commande n'est disponible que dans la console Python",
+                        )));
+                    }
                     CmdMsg::Solver(_) | CmdMsg::Strategy(_) => {}
                 },
                 Err(e) => {

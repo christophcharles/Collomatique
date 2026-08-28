@@ -64,6 +64,7 @@ mod general_planning;
 mod group_lists;
 mod incompats;
 mod pairings;
+mod python_repl;
 mod run_python_script;
 mod run_solver;
 mod settings;
@@ -76,6 +77,7 @@ mod week_patterns;
 
 mod warning_compact_ids;
 mod warning_op;
+mod warning_repl_replace;
 mod warning_save_ids;
 
 #[derive(Debug)]
@@ -103,6 +105,19 @@ pub enum EditorInput {
     CancelOp,
     RunScriptClicked,
     RunScript(PathBuf, String),
+    OpenPythonRepl,
+    /// The console asks for the document, as it is now.
+    ReplDataRequest {
+        generation: u64,
+    },
+    /// The console hands a document back, with the token of the one it read.
+    ReplReplaceRequest {
+        generation: u64,
+        data: collomatique_rpc_colloscopes::InternalDataStream,
+        token: Option<u64>,
+    },
+    ReplReplaceConfirmed,
+    ReplReplaceRefused,
     NewStateFromSecondInstance(AppState<Data, Desc>),
     ExportColloscopeAs(PathBuf, collomatique_xlsx::Config),
     ExportMpsClicked,
@@ -256,6 +271,12 @@ pub struct EditorPanel {
     /// Same pattern as [Self::state_to_commit]: the payload of a save
     /// that cannot go through as-is waits here while the user answers.
     save_pending_compaction: Option<(PathBuf, collomatique_state_colloscopes::InnerData)>,
+    /// The document the console offered, waiting on the confirmation dialog
+    ///
+    /// Same pattern again, with the session it belongs to: the console is
+    /// blocked on the answer, and it must be told even if it is no longer the
+    /// session that asked.
+    repl_replace_pending: Option<(u64, collomatique_rpc_colloscopes::InternalDataStream)>,
 
     show_particular_panel: Option<PanelNumbers>,
 
@@ -279,7 +300,9 @@ pub struct EditorPanel {
     advanced_tools: Controller<advanced_tools::AdvancedTools>,
     check_script_dialog: Controller<check_script::Dialog>,
     run_python_script_dialog: Controller<run_python_script::Dialog>,
+    python_repl_window: Controller<python_repl::Window>,
     warning_op_dialog: Controller<warning_op::Dialog>,
+    warning_repl_replace_dialog: Controller<warning_repl_replace::Dialog>,
     warning_save_ids_dialog: Controller<warning_save_ids::Dialog>,
     warning_compact_ids_dialog: Controller<warning_compact_ids::Dialog>,
 }
@@ -953,6 +976,9 @@ impl Component for EditorPanel {
                 advanced_tools::AdvancedToolsOutput::RunPythonScriptClicked => {
                     EditorInput::RunScriptClicked
                 }
+                advanced_tools::AdvancedToolsOutput::OpenPythonConsoleClicked => {
+                    EditorInput::OpenPythonRepl
+                }
                 advanced_tools::AdvancedToolsOutput::ExportMpsClicked => {
                     EditorInput::ExportMpsClicked
                 }
@@ -992,6 +1018,25 @@ impl Component for EditorPanel {
                 run_python_script::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
+        let python_repl_window = python_repl::Window::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                python_repl::WindowOutput::DataRequest { generation } => {
+                    EditorInput::ReplDataRequest { generation }
+                }
+                python_repl::WindowOutput::ReplaceRequest {
+                    generation,
+                    data,
+                    token,
+                } => EditorInput::ReplReplaceRequest {
+                    generation,
+                    data,
+                    token,
+                },
+                python_repl::WindowOutput::PresentParent => EditorInput::PresentParent,
+            });
+
         let error_dialog = error_dialog::Dialog::builder()
             .transient_for(&root)
             .launch(())
@@ -1006,6 +1051,15 @@ impl Component for EditorPanel {
                 warning_op::DialogOutput::Continue => EditorInput::ContinueOp,
                 warning_op::DialogOutput::Cancel => EditorInput::CancelOp,
                 warning_op::DialogOutput::PresentParent => EditorInput::PresentParent,
+            });
+
+        let warning_repl_replace_dialog = warning_repl_replace::Dialog::builder()
+            .transient_for(&root)
+            .launch(())
+            .forward(sender.input_sender(), |msg| match msg {
+                warning_repl_replace::DialogOutput::Replace => EditorInput::ReplReplaceConfirmed,
+                warning_repl_replace::DialogOutput::Cancel => EditorInput::ReplReplaceRefused,
+                warning_repl_replace::DialogOutput::PresentParent => EditorInput::PresentParent,
             });
 
         let warning_save_ids_dialog = warning_save_ids::Dialog::builder()
@@ -1039,6 +1093,7 @@ impl Component for EditorPanel {
             show_particular_panel: None,
             state_to_commit: None,
             save_pending_compaction: None,
+            repl_replace_pending: None,
             error_dialog,
             general_planning,
             subjects,
@@ -1058,7 +1113,9 @@ impl Component for EditorPanel {
             advanced_tools,
             check_script_dialog,
             run_python_script_dialog,
+            python_repl_window,
             warning_op_dialog,
+            warning_repl_replace_dialog,
             warning_save_ids_dialog,
             warning_compact_ids_dialog,
         };
@@ -1331,6 +1388,60 @@ impl Component for EditorPanel {
                     ))
                     .unwrap();
             }
+            EditorInput::OpenPythonRepl => {
+                self.python_repl_window
+                    .sender()
+                    .send(python_repl::WindowInput::Show)
+                    .unwrap();
+            }
+            EditorInput::ReplDataRequest { generation } => {
+                self.python_repl_window
+                    .sender()
+                    .send(python_repl::WindowInput::DataAnswer {
+                        generation,
+                        data: self.data.get_data().clone(),
+                    })
+                    .unwrap();
+            }
+            EditorInput::ReplReplaceRequest {
+                generation,
+                data,
+                token,
+            } => {
+                let current =
+                    collomatique_rpc_colloscopes::InternalDataStream::from(self.data.get_data());
+                if token == Some(current.token()) {
+                    self.commit_repl_replace(generation, data, &sender);
+                } else {
+                    self.repl_replace_pending = Some((generation, data));
+                    self.warning_repl_replace_dialog
+                        .sender()
+                        .send(warning_repl_replace::DialogInput::Show {
+                            new_document: token.is_none(),
+                        })
+                        .unwrap();
+                }
+            }
+            EditorInput::ReplReplaceConfirmed => {
+                if let Some((generation, data)) = self.repl_replace_pending.take() {
+                    // The console may have been restarted or closed while the
+                    // dialog was open: the replacement was consented to, so it
+                    // lands, and the generation check drops the answer nobody
+                    // is waiting for any more.
+                    self.commit_repl_replace(generation, data, &sender);
+                }
+            }
+            EditorInput::ReplReplaceRefused => {
+                if let Some((generation, _data)) = self.repl_replace_pending.take() {
+                    self.python_repl_window
+                        .sender()
+                        .send(python_repl::WindowInput::ReplaceAnswer {
+                            generation,
+                            outcome: python_repl::ReplaceOutcome::Refused,
+                        })
+                        .unwrap();
+                }
+            }
             EditorInput::NewStateFromSecondInstance(new_data) => {
                 self.update_data(DataUpdate::Replace(new_data));
                 if let Some((cat, _desc)) = self.data.get_undo_name() {
@@ -1531,6 +1642,46 @@ impl EditorPanel {
                 self.data = new_state;
             }
         }
+    }
+}
+
+impl EditorPanel {
+    /// Puts the console's document in place of the open one, and says what the
+    /// application now holds
+    fn commit_repl_replace(
+        &mut self,
+        generation: u64,
+        data: collomatique_rpc_colloscopes::InternalDataStream,
+        sender: &ComponentSender<Self>,
+    ) {
+        let data: collomatique_state_colloscopes::Data = data.into();
+        let op = collomatique_state_colloscopes::Op::GlobalUpdate(data.into_inner_data());
+        let desc = (
+            collomatique_ops::OpCategory::None,
+            String::from("Console Python"),
+        );
+
+        // One op applied on a clone: a whole session of the console is as many
+        // undo steps as it sent documents, not one for the window.
+        let mut new_state = self.data.clone();
+        let outcome = match new_state.apply(op, desc) {
+            Ok(_) => {
+                let token =
+                    collomatique_rpc_colloscopes::InternalDataStream::from(new_state.get_data())
+                        .token();
+                sender.input(EditorInput::CommitUpdateOp(new_state));
+                python_repl::ReplaceOutcome::Done { token }
+            }
+            Err(e) => python_repl::ReplaceOutcome::Failed(e.to_string()),
+        };
+
+        self.python_repl_window
+            .sender()
+            .send(python_repl::WindowInput::ReplaceAnswer {
+                generation,
+                outcome,
+            })
+            .unwrap();
     }
 }
 

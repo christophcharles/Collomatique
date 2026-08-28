@@ -20,7 +20,7 @@ use anyhow::Context as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use collomatique_python_runner::{EngineExe, Host};
+use collomatique_python_runner::{EngineExe, Host, SendError, TakenDocument};
 use collomatique_state_colloscopes::Data;
 
 /// This process, as the hosted script's application
@@ -39,15 +39,22 @@ struct HostState {
 }
 
 impl Host for CliHost {
-    fn data(&self) -> Data {
-        self.state.lock().unwrap().data.clone()
+    fn live(&self) -> bool {
+        false
     }
 
-    fn send(&self, data: &Data) -> Result<(), String> {
+    fn data(&self) -> Result<TakenDocument, String> {
+        Ok(TakenDocument {
+            data: self.state.lock().unwrap().data.clone(),
+            token: None,
+        })
+    }
+
+    fn send(&self, data: &Data, _token: Option<u64>) -> Result<Option<u64>, SendError> {
         let mut state = self.state.lock().unwrap();
         state.data = data.clone();
         state.modified = true;
-        Ok(())
+        Ok(None)
     }
 }
 

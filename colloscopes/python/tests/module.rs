@@ -21,7 +21,7 @@ use collomatique_python::data::{
     PairingRuleSideData, SlotData, SlotPairingRuleData, SlotPairingRuleSideData, StudentData,
     SubjectData, TeacherData, WeekData, WeekPatternData,
 };
-use collomatique_python::{FileRequest, collomatique};
+use collomatique_python::{FileRequest, SendError, TakenDocument, collomatique};
 use collomatique_state_colloscopes::Data;
 use collomatique_ui_text::rendering::{
     render_pairing_rule, render_slot_in_subject, render_slot_pairing_rule, render_subject,
@@ -970,13 +970,83 @@ struct FakeHost {
 }
 
 impl collomatique_python::Host for FakeHost {
-    fn data(&self) -> Data {
-        self.data.clone()
+    fn live(&self) -> bool {
+        false
     }
 
-    fn send(&self, data: &Data) -> Result<(), String> {
+    fn data(&self) -> Result<TakenDocument, String> {
+        Ok(TakenDocument {
+            data: self.data.clone(),
+            token: None,
+        })
+    }
+
+    fn send(&self, data: &Data, _token: Option<u64>) -> Result<Option<u64>, SendError> {
         self.sent.lock().unwrap().push(data.clone());
-        Ok(())
+        Ok(None)
+    }
+}
+
+/// The application, as the console talks to it
+///
+/// It answers with the document it holds *now*, names each answer with a token,
+/// and records what came back with which token. A refusing one stands for the
+/// user declining the replacement.
+struct ConsoleHost {
+    state: Mutex<ConsoleState>,
+    refuse: bool,
+}
+
+struct ConsoleState {
+    data: Data,
+    token: u64,
+    sent: Vec<(Data, Option<u64>)>,
+}
+
+impl ConsoleHost {
+    fn new(data: Data, token: u64, refuse: bool) -> ConsoleHost {
+        ConsoleHost {
+            state: Mutex::new(ConsoleState {
+                data,
+                token,
+                sent: Vec::new(),
+            }),
+            refuse,
+        }
+    }
+
+    /// What crossed, and the token each send carried
+    fn sent(&self) -> Vec<(Data, Option<u64>)> {
+        self.state.lock().expect("no sender panicked").sent.clone()
+    }
+}
+
+impl collomatique_python::Host for ConsoleHost {
+    fn live(&self) -> bool {
+        true
+    }
+
+    fn data(&self) -> Result<TakenDocument, String> {
+        let state = self.state.lock().unwrap();
+        Ok(TakenDocument {
+            data: state.data.clone(),
+            token: Some(state.token),
+        })
+    }
+
+    fn send(&self, data: &Data, token: Option<u64>) -> Result<Option<u64>, SendError> {
+        let mut state = self.state.lock().unwrap();
+        state.sent.push((data.clone(), token));
+
+        if self.refuse {
+            return Err(SendError::Refused(
+                "le document ouvert a été modifié depuis".to_string(),
+            ));
+        }
+
+        state.data = data.clone();
+        state.token += 1;
+        Ok(Some(state.token))
     }
 }
 
@@ -1034,6 +1104,82 @@ fn a_hosted_script_is_handed_a_document_and_sends_one_back() {
     );
     // Sending twice is allowed, and this is the one that wins.
     assert_eq!(sent[2].get_inner_data(), &hosted_document_dated(monday));
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// The console takes the document again on every call, and keeps up with the
+/// application as it takes documents back
+///
+/// The tokens are the point: what a send carries is the one that came with the
+/// document it is a copy of — the read's, then the one the application answered
+/// the previous send with, and none at all for a document it never handed over.
+#[test]
+fn the_console_takes_the_document_again_on_every_call() {
+    let dir = workspace("console");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let monday = chrono::NaiveDate::from_ymd_opt(2026, 9, 7).expect("7 September 2026 is a monday");
+
+    let host = Arc::new(ConsoleHost::new(reload(&source), 7, false));
+
+    run_hosted(
+        include_str!("scripts/console.py"),
+        Some(host.clone()),
+        |globals| {
+            globals.set_item("monday", monday)?;
+            Ok(())
+        },
+    );
+
+    let mut dated = reload(&source).get_inner_data().clone();
+    dated.params.periods.first_week =
+        Some(collomatique_time::WeekStart::new(monday).expect("this date is a monday"));
+
+    let sent = host.sent();
+    assert_eq!(sent.len(), 3);
+
+    assert_eq!(sent[0].0.get_inner_data(), &dated);
+    assert_eq!(sent[0].1, Some(7), "the token the document was read at");
+    assert_eq!(
+        sent[1].1,
+        Some(8),
+        "then the one the application answered the first send with"
+    );
+
+    assert_eq!(sent[2].0.get_inner_data(), Data::new().get_inner_data());
+    assert_eq!(sent[2].1, None, "a document the application never held");
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
+/// A refused replacement reaches the script as an exception, and leaves the
+/// document as it was
+#[test]
+fn the_console_hears_a_refused_replacement() {
+    let dir = workspace("console-refused");
+    let source = example_copy(&dir, "source.collomatique");
+
+    let host = Arc::new(ConsoleHost::new(reload(&source), 7, true));
+
+    let globals = run_hosted(
+        include_str!("scripts/console_refused.py"),
+        Some(host.clone()),
+        |_| Ok(()),
+    );
+
+    assert_eq!(
+        global::<String>(&globals, "message"),
+        "le document ouvert a été modifié depuis",
+        "the application's own sentence, not one made up on the way"
+    );
+
+    let sent = host.sent();
+    assert_eq!(sent.len(), 2);
+    assert!(
+        sent.iter().all(|(_, token)| *token == Some(7)),
+        "a refusal leaves the document speaking of what it read"
+    );
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }

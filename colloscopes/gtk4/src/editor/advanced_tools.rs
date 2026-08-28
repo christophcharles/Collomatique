@@ -221,6 +221,7 @@ pub enum AdvancedToolsInput {
     UpdateIlpProblemInfo(Option<IlpProblemInfo>),
 
     RunPythonScriptClicked,
+    OpenPythonConsoleClicked,
     InstallPackageClicked,
     ExportMpsClicked,
     /// Snapshot of the document, taken by the editor when the export was asked for: hand it to
@@ -245,6 +246,8 @@ pub enum AdvancedToolsInput {
 #[derive(Debug)]
 pub enum AdvancedToolsOutput {
     RunPythonScriptClicked,
+    /// The console needs the open document, so the click goes up to the editor.
+    OpenPythonConsoleClicked,
     ExportMpsClicked,
     /// The model is built and the MPS file is being written.
     MpsExportWriting(PathBuf),
@@ -500,6 +503,19 @@ impl Component for AdvancedTools {
                         set_margin_start: 10,
                         set_margin_end: 10,
                         set_size_request: (-1, 40),
+                        adw::ButtonContent {
+                            set_icon_name: "utilities-terminal-symbolic",
+                            set_label: "Console Python",
+                        },
+                        connect_clicked => AdvancedToolsInput::OpenPythonConsoleClicked,
+                    },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
                         // Hidden rather than greyed out where Python belongs to
                         // the machine: there is no directory of ours to install
                         // into there, so this is not a button waiting to become
@@ -568,6 +584,11 @@ impl Component for AdvancedTools {
             AdvancedToolsInput::RunPythonScriptClicked => {
                 sender
                     .output(AdvancedToolsOutput::RunPythonScriptClicked)
+                    .unwrap();
+            }
+            AdvancedToolsInput::OpenPythonConsoleClicked => {
+                sender
+                    .output(AdvancedToolsOutput::OpenPythonConsoleClicked)
                     .unwrap();
             }
             AdvancedToolsInput::InstallPackageClicked => {

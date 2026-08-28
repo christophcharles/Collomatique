@@ -28,7 +28,7 @@ pub mod values;
 pub use dialogs::{Dialogs, FileRequest, set_dialogs};
 pub use document::Document;
 pub use engine::{EngineExe, set_engine};
-pub use host::{Host, set_host};
+pub use host::{Host, SendError, TakenDocument, set_host};
 pub use model::ColloscopeModel;
 pub use transaction::Transaction;
 
