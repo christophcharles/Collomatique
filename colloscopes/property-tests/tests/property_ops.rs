@@ -7,12 +7,6 @@
 //! report a fully clean document (`Ok(BTreeSet::new())` — no logic errors, no
 //! dangling references, no convergence breaks).
 //!
-//! This file absorbs the former `property_ops_broken_invariants.rs` twin
-//! (deleted in the step-5 R1 deactivation commit): once the walk drives
-//! `apply` and asserts `broken_invariants` cleanliness op-by-op, the twin's
-//! sole job — running the new oracle over the same trajectories — is covered
-//! here, so the two harnesses became one.
-//!
 //! On failure, the seed and the full op log are printed: re-running the
 //! same test binary reproduces the exact same sequence.
 

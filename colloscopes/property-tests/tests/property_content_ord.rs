@@ -9,13 +9,13 @@
 //! gate has rolled back, so `data` is unchanged and valid — precisely the state
 //! the cascade would consult the map on.
 //!
-//! **Why this exists next to `property_cascade.rs`.** Commit 5 put the
-//! strictly-below check inside the engine, but the engine only ever sees the
-//! *canonical first pick* of a break set, and only along the trajectory the
-//! cascade happens to walk. This harness asks the map about **every** invariant
-//! in every reported set, so it probes arms the engine never reaches. It is
-//! also the only systematic exercise of the map's `Some` branches — step 6's
-//! §9bis innocent-state tests systematically cover `None`.
+//! **Why this exists next to `property_cascade.rs`.** The engine carries the
+//! strictly-below check itself, but it only ever sees the *canonical first
+//! pick* of a break set, and only along the trajectory the cascade happens to
+//! walk. This harness asks the map about **every** invariant in every reported
+//! set, so it probes arms the engine never reaches. It is also the only
+//! systematic exercise of the map's `Some` branches — the innocent-state unit
+//! tests systematically cover `None`.
 //!
 //! **Why `force_apply` and not `apply`.** A fix is allowed to land a state that
 //! still breaks *other* invariants: those are the mid-cascade states the engine
@@ -27,7 +27,7 @@
 //! would pass just as happily if no generated op ever broke an invariant, or if
 //! the map answered `None` every time. Both counters are asserted across all
 //! seeds, and they count the specific outcome the test is about rather than a
-//! proxy (the step-6 commit-8 lesson).
+//! proxy.
 //!
 //! **What it measured** (July 29 2026, green on its first run): across the 50
 //! seeds, 3564 landings were rejected over broken invariants and the map
@@ -53,11 +53,11 @@ use harness::{OpLog, RunConfig};
 #[path = "support/start_points.rs"]
 mod start_points;
 
-/// The house configuration for the step-6-family harnesses: one hardcoded
-/// const, no environment variables, no `#[ignore]` tiers — the `fuzz`
-/// feature that decides *whether* this target is built is a separate
-/// matter, and does not vary what it does. Matches `property_cascade.rs`,
-/// whose walk this one mirrors.
+/// The house configuration for these harnesses: one hardcoded const, no
+/// environment variables, no `#[ignore]` tiers — the `fuzz` feature that
+/// decides *whether* this target is built is a separate matter, and does not
+/// vary what it does. Matches `property_cascade.rs`, whose walk this one
+/// mirrors.
 ///
 /// `seeds` is the budget for the bootstrap start; the four big starts share
 /// the same again between them (`start_points::seeds_for`).
@@ -94,9 +94,9 @@ fn maybe_snapshot(rng: &mut ChaCha8Rng, data: &Data, snapshots: &mut Vec<InnerDa
     }
 }
 
-/// Design doc §8 step 6.5: over generated broken states, every
-/// `fix_invariant` answer is `None` or an op whose applied result sits
-/// strictly below the pre-fix state — never above, never equivalent.
+/// Over generated broken states, every `fix_invariant` answer is `None` or an
+/// op whose applied result sits strictly below the pre-fix state — never
+/// above, never equivalent.
 #[test]
 fn every_fix_lands_strictly_below() {
     let probed_fixes = Cell::new(0usize);
@@ -152,9 +152,9 @@ fn every_fix_lands_strictly_below() {
         },
     );
 
-    // Coverage guards (step-6 commit-8 lesson: count the specific outcome the
-    // test is about, not a proxy). Without them the walk could go green with
-    // the map never once answering `Some`.
+    // Coverage guards: they count the specific outcome the test is about, not
+    // a proxy. Without them the walk could go green with the map never once
+    // answering `Some`.
     assert!(
         broken_landings.get() > 0,
         "no generated op ever broke an invariant across all seeds",

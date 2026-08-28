@@ -308,8 +308,8 @@ impl Fixable for QuoteData {
 
     fn fix_invariant(&self, invariant: &QuoteInvariant) -> Option<QuoteFix> {
         match invariant {
-            // Presence of the removable material (design doc §5): Some only if
-            // the quote row actually exists in the current state.
+            // Presence of the removable material: Some only if the quote row
+            // actually exists in the current state.
             QuoteInvariant::DanglingQuoteAuthor(quote) => self
                 .quotes
                 .contains_key(quote)
@@ -350,10 +350,10 @@ impl ContentOrd for QuoteData {
 
 /// The way an [EvilQuoteData] map misbehaves.
 ///
-/// The two step-6.5 modes ([EvilMode::CreateAuthor] and
-/// [EvilMode::ReauthorExisting]) violate the contract while *resolving* the
-/// invariant: before the in-flight document-order check they would have led
-/// the cascade to a quiet, creative `Ok`. Now they panic.
+/// [EvilMode::CreateAuthor] and [EvilMode::ReauthorExisting] violate the
+/// contract while *resolving* the invariant: without the in-flight
+/// document-order check they would lead the cascade to a quiet, creative
+/// `Ok`. With it they panic.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum EvilMode {
     /// Always "fixes" by removing the invariant's own quote, even when it is

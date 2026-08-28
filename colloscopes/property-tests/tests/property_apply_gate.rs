@@ -1,12 +1,8 @@
 //! Property fuzz over the apply/check/rollback gate ([`Data::apply`]).
 //!
-//! This is the step-5 successor of `differential_force_apply.rs`. The old file
-//! *differential-fuzzed* `force_apply` against the two checkers to earn trust in
-//! the new checker; that job is done, and the old checker retired with step 5.
-//! What survives is the randomized coverage of the exact primitive production
-//! now runs on: the gate `apply` = snapshot + `force_apply` +
-//! `broken_invariants` + rollback. This file re-expresses the same walk-and-probe
-//! shape as *properties of the gate alone*:
+//! Randomized coverage of the exact primitive production runs on: the gate
+//! `apply` = snapshot + `force_apply` + `broken_invariants` + rollback. The
+//! walk-and-probe shape is expressed as *properties of the gate alone*:
 //!
 //! * **atomicity** — every `Err` arm (precheck, logic, invariants) leaves the
 //!   state bit-identical to before the op, and carries a non-empty error set on
@@ -209,13 +205,10 @@ fn apply_gate_is_atomic_and_honest() {
                             redo.get_inner_data() == snapshot.get_inner_data(),
                             "reverse of a gated op must restore the pre-state",
                         );
-                        // ForceValid needs no special arm: without the old checker
-                        // there is no "hidden repair" to detect here (the gate only
-                        // ever lands fully-valid states, asserted just above). A
-                        // valid landing is honest whether it changed state or was a
-                        // perfect no-op. (The migration-window canary guarded
-                        // force-path drift until it retired with the old world
-                        // at R1.)
+                        // ForceValid needs no special arm: the gate only ever
+                        // lands fully-valid states, asserted just above, and a
+                        // valid landing is honest whether it changed state or
+                        // was a perfect no-op.
                     }
                 }
 

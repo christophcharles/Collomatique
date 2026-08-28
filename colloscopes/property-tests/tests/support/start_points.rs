@@ -131,8 +131,7 @@ pub(crate) fn seeds_for(start: &Start, cfg: &RunConfig) -> u64 {
 /// The snapshots are the walk's history positions. A bootstrap returns one per
 /// bootstrap op; a loaded document has no history at all, so it returns the
 /// single position it starts at — which is the shape the undo/redo walks of
-/// `property_ops` need, and they were run this way before the plan was
-/// written.
+/// `property_ops` need.
 pub(crate) fn open(start: &Start, rng: &mut ChaCha8Rng) -> (AppState<Data, String>, Vec<Data>) {
     match start {
         Start::Bootstrap => harness::bootstrap(rng),

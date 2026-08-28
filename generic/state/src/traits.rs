@@ -531,9 +531,9 @@ mod tests {
 
     #[test]
     // History written by `apply` must replay correctly through undo/redo,
-    // which go through `update_internal_state_with_aggregated` — itself now on
-    // `apply` (commit 3.0), so the ops it recorded replay through the same
-    // gate that accepted them.
+    // which go through `update_internal_state_with_aggregated` — itself on
+    // `apply`, so the ops it recorded replay through the same gate that
+    // accepted them.
     fn apply_history_replays_through_undo_redo() {
         let mut state = new_state(0);
         state

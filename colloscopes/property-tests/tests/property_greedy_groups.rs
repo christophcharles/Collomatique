@@ -186,7 +186,7 @@ fn greedy_check(rng: &mut ChaCha8Rng, inner: &InnerData, coverage: &Coverage) {
         let placed: BTreeSet<StudentId> = groups.iter().flatten().copied().collect();
         assert_eq!(&placed, spec.students(), "exactly the spec's students");
 
-        // The balanced targets of §3, characterized rather than recomputed:
+        // The balanced targets, characterized rather than recomputed:
         // minimal count, descending, spread at most one, inside the range.
         // Together with the exact cover above, that pins the sizes uniquely,
         // without this test restating the production formula.
