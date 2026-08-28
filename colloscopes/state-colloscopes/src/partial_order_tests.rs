@@ -343,7 +343,7 @@ fn middle_removal_in_an_ordered_list_is_strictly_below() {
 
 #[test]
 fn excluded_period_drop_is_strictly_below() {
-    // D5.1 in one assertion. Dropping an exclusion *widens* what the subject
+    // The pin in one assertion. Dropping an exclusion *widens* what the subject
     // denotes (it now runs on one more period), but the document holds one
     // element less — and the order reads the content, never the meaning.
     let mut wide = Subject::default();

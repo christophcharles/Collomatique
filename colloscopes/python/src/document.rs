@@ -576,8 +576,8 @@ impl Document {
     /// question, so the two reads pair.
     ///
     /// The view is read-only: nothing here mutates, and the placements
-    /// mappings cannot be written to. All of that is the write surface of
-    /// step 3.
+    /// mappings cannot be written to. All of that is the write surface's
+    /// business.
     #[getter]
     fn colloscope(slf: Py<Self>) -> Colloscope {
         Colloscope::new(slf)

@@ -129,13 +129,13 @@ pub enum QuoteOp {
     /// Sets (or overwrites) a quote row. The author is *not* prechecked:
     /// a dangling author is an invariant break, which is the point.
     SetQuote { quote: u64, author: u64 },
-    /// Removes a quote row. Removing an absent quote is a perfect no-op
-    /// (G.2 precedent), whose inverse is itself.
+    /// Removes a quote row. Removing an absent quote is a perfect no-op, whose
+    /// inverse is itself.
     RemoveQuote(u64),
     /// Rewrites an existing quote's author. Unlike [QuoteOp::SetQuote] the
     /// quote must exist (precheck) — which is what lets a cascade fix consume
     /// the target's own target and drive the retried target into `InvalidOp`
-    /// with a remembered break (the D4 conviction route).
+    /// with a remembered break (the conviction route).
     UpdateQuote { quote: u64, author: u64 },
     /// Sets (or overwrites) a note row. The commented quote is *not*
     /// prechecked — the [QuoteOp::SetQuote] mirror one level down.

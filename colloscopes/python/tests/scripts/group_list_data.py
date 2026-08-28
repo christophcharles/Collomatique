@@ -2,10 +2,10 @@ import dataclasses
 
 import collomatique
 
-# `source` is a throwaway copy of the document the read surface's commit 8
-# built for the two filling shapes: an automatic group list and a prefilled
-# one with named groups, side by side. The example has only prefilled lists
-# and only unnamed groups, so it cannot carry this test.
+# `source` is a throwaway copy of a document built for the two filling shapes:
+# an automatic group list and a prefilled one with named groups, side by side.
+# The example has only prefilled lists and only unnamed groups, so it cannot
+# carry this test.
 doc = collomatique.load(source)
 
 group_list_list = list(doc.group_lists)

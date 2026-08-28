@@ -277,10 +277,10 @@ impl ColloscopeUpdateOp {
                                     }
                                 }
                                 // The four scans above cover every break a
-                                // SetGroupList can cause, so this is the
-                                // instrument H.2 describes rather than a hole:
-                                // reaching it means the checker grew a case the
-                                // vocabulary has no word for.
+                                // SetGroupList can cause, so this is an
+                                // instrument rather than a hole: reaching it
+                                // means the checker grew a case the vocabulary
+                                // has no word for.
                                 panic!("Unexpected invariant breaks during UpdateColloscopeGroupList: {set:?}");
                             }
                             _ => panic!("Unexpected error during UpdateColloscopeGroupList: {e:?}"),
@@ -612,10 +612,10 @@ impl ColloscopeUpdateOp {
                                         }
                                     }
                                     // The four scans above cover every break a
-                                    // SetGroupList can cause, so this is the
-                                    // instrument H.2 describes rather than a
-                                    // hole: reaching it means the checker grew a
-                                    // case the vocabulary has no word for.
+                                    // SetGroupList can cause, so this is an
+                                    // instrument rather than a hole: reaching it
+                                    // means the checker grew a case the
+                                    // vocabulary has no word for.
                                     panic!("Unexpected invariant breaks during InstallColloscope group-list write: {set:?}");
                                 }
                                 _ => panic!("Unexpected error during InstallColloscope group-list write: {e:?}"),

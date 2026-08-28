@@ -6590,9 +6590,8 @@ fn a_removed_address_makes_the_assignments_read_raise() {
 /// The example carries six incompatibilities across two subjects, one with a
 /// single busy window, all bound to no week pattern — enough to pin the walk,
 /// every field, and the `None` shape of `week_pattern`. An incompatibility
-/// that carries a pattern stays out of this commit's tests: no fixture has
-/// one, and the `Some` shape needs a synthetic document, which commit 13
-/// builds.
+/// that carries a pattern stays out of these tests: no fixture has one, and
+/// the `Some` shape needs a synthetic document.
 #[test]
 fn the_incompats_read_back_slot_by_slot() {
     let dir = workspace("incompats");

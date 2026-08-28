@@ -952,7 +952,7 @@ pub(crate) mod tests {
     #[test]
     fn dangling_slots_in_slot_pairing_yield_distinct_sites() {
         // Both parts forged: the antecedent and consequent slots dangle at
-        // *distinct* sites (D6 — the two-sided row doubles as a site-split pin).
+        // *distinct* sites — the two-sided row doubles as a site-split pin.
         let mut data = InnerData::default();
         let rule = unsafe { SlotPairingRuleId::new(1) };
         let slot_a = unsafe { SlotId::new(2) };

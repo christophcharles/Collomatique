@@ -196,8 +196,8 @@ fn apply_gate_is_atomic_and_honest() {
                             Ok(BTreeSet::new()),
                             "apply returned Ok but the state is not fully valid",
                         );
-                        // The returned reverse restores the pre-state exactly (the
-                        // clean-landing reverse pin, carried over from step 4).
+                        // The returned reverse restores the pre-state exactly
+                        // (the clean-landing reverse pin).
                         let mut redo = data.clone();
                         redo.force_apply(&reverse)
                             .expect("reverse of a gated op must apply");

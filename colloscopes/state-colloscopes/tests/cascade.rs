@@ -1972,8 +1972,7 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
     }
 }
 
-/// Fixture `5a` — **the deliberate divergence from the legacy cleaning**
-/// (design-doc D5.4).
+/// Fixture `5a` — **the deliberate divergence from the legacy cleaning**.
 ///
 /// Target: `WeekPatternOp::Remove(WP)`. Both sites hold the pattern in an
 /// `Option` whose `None` is a legal, documented value, so the reference can go
@@ -2243,14 +2242,14 @@ fn fixture_5b_week_pattern_update_clears_the_newly_inactive_cell() {
 ///
 /// ```ignore
 /// // Snapshot for the no-op-fix panic; only fix ops are held to it (a
-/// // no-op *target* is a legitimate perfect no-op, G.2).
+/// // no-op *target* is a legitimate perfect no-op).
 /// let before = (!is_target).then(|| data.clone());
 /// ```
 ///
 /// A fix that applies as a perfect no-op is a map-contract violation and the
 /// engine panics on it — the map owes a `None` when there is nothing to repair.
 /// A *target* that applies as a perfect no-op is legitimate, because the apply
-/// gate accepts perfect no-ops (the G.2 widening), so the target is exempt from
+/// gate accepts perfect no-ops, so the target is exempt from
 /// that check on purpose. Drop the `(!is_target)` guard and make the snapshot
 /// unconditional, and every no-op target starts panicking — and without this
 /// fixture no test in the suite would notice. The toy tests in `cascade.rs` do

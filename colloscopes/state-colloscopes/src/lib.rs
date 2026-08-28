@@ -687,8 +687,8 @@ mod force_apply_tests {
     #[test]
     fn forced_valid_week_add_equals_apply() {
         // Weeks exercise the copied helpers (`force_add_week` &c.), the highest
-        // drift-risk spot (F2). Build a period, then compare the two paths on a
-        // week AddFront.
+        // drift-risk spot. Build a period, then compare the two paths on a week
+        // AddFront.
         let mut data = Data::default();
         let period = match apply(&mut data, Op::Period(PeriodOp::AddFront)) {
             AnnotatedOp::Period(AnnotatedPeriodOp::AddFront(p)) => p,

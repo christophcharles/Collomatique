@@ -13,8 +13,8 @@
 //!   exists. The engine holds the map to its contract in-flight: the precheck
 //!   and disowned-invariant panics, the strictly-below assertion in the
 //!   document order ([`ContentOrd`](collomatique_state::partial_order::ContentOrd))
-//!   after every landed fix (step 6.5 — deliberately *not* `PartialOrd`, whose
-//!   std container impls are lexicographic), and the no-progress ledger on
+//!   after every landed fix (deliberately *not* `PartialOrd`, whose std
+//!   container impls are lexicographic), and the no-progress ledger on
 //!   never-landing fix chains. Every fix a green walk lands has passed the
 //!   strictly-below assertion.
 //! * **`Ok` ⇒ honesty** — the landed state is fully valid, the target op is the
@@ -86,9 +86,9 @@ use harness::{OpLog, RunConfig, RunStats};
 #[path = "support/start_points.rs"]
 mod start_points;
 
-/// Deliberately wide while the migration is in flight (★ user ruling, July 28
-/// 2026): a cascade multiplies gate calls, but we would rather catch a map bug
-/// and wait a bit than tune the harness down before the map has stopped moving.
+/// Deliberately wide while the migration is in flight: a cascade multiplies
+/// gate calls, but we would rather catch a map bug and wait a bit than tune the
+/// harness down before the map has stopped moving.
 /// Below the two existing harnesses, which run 100 × 1000 each. Shrinking is a
 /// later decision, to be justified the way `property_ops.rs:32-34` justifies its
 /// own — not a knob to reach for the first time the suite feels slow.

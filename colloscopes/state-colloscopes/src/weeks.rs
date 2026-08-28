@@ -524,8 +524,8 @@ impl Weeks {
 /// no-clobber, op-target existence
 /// ([Self::InvalidWeekId]), destination-period existence for add/move
 /// ([Self::InvalidPeriodId]), and position bounds. The Remove reference scans,
-/// the Update silencing guard, and both `WeekMove` semantic guards (the F2
-/// inline re-implementations) are stripped.
+/// the Update silencing guard, and both `WeekMove` semantic guards (the inline
+/// re-implementations) are stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum WeekPrecheckError {
     /// A period id is invalid
@@ -686,7 +686,7 @@ impl crate::Data {
 
     /// Force-applies a week move: target existence, destination-period
     /// existence and position bounds kept; both `WeekMove` semantic guards (the
-    /// F2 inline re-implementations) stripped.
+    /// inline re-implementations) stripped.
     fn force_move_week(
         &mut self,
         week_id: WeekId,
@@ -728,7 +728,7 @@ impl crate::Data {
         }
 
         // stripped: the per-row colloscope compatibility guard (subject-runs +
-        // group-bound, the F2 inline re-implementations)
+        // group-bound, the inline re-implementations)
 
         self.inner_data
             .params

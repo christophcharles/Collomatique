@@ -89,8 +89,8 @@ use crate::history::AggregatedOp;
 /// anchor — or an op payload that would land logically impossible data). It is
 /// never resolvable. [ApplyError::BrokenInvariants] means the op is
 /// well-formed but the state does not satisfy what it needs: the payload is
-/// the exact set of broken invariants, in the canonical `Ord`. At step 6 this
-/// is what the cascade resolves; outside the cascade it is simply an error.
+/// the exact set of broken invariants, in the canonical `Ord`. This is what
+/// the cascade resolves; outside the cascade it is simply an error.
 ///
 /// Either way the failed `apply` left the data strictly unchanged.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]

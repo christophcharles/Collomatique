@@ -163,7 +163,7 @@ const FIX_VARIANTS: [&str; 24] = [
 /// is gone. Only a bare elementary [`collomatique_state_colloscopes::PeriodOp::Remove`]
 /// leaves one, and no composite emits a bare one: `DeletePeriodAndWeeks`
 /// *authors* its weeks' removal first, precisely so the user is not told « la
-/// semaine X sera supprimée » about weeks they asked to delete (★ D8). The
+/// semaine X sera supprimée » about weeks they asked to delete. The
 /// state-layer path that does reach it is pinned by fixture 1b of
 /// `colloscopes/state-colloscopes/tests/cascade.rs`, and its French template is written for
 /// the day a composite legitimately grows a bare period removal — the day this
@@ -1455,7 +1455,7 @@ fn update_ops_never_panic_and_land_valid() {
                             // Rendered against `state`, which is still the
                             // *pre*-state here: that is the document the dialog
                             // appears over, and the one the texts are written
-                            // against (D7). An `Err` means a repair named material
+                            // against. An `Err` means a repair named material
                             // the pre-state never held — the frame rule's
                             // rendering corollary broken — and the seed replays it.
                             for warning in &result.warnings {

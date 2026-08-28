@@ -598,8 +598,8 @@ pub(crate) fn model_periodicity(obj: &Bound<'_, PyAny>) -> Option<SubjectPeriodi
 /// must not cross midnight into the next day — a window ending exactly at
 /// midnight is fine. A window that refuses to exist raises `ValueError`.
 ///
-/// It opts into extraction like [WeekBlock]: step 3's dataclasses will hold
-/// these values in their fields, and the write surface will pass them back in.
+/// It opts into extraction like [WeekBlock]: the dataclasses hold these values
+/// in their fields, and the write surface passes them back in.
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TimeSlot {
@@ -779,7 +779,7 @@ impl Enforcement {
 /// The value is a plain count, and nothing about the range is checked at
 /// construction: the model's per-week fields take zero, and the at-least-one
 /// rule on `max_interrogations_per_day` is the model's own, enforced where the
-/// model stores that field — step 3 refuses a zero there, not here.
+/// model stores that field — a zero is refused there, not here.
 ///
 /// [Limits]: crate::collections::settings::Limits
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
@@ -923,8 +923,8 @@ impl Orientation {
 ///
 /// Construction validates what the model's own channels hold: each of the
 /// three is 0-255, and a channel outside that raises `ValueError`. It opts
-/// into extraction like [Limit], so step 3's dataclasses can hold it in their
-/// fields and pass it back in.
+/// into extraction like [Limit], so the dataclasses can hold it in their fields
+/// and pass it back in.
 #[pyclass(module = "collomatique", frozen, eq, hash, from_py_object)]
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct Color {

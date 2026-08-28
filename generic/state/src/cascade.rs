@@ -236,7 +236,7 @@ pub fn apply_cascade<T: Fixable>(
     // parent links exactly. Depth 1 is the target.
     let mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>, usize)> = Vec::new();
     // The target's most recent BrokenInvariants set: the informative error
-    // when the target is convicted mid-cascade (D4 — the SlotOverflowsDay trace).
+    // when the target is convicted mid-cascade.
     let mut last_target_break: Option<BTreeSet<T::Invariant>> = None;
     // Picks since the last landed op. State only changes on landings and the
     // map is a pure function of (state, invariant), so re-picking the same
@@ -252,7 +252,7 @@ pub fn apply_cascade<T: Fixable>(
         let is_target = stack.len() == 1;
 
         // Snapshot for the monotonicity check; only fix ops are held to it (a
-        // no-op *target* is a legitimate perfect no-op, G.2).
+        // no-op *target* is a legitimate perfect no-op).
         let before = (!is_target).then(|| data.clone());
 
         match data.apply(&front) {
@@ -554,8 +554,8 @@ mod tests {
     }
 
     // 10. A fix that grows the state: the map "fixes" the dangling author by
-    //     creating the missing student. Before step 6.5 this landed a quiet
-    //     creative Ok; the document-order check panics instead.
+    //     creating the missing student. This used to land a quiet creative
+    //     Ok; the document-order check panics instead.
     #[test]
     #[should_panic(expected = "did not land strictly below")]
     fn a_growing_fix_panics() {
@@ -611,7 +611,7 @@ mod tests {
         let _ = apply_cascade(&mut data, target);
     }
 
-    // 13. The remembered-error conviction (D4): a fix consumes the target's
+    // 13. The remembered-error conviction: a fix consumes the target's
     //     own target, the retried target hits a precheck, and the user is told
     //     what the target kept breaking — not a baffling "unknown quote" for a
     //     quote they can see.
