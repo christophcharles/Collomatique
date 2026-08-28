@@ -69,5 +69,6 @@ fn run_python_script(script: String) -> Result<(), anyhow::Error> {
 pub fn run_rpc_engine() -> Result<(), anyhow::Error> {
     collomatique_rpc_engine::run_engine::<ColloProtocol, _>(|app| match app {
         AppInitMsg::RunPythonScript(script) => run_python_script(script),
+        AppInitMsg::StartPythonRepl => Err(anyhow!("la console Python n'est pas encore branchée")),
     })
 }
