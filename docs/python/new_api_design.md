@@ -448,7 +448,10 @@ worker-killing `panic!`s:
   a diagnosis: `IdCeilingExceeded` names `compacted()` as the way out (§9.5), and
   `CaveatedOverwrite` lists what was lost and names `ignore_caveats=True` (§9.2). Both
   are `SaveError`s, so a script that only cares that the write failed catches one
-  thing. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
+  thing. `DocumentChanged` is a third: the application declined the document
+  `send_to_host` offered it. Only the interactive console meets it — there the user
+  goes on editing while the console is open, so the document may have moved since it
+  was read, and the application asks before overwriting. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
   tracks how it was produced.
 - `ModelBuildError` for a colloscope model the constraint builder refuses to
   build (`doc.build_colloscope_model`, §10.2), carrying the builder's own
