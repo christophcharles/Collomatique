@@ -6,10 +6,10 @@
 //! rather than picking it apart field by field, and construction validates what
 //! the model validates.
 //!
-//! These are rust classes rather than the `.py` dataclasses of
-//! `docs/python/new_api_design.md` §2, for the reason `caveats.rs` already
-//! gives: that section's argument is about nested *mutable* copies, and it does
-//! not apply to a flat immutable value that only ever travels out of rust.
+//! These are rust classes rather than `.py` dataclasses, for the reason
+//! `caveats.rs` already gives: the argument for dataclasses is about nested
+//! *mutable* copies, and it does not apply to a flat immutable value that only
+//! ever travels out of rust.
 //!
 //! This module opens with the periodicity family, which is what the subjects
 //! need, [TimeSlot], which the incompatibilities hand out, the settings
@@ -111,9 +111,8 @@ impl Weekday {
 
 /// A `(min, max)` pair, inclusive at both ends
 ///
-/// The model's `NonEmptyRangeInclusive` never leaks as a class: a range reads as
-/// the tuple `docs/python/new_api_design.md` §14 already writes,
-/// `students_per_group=(2, 3)`.
+/// The model's `NonEmptyRangeInclusive` never leaks as a class: a range reads
+/// as a plain tuple, `students_per_group=(2, 3)`.
 pub(crate) type Range = (u32, u32);
 
 /// The range a model field holds
@@ -131,8 +130,8 @@ pub(crate) fn nonzero_range(bounds: &NonEmptyRangeInclusive<NonZeroU32>) -> Rang
 
 /// Checks a `(min, max)` a script wrote down
 ///
-/// The boundary of §6 applied one milestone early: a leaf value refuses
-/// nonsense when it is built, so step 3 can take these objects as they are.
+/// A leaf value refuses nonsense when it is built, so whatever takes these
+/// objects can take them as they are.
 fn checked_range(what: &str, bounds: Range) -> PyResult<Range> {
     let (min, max) = bounds;
     if min > max {

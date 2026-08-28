@@ -1,7 +1,6 @@
 """The values a script builds, and what a read hands back detached.
 
-§2 of `docs/python/new_api_design.md` is the design, and it
-says why these are python dataclasses rather than rust classes: a value nests
+These are python dataclasses rather than rust classes because a value nests
 and holds real mutable containers, and a pyo3 getter hands back a *clone* of
 the struct it holds — so `value.nested.field = x` would quietly write to a
 temporary that is thrown away. A dataclass has no such trap.
@@ -1173,7 +1172,6 @@ class GroupListSolveConfig:
 class ColloscopeSolveConfig:
     """What a solve recomputes, and what it must leave alone.
 
-    §10 of `docs/python/new_api_design.md` is the design.
     `doc.build_colloscope_model(config)` takes one of these, and the model it
     hands back is what the MPS export writes:
 
@@ -1307,7 +1305,6 @@ class FuzzyConfig:
 class ConductorStrategy:
     """How a solve is run: which substrategies, on how many worker slots.
 
-    §10 of `docs/python/new_api_design.md` is the design.
     `model.solve(strategy)` takes one of these:
 
         strategy = clm.ConductorStrategy.optimize()

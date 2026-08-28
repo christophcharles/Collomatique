@@ -166,8 +166,7 @@ assert _same_class is collomatique.DocumentData
 assert collomatique.DocumentData.__module__ == "collomatique"
 
 # A tree keyed by handles and one keyed by ids name the same entities, and
-# the two do not compare equal — the wart §2.3 records, same as every value
-# class.
+# the two do not compare equal — the same wart as every value class.
 subject = list(doc.subjects)[0]
 teacher = list(doc.teachers)[0]
 student = list(doc.students)[0]

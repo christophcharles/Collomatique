@@ -2,8 +2,7 @@
 //!
 //! Every mutator returns an [OpResult] rather than `None`: a write can do more
 //! than it was asked to — the cascade repairs whatever the change broke — and
-//! `docs/python/new_api_design.md` §5 makes those repairs part of the answer
-//! instead of leaving them silent, which is what the old api did.
+//! those repairs are part of the answer instead of being left silent.
 //!
 //! A write that creates something answers the [AddResult] subclass, which
 //! carries the handle of what it made beside the same warnings. [created] is
@@ -72,9 +71,9 @@ impl OpResult {
 ///
 /// The same [OpResult] — `warnings` is there and means the same thing — with
 /// the one thing a creating write has to say beside them: `created`, what it
-/// made. A **handle**, not an id, for the reason §4 of the design gives for
-/// every read that names an entity: a handle is strictly more useful, and the
-/// id is one attribute away as `r.created.id`.
+/// made. A **handle**, not an id, for the reason every read that names an
+/// entity hands back one: a handle is strictly more useful, and the id is one
+/// attribute away as `r.created.id`.
 ///
 /// The handle is typed — a `doc.incompats.add(...)` answers an `Incompat` —
 /// because it is the handle the collection would have handed out anyway. There

@@ -2,8 +2,7 @@
 //!
 //! What `doc.build_colloscope_model(config)` hands back: the problem the
 //! solver would attack, built once and then used — written out as an MPS file,
-//! or solved. `docs/python/new_api_design.md` §10.2 is the design; this module
-//! is the object it describes.
+//! or solved.
 //!
 //! It is **opaque**. A script can hold it, pass it back to a method and print
 //! it, and that is all: no variables, no constraints, no accessors. Publishing
@@ -11,10 +10,10 @@
 //! `constraints-colloscopes` public API, and a rename there would then break
 //! scripts. The only thing that crosses is the file the export writes.
 //!
-//! It is **detached**, like the values of §2: a snapshot of the document as it
-//! stood when the build ran. Editing the document afterwards neither changes
-//! the model nor invalidates it, so there is no staleness question to ask of
-//! it — it is not a handle.
+//! It is **detached**, like the value dataclasses: a snapshot of the document
+//! as it stood when the build ran. Editing the document afterwards neither
+//! changes the model nor invalidates it, so there is no staleness question to
+//! ask of it — it is not a handle.
 
 use std::path::PathBuf;
 use std::sync::mpsc::{self, RecvTimeoutError};
@@ -62,7 +61,7 @@ pub struct ColloscopeModel {
     /// The built problem, in the shape `SolveConfig::build_model` left it —
     /// which already carries both the real problem and the constraints-only
     /// checker one, so the choice between them belongs to the export and not
-    /// to the build (§10.2).
+    /// to the build.
     model: ConfiguredColloscopeModel,
     /// The parameters the model was built against
     ///
@@ -110,8 +109,7 @@ impl ColloscopeModel {
     /// summed over the three kinds the modeler distinguishes: the base
     /// variables plus the helper variables the constraints and the objective
     /// needed, and the constraints written down plus the ones those helpers
-    /// are defined by. No names: what a variable *is* is not part of the API
-    /// (§10.2).
+    /// are defined by. No names: what a variable *is* is not part of the API.
     fn __repr__(&self) -> String {
         let stats = self.model.stats();
 

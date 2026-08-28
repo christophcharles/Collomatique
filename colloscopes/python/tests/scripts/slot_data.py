@@ -78,9 +78,8 @@ assert all(
 )
 assert all(isinstance(d.excluded_weeks, set) for d in pattern_values)
 
-# The subject in the value is the slot's own. That is the field §2.0 of the
-# design is about, and it is what makes a read-modify-write never trip over the
-# one field a slot cannot change.
+# The subject in the value is the slot's own. That is what makes a
+# read-modify-write never trip over the one field a slot cannot change.
 assert [d.subject for d in slot_values] == [slot.subject.id for slot in slot_list]
 assert [d.teacher for d in slot_values] == [slot.teacher.id for slot in slot_list]
 assert [d.week_pattern for d in slot_values] == [
@@ -156,8 +155,8 @@ assert collomatique.WeekPatternData.__module__ == "collomatique"
 
 # A field that names an entity takes a handle or an id, interchangeably, and
 # anything iterable does where a set is wanted. The values below extract to the
-# same pattern and — this is the wart §2.3 records — do not compare equal,
-# because a dataclass stores what it was given.
+# same pattern and — this is the wart — do not compare equal, because a
+# dataclass stores what it was given.
 first_week = weeks[0]
 pattern_by_handle = collomatique.WeekPatternData(
     "Semaines paires", excluded_weeks={first_week}

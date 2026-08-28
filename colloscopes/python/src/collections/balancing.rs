@@ -176,9 +176,9 @@ impl Balancing {
     /// write itself always goes through.
     fn set_global(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5). A `BalancingData` names none,
-        // but the order is the boundary's and not each value's.
+        // an entity is resolved against this document, which borrows it to ask.
+        // A `BalancingData` names none, but the order is the boundary's and not
+        // each value's.
         let options = BalancingData::from_py(&self.doc, data)?;
 
         self.write(

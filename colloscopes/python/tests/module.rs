@@ -296,9 +296,10 @@ fn extracted_all<V: collomatique_python::data::Value>(
 
 /// How extracting one value the script built was refused
 ///
-/// The exception's class name and its message, both of them: the refusals of
-/// §2.4 are `ValueError`s that name the class and the field, and a test that
-/// only checked the class would not notice a message naming the wrong field.
+/// The exception's class name and its message, both of them: an extraction
+/// refusal is a `ValueError` that names the class and the field, and a test
+/// that only checked the class would not notice a message naming the wrong
+/// field.
 fn refused<V: collomatique_python::data::Value>(
     globals: &Py<PyDict>,
     name: &str,
@@ -985,8 +986,8 @@ impl collomatique_python::Host for FakeHost {
 /// alone: what crosses is the document, so a send that carried the right date
 /// on the wrong colloscope would be caught. The count is part of the test —
 /// three sends and no fourth — because a send happening on its own is exactly
-/// what `docs/python/new_api_design.md` §9.2 refuses, and the script's undo at
-/// the end would be the one to produce it.
+/// what the handoff refuses, and the script's undo at the end would be the one
+/// to produce it.
 #[test]
 fn a_hosted_script_is_handed_a_document_and_sends_one_back() {
     let dir = workspace("hosted");
@@ -1475,12 +1476,12 @@ fn ids_compare_hash_and_order_but_do_nothing_else() {
 /// a period and every week in it in one blow, which is what makes both handle
 /// kinds stale at once.
 ///
-/// The second half is where the whole of §2.2 is pinned: `.id`, `==` and `hash`
-/// keep working because they never read the state, every reading attribute
-/// raises `StaleHandleError`, the repr says `(périmé)` instead of raising, and
-/// the mapping conventions answer `None` / `False` / `KeyError`. The walk
-/// started before the removal is in there too, for the promise that iteration
-/// snapshots ids and mints handles as it goes.
+/// The second half is where a stale handle's whole contract is pinned: `.id`,
+/// `==` and `hash` keep working because they never read the state, every
+/// reading attribute raises `StaleHandleError`, the repr says `(périmé)`
+/// instead of raising, and the mapping conventions answer `None` / `False` /
+/// `KeyError`. The walk started before the removal is in there too, for the
+/// promise that iteration snapshots ids and mints handles as it goes.
 #[test]
 fn a_removed_period_makes_its_handles_stale() {
     let dir = workspace("stale");
@@ -1523,11 +1524,11 @@ fn a_removed_period_makes_its_handles_stale() {
 
 /// A refused write names its family, its op and its case
 ///
-/// The typed update errors of `docs/python/new_api_design.md` §6, end to end:
-/// the class comes from the family, and the three attributes from the two
-/// levels under it. None of it is written out variant by variant — the mapping
-/// is walked off the model's own serde shape — so this test is what says the
-/// walk finds the same thing the model put there.
+/// The typed update errors, end to end: the class comes from the family, and
+/// the three attributes from the two levels under it. None of it is written
+/// out variant by variant — the mapping is walked off the model's own serde
+/// shape — so this test is what says the walk finds the same thing the model
+/// put there.
 ///
 /// The four refusals cover what the walk has to get right: two families, so the
 /// class table is exercised rather than assumed; a case carrying one id, which
@@ -1645,10 +1646,10 @@ fn a_refused_write_names_its_family_its_op_and_its_case() {
 
 /// A cascade hands back every repair it made, and what needed it
 ///
-/// The piece §5 promises beyond the sentence: `kind` and `details` are the
-/// repair as structured data — the model's own name for it and its coordinates,
-/// as ids — and `parent` is the repair that needed this one, so the warning list
-/// reads as the tree it came from.
+/// The piece a warning carries beyond the sentence: `kind` and `details` are
+/// the repair as structured data — the model's own name for it and its
+/// coordinates, as ids — and `parent` is the repair that needed this one, so
+/// the warning list reads as the tree it came from.
 ///
 /// The write is applied from here rather than from the script because no python
 /// mutator cascades yet: the two first-week ops are the whole write surface.
@@ -4157,8 +4158,7 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
 /// The example holds two of the four kinds and excludes no period from any
 /// subject, so this is
 /// [the_four_periodicities_read_back_value_by_value]'s document again — the one
-/// place where `SubjectData.excluded_periods`, the field §2.0 of the design is
-/// about, has something in it to carry.
+/// place where `SubjectData.excluded_periods` has something in it to carry.
 ///
 /// Both halves are here: the round trip, which says a periodicity read out of a
 /// document goes back in as the same one, and four values written from scratch
@@ -5295,7 +5295,7 @@ fn week_pattern_document(path: &Path) {
 /// patterns nowhere near each other: that is what lets the script hold an id
 /// that is a perfectly good `WeekPatternId` and still names nothing where it is
 /// asked — a lookup and an argument, side by side, answering the two different
-/// ways §2.4 says they must.
+/// ways they must.
 #[test]
 fn a_pattern_excludes_no_week_every_week_or_the_ones_it_names() {
     let dir = workspace("exclusions");
@@ -5331,12 +5331,12 @@ fn a_pattern_excludes_no_week_every_week_or_the_ones_it_names() {
 /// — so they come from rust, between the two halves: one week pattern goes, and
 /// one whole period goes with every week in it.
 ///
-/// The point is the divergence §2.4 asks for. The model is forgiving about a
-/// reference it cannot resolve: `is_week_active` answers `false` for a week it
-/// does not hold, and treats a pattern it does not hold as excluding nothing.
-/// Those are the two answers pinned here on the model's side — and the script's
-/// side is that python gives neither, because an argument naming nothing was
-/// malformed before it had an answer.
+/// The point is the divergence between the two sides. The model is forgiving
+/// about a reference it cannot resolve: `is_week_active` answers `false` for a
+/// week it does not hold, and treats a pattern it does not hold as excluding
+/// nothing. Those are the two answers pinned here on the model's side — and
+/// the script's side is that python gives neither, because an argument naming
+/// nothing was malformed before it had an answer.
 #[test]
 fn a_removed_week_or_pattern_makes_is_week_active_raise() {
     use collomatique_state_colloscopes::ids::Id as _;
@@ -5590,11 +5590,11 @@ fn the_slots_read_back_with_the_cells_they_can_fill() {
 /// once cannot cancel itself out; the entities among them are named by their
 /// place in the walk they belong to, since an id means nothing written down.
 ///
-/// The rest is the other kinds this milestone's tests are made of: values
-/// written out by hand, entity fields taking a handle and an id alike, and the
-/// refusals with the sentence each one raises. Neither model type has a
-/// `Default`, so there is no default to pin here — what §2.5 of the design
-/// asks for is a pin per class whose model has one.
+/// The rest is the other kinds these tests are made of: values written out by
+/// hand, entity fields taking a handle and an id alike, and the refusals with
+/// the sentence each one raises. Neither model type has a `Default`, so there
+/// is no default to pin here — a class whose model has one gets that pin
+/// instead.
 #[test]
 fn the_pattern_and_slot_values_carry_the_start_time_out_and_back() {
     let dir = workspace("slot-values");
@@ -6163,7 +6163,7 @@ fn the_week_values_round_trip_and_name_their_period() {
     );
 
     // The handle-or-id pair extracts to the same week, though the two python
-    // objects do not compare equal — the wart §2.3 records.
+    // objects do not compare equal — the wart.
     assert_eq!(
         extracted::<WeekData>(&globals, "week_by_handle"),
         extracted::<WeekData>(&globals, "week_by_id")
@@ -6525,7 +6525,7 @@ fn the_assignments_read_back_row_by_row() {
 /// the dangling rows away (`colloscopes/ops/src/subjects.rs`), which is what makes the
 /// address dead rather than empty.
 ///
-/// The second half pins §3.7's wrinkle: the address is an *argument*, so a
+/// The second half pins the wrinkle: the address is an *argument*, so a
 /// dead one raises `StaleHandleError` where the total read's empty frozenset
 /// would have read as « nobody assigned ». And the survivors read exactly as
 /// before, because what went was the subject, not the table.
@@ -6585,7 +6585,7 @@ fn a_removed_address_makes_the_assignments_read_raise() {
 /// with the same document read straight from the model — the names, the
 /// subjects, and every busy window of every incompatibility: the day, the time
 /// and the duration of the model's `SlotWithDuration`. The windows also pin the
-/// read half of the `TimeSlot` value: the `from_model` conversion of §2.6.
+/// read half of the `TimeSlot` value: its `from_model` conversion.
 ///
 /// The example carries six incompatibilities across two subjects, one with a
 /// single busy window, all bound to no week pattern — enough to pin the walk,
@@ -6688,7 +6688,7 @@ fn the_incompats_read_back_slot_by_slot() {
 
 /// Constructing a `TimeSlot` validates what the model's own window type does
 ///
-/// The whole point of a leaf value (§2.6): a script names the window it
+/// The whole point of a leaf value: a script names the window it
 /// expects and compares it, and a window the model would refuse to build
 /// refuses to exist here too. The script builds the valid shapes — the plain
 /// window, and the one ending exactly at midnight, which the model's
@@ -12376,7 +12376,7 @@ fn the_export_configuration_comes_back_detached() {
     );
 
     // The defaults: every section the model's own — the six section-level
-    // builders of §3.9, the three per-student-groups constructors included,
+    // builders, the three per-student-groups constructors included,
     // and the whole tree — pinned so the python side cannot drift.
     assert_eq!(
         extracted::<ExportGlobalConfigData>(&globals, "defaults_global"),
@@ -13997,7 +13997,7 @@ fn the_snapshot_holds_the_whole_document() {
     assert_eq!(extracted::<DocumentData>(&globals, "tree"), *inner);
 
     // The handle- and id-keyed spellings of one tree extract to the same
-    // document — the §2.3 rule at tree scale.
+    // document — the handle-or-id rule at tree scale.
     assert_eq!(
         extracted::<DocumentData>(&globals, "by_handles"),
         extracted::<DocumentData>(&globals, "by_ids"),
@@ -14108,7 +14108,7 @@ fn the_snapshot_holds_the_whole_document() {
 
 /// A whole tree goes back in, as one step
 ///
-/// The coarse door of §8. The script's own assertions cover the shape of the
+/// The coarse door. The script's own assertions cover the shape of the
 /// call — the undo slot, the empty warnings, the refusals — and rust holds the
 /// two halves a script cannot see: that the document it saved really is the
 /// tree it handed over, field for field, and that a refused tree names *every*
@@ -14228,7 +14228,7 @@ fn a_document_exports_to_a_spreadsheet() {
 /// The solve configuration crosses the boundary whole, and refuses what means
 /// nothing
 ///
-/// The vocabulary of §10, extracted the way `build_colloscope_model` will
+/// The whole vocabulary, extracted the way `build_colloscope_model` will
 /// extract it. The document is the two-filling fixture because both shapes are
 /// needed here: the automatic list is what a config speaks about, and naming
 /// the prefilled one is one of the three refusals this class makes.
@@ -14485,7 +14485,7 @@ fn refused_strategy(globals: &Py<PyDict>, name: &str) -> (String, String) {
 /// The conductor strategy crosses the boundary whole, and refuses what means
 /// nothing
 ///
-/// The vocabulary of §13, extracted the way `model.solve` will extract it. No
+/// The whole vocabulary, extracted the way `model.solve` will extract it. No
 /// document is opened: a strategy says how a solve is run and names no entity,
 /// which is exactly why this family is the one that is not a `Value`.
 #[test]

@@ -1,10 +1,9 @@
 //! The value dataclasses, and the boundary they cross
 //!
-//! §2 of `new_api_design.md` is the design. The classes themselves are written
-//! in python, in `data.py`, for the reason that section gives: a value
-//! nests and holds mutable containers, and a pyo3 getter hands back a clone of
-//! the struct it holds. This module is what compiles that file into the module
-//! and what converts between the objects it defines and the model's own types.
+//! The classes themselves are written in python, in `data.py`: a value nests
+//! and holds mutable containers, and a pyo3 getter hands back a clone of the
+//! struct it holds. This module is what compiles that file into the module and
+//! what converts between the objects it defines and the model's own types.
 //!
 //! Two directions, both explicit, and neither of them a `FromPyObject` impl: a
 //! field that names an entity has to be resolved against *this* document, and
@@ -69,10 +68,10 @@ const MODULE: &str = "collomatique._data";
 pub trait Value: Sized {
     /// The model type this value converts to
     ///
-    /// The **entity**, and not the op payload (`new_api_design.md` §2). They
-    /// are the same type for eleven of the thirteen classes; where they are not, it
-    /// is the ops mirror that takes the payload half out of the entity and says
-    /// loudly what it cannot carry.
+    /// The **entity**, and not the op payload. They are the same type for
+    /// eleven of the thirteen classes; where they are not, it is the ops
+    /// mirror that takes the payload half out of the entity and says loudly
+    /// what it cannot carry.
     type Model;
 
     /// The python class name — `TeacherData`
@@ -848,8 +847,8 @@ fn pair_set(
 
 /// A field holding a whole section keyed by entity ids
 ///
-/// The tree of `DocumentData` is a dict per entity section. The keys follow
-/// §2.3 like every other entity reference — a handle and an id name the same
+/// The tree of `DocumentData` is a dict per entity section. The keys behave
+/// like every other entity reference — a handle and an id name the same
 /// entity, against this document — and each entry is a value of its own class,
 /// extracted the way every other value is, at the site of the section it
 /// sits in.
@@ -1053,8 +1052,8 @@ fn filling(
 
 /// The python filling for one model filling
 ///
-/// The students come out as ids, like every entity reference of a value
-/// (§2.3 of the design), inside the leaf value's frozen containers.
+/// The students come out as ids, like every entity reference of a value,
+/// inside the leaf value's frozen containers.
 fn filling_to_py<'py>(
     py: Python<'py>,
     filling: &group_lists::GroupListFilling,
@@ -1232,8 +1231,8 @@ impl Value for InterrogationData {
     const CLASS: &'static str = "InterrogationData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(
         _doc: &Py<Document>,
         obj: &Bound<'_, PyAny>,
@@ -1404,7 +1403,7 @@ impl Value for SlotData {
 ///
 /// One of the eleven classes whose entity and op payload are the same type:
 /// `AddNewIncompat` and `UpdateIncompat` carry the whole `Incompatibility`, so
-/// §2.0 of the design says nothing new here. The subject is deliberately not
+/// there is nothing more to say here. The subject is deliberately not
 /// required to hold interrogations — the edge's whole point — so the value
 /// takes any live subject, and the refusal stays where the model keeps it, in
 /// the write.
@@ -1463,7 +1462,7 @@ pub struct GroupListData;
 
 impl Value for GroupListData {
     /// The **entity**, and the op payload too: the group list ops carry the
-    /// whole sealed `GroupList`, so §2.0 of the design says nothing new here.
+    /// whole sealed `GroupList`, so there is nothing more to say here.
     type Model = group_lists::GroupList;
 
     const CLASS: &'static str = "GroupListData";
@@ -1566,8 +1565,7 @@ pub struct PairingRuleData;
 
 impl Value for PairingRuleData {
     /// The **entity**, and the op payload too: the pairing rule ops carry the
-    /// whole sealed `PairingRule`, so §2.0 of the design says nothing new
-    /// here.
+    /// whole sealed `PairingRule`, so there is nothing more to say here.
     type Model = pairings::PairingRule;
 
     const CLASS: &'static str = "PairingRuleData";
@@ -1663,8 +1661,8 @@ pub struct SlotPairingRuleData;
 
 impl Value for SlotPairingRuleData {
     /// The **entity**, and the op payload too: the slot pairing rule ops
-    /// carry the whole sealed `SlotPairingRule`, so §2.0 of the design says
-    /// nothing new here.
+    /// carry the whole sealed `SlotPairingRule`, so there is nothing more to
+    /// say here.
     type Model = slot_pairings::SlotPairingRule;
 
     const CLASS: &'static str = "SlotPairingRuleData";
@@ -1745,8 +1743,8 @@ impl Value for LimitsData {
     const CLASS: &'static str = "LimitsData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<settings::Limits> {
         let site = Site::whole(Self::CLASS);
 
@@ -1808,8 +1806,8 @@ impl Value for BalancingData {
     const CLASS: &'static str = "BalancingData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(
         _doc: &Py<Document>,
         obj: &Bound<'_, PyAny>,
@@ -1890,8 +1888,8 @@ impl Value for ExportGlobalConfigData {
     const CLASS: &'static str = "ExportGlobalConfigData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawGlobalConfig> {
         global_config(Site::whole(Self::CLASS), obj)
     }
@@ -1950,8 +1948,8 @@ impl Value for ExportColloscopeConfigData {
     const CLASS: &'static str = "ExportColloscopeConfigData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawColloscopeConfig> {
         colloscope_config(Site::whole(Self::CLASS), obj)
     }
@@ -2026,8 +2024,8 @@ impl Value for ExportStudentGroupsConfigData {
     const CLASS: &'static str = "ExportStudentGroupsConfigData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawPerStudentGroupsConfig> {
         student_groups_config(Site::whole(Self::CLASS), obj)
     }
@@ -2080,8 +2078,8 @@ impl Value for ExportGroupListConfigData {
     const CLASS: &'static str = "ExportGroupListConfigData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawPerGroupListConfig> {
         group_list_config(Site::whole(Self::CLASS), obj)
     }
@@ -2102,8 +2100,8 @@ impl Value for ExportGroupListConfigData {
 
 /// The whole export configuration
 ///
-/// The tree `doc.export_config.to_data()` assembles, and the one §8's
-/// `DocumentData` holds. No op takes it: the eleven export mutators each patch
+/// The tree `doc.export_config.to_data()` assembles, and the one
+/// [DocumentData] holds. No op takes it: the eleven export mutators each patch
 /// one field of the document's own configuration, so the coarse door is what
 /// consumes a whole one: it rides into `replace_all` inside [DocumentData].
 /// `doc.export_xlsx` takes one too, and stores nothing — there it says how to
@@ -2116,8 +2114,8 @@ impl Value for ExportConfigData {
     const CLASS: &'static str = "ExportConfigData";
 
     /// Names no entity, so the document goes unused here — the one asymmetry
-    /// §2.2 of the design accepts, since two shapes for one boundary would be
-    /// worse than one shape carrying an argument it sometimes ignores.
+    /// accepted here, since two shapes for one boundary would be worse than
+    /// one shape carrying an argument it sometimes ignores.
     fn from_py(_doc: &Py<Document>, obj: &Bound<'_, PyAny>) -> PyResult<RawExportConfig> {
         let site = Site::whole(Self::CLASS);
 
@@ -2415,8 +2413,8 @@ fn placement_rows(
 /// cell, and the placements of each automatic group list. The op payload and
 /// the entity are the same shape here — [ColloscopeContents] is the
 /// plain-map twin of the state's sparse `Colloscope`, and
-/// `InstallColloscope` takes it whole — so §2.0 of the design says nothing
-/// new. The group *numbers* are not ids. An empty group set or an empty
+/// `InstallColloscope` takes it whole — so there is nothing more to say.
+/// The group *numbers* are not ids. An empty group set or an empty
 /// placement map means "no row", which is what the payload promises its
 /// callers: the boundary is dumb, and the canonical form stays with the
 /// write that reads the value back.
@@ -2488,8 +2486,8 @@ pub(crate) fn detached_colloscope(obj: &Bound<'_, PyAny>) -> PyResult<Colloscope
 /// The one value class no op consumes: the two week ops carry a single field
 /// each (`UpdateWeekStatus` a bool, `UpdateWeekAnnotation` an annotation),
 /// addressed by `(period, index)`. So the class exists for `week.to_data()`
-/// and for the whole-document snapshot of the next commit, and the boundary
-/// mirrors the model's stored `weeks::Week` — the entity, per §2.0 — whole.
+/// and for the whole-document snapshot, and the boundary mirrors the model's
+/// stored `weeks::Week` — the entity — whole.
 pub struct WeekData;
 
 impl Value for WeekData {
@@ -2536,7 +2534,7 @@ type SlotRows = Vec<(RawId<Subject>, Vec<(RawId<Slot>, slots::Slot)>)>;
 
 /// The whole document, detached — one value holding every section
 ///
-/// The tree `doc.snapshot()` assembles (`new_api_design.md` §8):
+/// The tree `doc.snapshot()` assembles:
 /// every section of `InnerData` as a field, with the user orders carried by
 /// the python containers themselves. No op takes one: the coarse door's other
 /// half, `doc.replace_all`, takes this same tree through
@@ -3449,10 +3447,9 @@ impl Value for GroupListsGenerationRequest {
 /// Compiles `data.py` and puts the classes it defines in the module
 ///
 /// Compiling from a string rather than shipping a package is what makes the
-/// hosted path need no filesystem at all (`new_api_design.md` §12), and the
-/// same code runs for the wheel — one mechanism rather than one per build
-/// shape. The compilation happens once per interpreter, when `collomatique` is
-/// first imported.
+/// hosted path need no filesystem at all, and the same code runs for the
+/// wheel — one mechanism rather than one per build shape. The compilation
+/// happens once per interpreter, when `collomatique` is first imported.
 pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     let py = m.py();
 
@@ -3474,8 +3471,8 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
         let class = data.getattr(name.as_str())?;
 
         // Where the class says it lives, and where a script really finds it.
-        // `collomatique._data` is an implementation detail §2.1 of the design
-        // says a script never names, and every rust class in this module
+        // `collomatique._data` is an implementation detail a script never
+        // names, and every rust class in this module
         // already claims `collomatique` through `#[pyclass(module = ...)]`.
         class.setattr("__module__", "collomatique")?;
 

@@ -118,9 +118,9 @@ assert collomatique.SlotPairingRuleData.__module__ == "collomatique"
 assert collomatique.SlotPairingRuleSideData.__module__ == "collomatique"
 
 # A field that names an entity takes a handle or an id, interchangeably. The
-# two rules below extract to the example's first rule and — this is the wart
-# §2.3 of the design records — do not compare equal, because a dataclass
-# stores what it was given, and a handle and an id hash differently.
+# two rules below extract to the example's first rule and — this is the wart —
+# do not compare equal, because a dataclass stores what it was given, and a
+# handle and an id hash differently.
 first_rule = rule_list[0]
 ante_slot = first_rule.antecedent.slot
 con_slot = first_rule.consequent.slot

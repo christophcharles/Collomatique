@@ -113,8 +113,8 @@ assert collomatique.InterrogationData() == collomatique.InterrogationData()
 
 # A field that names an entity takes a handle or an id, interchangeably, and
 # anything iterable does on the way in. The two values below extract to the same
-# subject and — this is the wart §2.3 records — do not compare equal, because a
-# dataclass stores what it was given.
+# subject and — this is the wart — do not compare equal, because a dataclass
+# stores what it was given.
 period = list(doc.periods)[0]
 by_handle = collomatique.SubjectData("Spé maths", excluded_periods={period})
 by_id = collomatique.SubjectData("Spé maths", excluded_periods={period.id})

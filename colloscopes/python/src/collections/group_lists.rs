@@ -39,8 +39,7 @@
 //!
 //! The family's eighth op, `add_generated`, is the landing door of group-list
 //! generation: `doc.generate_group_lists` builds the lists and writes nothing,
-//! and this door lands what it built as one undo slot
-//! (`docs/python/new_api_design.md` §10).
+//! and this door lands what it built as one undo slot.
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
@@ -134,8 +133,8 @@ impl GroupLists {
 
     /// The group list a subject uses on a period, or `None`
     ///
-    /// The `(period, subject) → group list` hop of the design: the one every
-    /// script makes between a colloscope cell and the names it should print.
+    /// The `(period, subject) → group list` hop: the one every script makes
+    /// between a colloscope cell and the names it should print.
     ///
     /// The read is total over valid addresses, like the assignments': a period
     /// or a subject the document does not hold raises `StaleHandleError`, and
@@ -203,8 +202,7 @@ impl GroupLists {
     /// the model keeps the two apart.
     fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5).
+        // an entity is resolved against this document, which borrows it to ask.
         let group_list = GroupListData::from_py(&self.doc, data)?;
 
         crate::results::created::<GroupList>(

@@ -33,7 +33,7 @@ use crate::transaction::Transaction;
 /// — mirroring the GUI's `FileName` — makes "caveats with no path"
 /// unrepresentable, and gives the hosted document a slot of its own.
 /// [Origin::Hosted] carries no caveats, because the handoff carries the `Data`
-/// and not the host's caveat set (`docs/python/new_api_design.md` §9.2).
+/// and not the host's caveat set.
 enum Origin {
     /// Never on disk and not hosted: `save()` has nowhere to write
     None,
@@ -206,7 +206,7 @@ impl Document {
     /// It carries no caveats: the handoff carries the `Data` and not the
     /// application's caveat set, so a script cannot see that the file behind
     /// it was opened with something missing. Showing that needs a protocol
-    /// change (`docs/python/new_api_design.md` §9.2).
+    /// change.
     pub(crate) fn hosted(data: Data) -> Document {
         Document {
             state: SessionStack::new(data),
@@ -683,17 +683,16 @@ impl Document {
     /// doc.replace_all(tree, "Rebuilt from scratch")
     /// ```
     ///
-    /// The coarse door of `docs/python/new_api_design.md` §8, and the way back
-    /// in for what `snapshot()` hands out: one `GlobalUpdate`, one undo slot,
-    /// whatever the tree changed. `label` names that slot and defaults to
-    /// « Mise à jour globale », the name the application's own global updates
-    /// carry.
+    /// The coarse door, and the way back in for what `snapshot()` hands out:
+    /// one `GlobalUpdate`, one undo slot, whatever the tree changed. `label`
+    /// names that slot and defaults to « Mise à jour globale », the name the
+    /// application's own global updates carry.
     ///
     /// A tree can rename, delete and rewire, and it cannot **add**: it names
     /// its entities by id, every id in it has to be one this document holds —
     /// an id it does not raises `StaleHandleError`, as everywhere else — and
     /// ids have no constructor. Creating something is the incremental ops'
-    /// business, and it stays theirs (§8).
+    /// business, and it stays theirs.
     ///
     /// A refused tree changes nothing at all: the document is left exactly as
     /// it was, and the `UpdateError` names every invariant the tree broke, not
@@ -715,8 +714,7 @@ impl Document {
 
         // Extracted before the borrow below and never inside it: resolving the
         // ids a tree names borrows the document to ask, and doing that under a
-        // `borrow_mut` is how a nested borrow becomes a `PanicException`
-        // (`docs/python/new_api_design.md` §5).
+        // `borrow_mut` is how a nested borrow becomes a `PanicException`.
         let inner = crate::data::DocumentData::from_py(&slf, tree)?;
 
         let desc = (
@@ -762,9 +760,8 @@ impl Document {
     /// `None` means the document was never on disk — it came from
     /// [new_document]. Saving it once does not give it an origin: the origin
     /// is where the document *came from*, not where it was last written.
-    /// pyo3 converts a rust path to a `pathlib.Path`, which is the type
-    /// `docs/python/new_api_design.md` §1 promises, so nothing is built by
-    /// hand here — but the script asserts the `isinstance`, because it is the
+    /// pyo3 converts a rust path to a `pathlib.Path`, so nothing is built by
+    /// hand here — but the script asserts the `isinstance`, because it is a
     /// promise and not an implementation detail we happen to inherit.
     #[getter]
     fn source_path(&self) -> Option<&Path> {
@@ -897,8 +894,7 @@ impl Document {
         // breaks nothing: a document that satisfied the invariants still does
         // (`colloscopes/state-colloscopes/src/compact.rs`, pinned by
         // `colloscopes/state-colloscopes/tests/compact_ids.rs`). The arm is still written
-        // out rather than unwrapped, because §6 says a script never gets a
-        // panic.
+        // out rather than unwrapped, because a script never gets a panic.
         let data = Data::from_inner_data(inner_data).map_err(|e| {
             Error::new_err(format!(
                 "compacting the document produced an invalid one: {e}"
@@ -1035,8 +1031,7 @@ impl Document {
 
         // Extracted before the borrow below and never inside it: reading a
         // python object calls back into python, and doing that under the
-        // document's borrow is how a nested borrow becomes a `PanicException`
-        // (`docs/python/new_api_design.md` §5).
+        // document's borrow is how a nested borrow becomes a `PanicException`.
         let given = match config {
             Some(config) => Some(crate::data::ExportConfigData::from_py(&slf, config)?),
             None => None,
@@ -1101,7 +1096,7 @@ impl Document {
         use crate::data::Value as _;
 
         // Extracted before the borrow below and never inside it, like
-        // `export_xlsx`'s configuration and for the same reason (§5).
+        // `export_xlsx`'s configuration and for the same reason.
         let config = crate::data::ColloscopeSolveConfig::from_py(&slf, config)?;
 
         // Copied out of the borrow: the build below runs with the GIL
@@ -1115,7 +1110,7 @@ impl Document {
         // What the log callback raised, if it raised. The builder takes an
         // infallible `FnMut`, so a raising callback cannot stop the build
         // half-way through — the first exception is kept here, the callback is
-        // not called again, and the build is left to finish (§10.2).
+        // not called again, and the build is left to finish.
         let mut failure: Option<PyErr> = None;
         let mut log = |line: &str| {
             let Some(callback) = on_log.as_ref() else {
@@ -1241,7 +1236,7 @@ impl Document {
     ) -> PyResult<Py<crate::generation::GroupListsGenerationResult>> {
         use crate::data::Value as _;
 
-        // Extracted before the borrow below and never inside it (§5) — and it
+        // Extracted before the borrow below and never inside it — and it
         // is the extraction that refuses dead references, so the plan below
         // can only fail on what the request asks for, never on what it names.
         let request = crate::data::GroupListsGenerationRequest::from_py(&slf, request)?;
@@ -1276,7 +1271,7 @@ impl Document {
         // What the log callback raised, if it raised. The generator takes an
         // infallible `FnMut`, so a raising callback cannot stop it half-way
         // through — the first exception is kept here, the callback is not
-        // called again, and the generation is left to finish (§10.2).
+        // called again, and the generation is left to finish.
         let mut failure: Option<PyErr> = None;
         let mut log = |line: &str| {
             let Some(callback) = on_log.as_ref() else {

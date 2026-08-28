@@ -71,8 +71,7 @@ assert [f.name for f in dataclasses.fields(collomatique.StudentData)] == [
     "excluded_periods",
 ]
 
-# Firstname first, as §14 of the design writes it and as every screen of the
-# application shows it.
+# Firstname first, as every screen of the application shows it.
 positional = collomatique.TeacherData("Emmy", "Noether")
 assert positional.firstname == "Emmy"
 assert positional.surname == "Noether"
@@ -85,8 +84,8 @@ assert _same_class is collomatique.TeacherData
 assert collomatique.TeacherData.__module__ == "collomatique"
 
 # A field that names an entity takes a handle or an id, interchangeably. The two
-# values below extract to the same teacher, and — this is the wart §2.3 records —
-# they do not compare equal, because a dataclass stores what it was given.
+# values below extract to the same teacher, and — this is the wart — they do
+# not compare equal, because a dataclass stores what it was given.
 subject = list(doc.subjects)[0]
 by_handle = collomatique.TeacherData(
     "Emmy", "Noether", email="noether@lycee.fr", subjects={subject}

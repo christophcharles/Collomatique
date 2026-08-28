@@ -16,9 +16,9 @@
 //!
 //! What crosses the boundary here holds **ids**, never handles: the entries
 //! pair a `GroupListData` — a detached value already carrying student ids —
-//! with the `(period, subject)` coordinates it must serve, and a value that
-//! was half detached and half holding the document is the one shape §2 of the
-//! design refuses.
+//! with the `(period, subject)` coordinates it must serve. A value that was
+//! half detached and half holding the document is the one shape the boundary
+//! refuses.
 
 use std::collections::BTreeSet;
 
