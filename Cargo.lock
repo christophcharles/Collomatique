@@ -515,6 +515,7 @@ version = "0.1.0-alpha.2.99"
 dependencies = [
  "anyhow",
  "collomatique-python",
+ "collomatique-state-colloscopes",
  "pyo3",
 ]
 
