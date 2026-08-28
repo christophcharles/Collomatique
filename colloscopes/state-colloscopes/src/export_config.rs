@@ -77,9 +77,8 @@ pub struct ExportConfig {
 
 // One composite presentation preference: colors, orientations and toggles are
 // choices, not content that can be added or removed, so the document order
-// treats the whole configuration as one atom (plan step 6.5, decision 13).
-// Two different configurations are incomparable — including the default
-// against a modified one.
+// treats the whole configuration as one atom. Two different configurations are
+// incomparable — including the default against a modified one.
 collomatique_state::impl_content_ord_atom!(ExportConfig);
 
 impl Default for GlobalConfig {
@@ -187,10 +186,9 @@ impl Default for ExportConfig {
     }
 }
 
-/// Precondition errors of the forced export-config op — the carve-out subset
-/// (step-3 survey Table 2). Export config is pure value data with no guards of
-/// any kind, so this enum is empty; kept for
-/// uniformity across the [crate::PrecheckError] family.
+/// Precondition errors of the forced export-config op — the carve-out subset.
+/// Export config is pure value data with no guards of any kind, so this enum is
+/// empty; kept for uniformity across the [crate::PrecheckError] family.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum ExportConfigPrecheckError {}
 

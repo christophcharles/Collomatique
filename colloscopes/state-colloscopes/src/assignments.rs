@@ -87,8 +87,7 @@ impl Assignments {
     }
 }
 
-/// Precondition errors of the forced assignment op — the carve-out subset
-/// (step-3 survey Table 2, as revised by the pre-step-7 review).
+/// Precondition errors of the forced assignment op — the carve-out subset.
 ///
 /// The two *address* checks (the row's `(period, subject)` key) are kept: with
 /// an empty payload `SetRow` clears the row, so nothing lands in the document

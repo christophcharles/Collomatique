@@ -1,9 +1,8 @@
-//! Innocent-state `None` tests (step-6 commit 7.5, plan §9bis).
+//! Innocent-state `None` tests.
 //!
 //! One test per **arm** of the resolution map, all of the same shape. Each asks
-//! the single question frame point 5 asks: *given an invariant that names a
-//! shape, does the arm keep its hands off a live document that does not carry
-//! that shape?*
+//! one question: *given an invariant that names a shape, does the arm keep its
+//! hands off a live document that does not carry that shape?*
 //!
 //! The four steps, in order:
 //!
@@ -24,7 +23,8 @@
 //! live in `tests/cascade.rs`. The two `GlobalUpdate` policy pins at the very
 //! end are the one exception, and they say so. Nothing here tests the
 //! *positive* half either (the arm firing when the shape really is live); that
-//! belongs to the commit-7 scenarios, which reach it by the legitimate route.
+//! belongs to the end-to-end scenarios, which reach it by the legitimate
+//! route.
 //!
 //! **Why the twin is built by field surgery and not by an op.** `force_apply`
 //! keeps the coordinate carve-out prechecks, so several of these shapes are
@@ -278,9 +278,10 @@ pub(super) struct ValidDocument {
     /// The one week holding no colloscope cell, and so the only one a twin can
     /// move to another period without dragging the group bound in.
     pub(super) bare_week: WeekId,
-    /// The one week of `other_period`. It exists so that §8.2 row 11 has a
-    /// coordinate to aim at: that row needs a week whose period the cell's slot
-    /// excludes, and `other_period` is the only excluded period there is.
+    /// The one week of `other_period`. It exists so that
+    /// `InterrogationSlotNotRunningOnPeriod` has a coordinate to aim at: that
+    /// arm needs a week whose period the cell's slot excludes, and
+    /// `other_period` is the only excluded period there is.
     pub(super) excluded_period_week: WeekId,
     /// Runs interrogations; hosts both slots, the association, the assignments
     /// row, the incompatibility and the balancing override.
@@ -307,8 +308,9 @@ pub(super) struct ValidDocument {
     /// changes what a slot *is*.
     pub(super) lone_slot: SlotId,
     /// The only slot not on `subject`, and so the only one whose subject
-    /// excludes a period. §8.2 row 11's twin puts a cell on it; §8.2 row 10's
-    /// two twins point a rule part at it.
+    /// excludes a period. `InterrogationSlotNotRunningOnPeriod`'s twin puts a
+    /// cell on it; `PairedSlotsNotInSameSubject`'s two twins point a rule part
+    /// at it.
     pub(super) other_subject_slot: SlotId,
     pub(super) incompat: IncompatId,
     pub(super) pairing: PairingRuleId,
@@ -321,7 +323,7 @@ pub(super) struct ValidDocument {
     pub(super) other_student: StudentId,
     /// Excludes `other_period`, and is excluded by `excluding_group_list`. She
     /// is assigned on `period`, where she is present — the innocent witness
-    /// §8.2 row 6 needs.
+    /// `AssignedStudentNotPresentForPeriod` needs.
     pub(super) excluded_student: StudentId,
     /// Automatic, associated to `(period, subject)`, and carrying the colloscope
     /// placements row.
@@ -344,7 +346,7 @@ pub(super) struct ValidDocument {
 /// The document shared by every test in this module.
 ///
 /// It is a single valid state holding, at least once, the innocent counterpart
-/// of every shape §8.1 and §8.2 talk about: a week in a live period, exclusion
+/// of every shape the arms talk about: a week in a live period, exclusion
 /// sets naming a live period, a slot on a live subject with a live teacher, a
 /// colloscope cell on a live `(slot, week)`, and so on. A test then corrupts
 /// **one** of those rows in a throwaway clone and asks the untouched document
@@ -379,7 +381,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         NewId::WeekId,
         "adding the second week"
     );
-    // A week carrying nothing at all. Once §8.2 rows 11 and 12 have their
+    // A week carrying nothing at all. Once `InterrogationSlotNotRunningOnPeriod`
+    // and `InterrogationOnInactiveWeek` have their
     // coverage witnesses, every other week in the fixture holds a colloscope
     // cell — and a week that holds one cannot be moved into a dead period
     // surgically, because the cell's group bound is read from an association at
@@ -392,10 +395,10 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         NewId::WeekId,
         "adding the week that carries nothing"
     );
-    // `other_period` held no week at all, and §8.2 row 11 needs one: that row
-    // fires on a colloscope cell whose slot sits on a subject excluding the
-    // *week's* period, so the excluded period has to have a week to put a cell
-    // on.
+    // `other_period` held no week at all, and
+    // `InterrogationSlotNotRunningOnPeriod` needs one: it fires on a colloscope
+    // cell whose slot sits on a subject excluding the *week's* period, so the
+    // excluded period has to have a week to put a cell on.
     let excluded_period_week = apply_new!(
         data,
         Op::Week(WeekOp::AddFront(other_period, WeekDesc::default())),
@@ -413,9 +416,11 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         "adding the running subject"
     );
     // It excludes `other_period` — the one subject in the fixture that runs
-    // interrogations *and* does not run everywhere. §8.2 row 8 needs exactly
-    // that combination: a subject excluded on a period fires row 8 alone, where
-    // a subject without interrogations would fire row 7 as well.
+    // interrogations *and* does not run everywhere.
+    // `AssociationForSubjectNotRunningOnPeriod` needs exactly that combination:
+    // a subject excluded on a period fires it alone, where a subject without
+    // interrogations would fire `AssociationForSubjectWithoutInterrogations` as
+    // well.
     let other_subject = apply_new!(
         data,
         Op::Subject(SubjectOp::AddAfter(
@@ -445,7 +450,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     );
     // A second teacher, on the *other* subject. It exists so that a twin can
     // point a slot at a **live** teacher who does not teach that slot's subject
-    // — §8.2 row 1's reachable route, and the only way to pin that comparison
+    // — `SlotTeacherDoesNotTeachSubject`'s reachable route, and the only way to
+    // pin that comparison
     // without reaching for a dead id. It also teaches `other_subject_slot`
     // below, which is the only slot of that subject.
     let other_teacher = apply_new!(
@@ -503,10 +509,12 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         "adding the lone slot"
     );
     // The fixture's only slot that is not on `subject`, and so the only one
-    // whose subject excludes a period. Two rows of §8.2 need it: row 11, whose
-    // twin puts a colloscope cell where the slot's subject excludes the week's
-    // period, and row 10, whose twins point one part of the slot pairing rule at
-    // a live slot on a *different* subject from the other part.
+    // whose subject excludes a period. Two arms need it:
+    // `InterrogationSlotNotRunningOnPeriod`, whose twin puts a colloscope cell
+    // where the slot's subject excludes the week's period, and
+    // `PairedSlotsNotInSameSubject`, whose twins point one part of the slot
+    // pairing rule at a live slot on a *different* subject from the other
+    // part.
     let other_subject_slot = apply_new!(
         data,
         Op::Slot(SlotOp::AddAfter(
@@ -609,7 +617,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "associating the group list",
     );
-    // Two more associations, placed so that §8.2 row 8's twin — which puts an
+    // Two more associations, placed so that
+    // `AssociationForSubjectNotRunningOnPeriod`'s twin — which puts an
     // entry at `(other_period, other_subject)` — has a live neighbour sharing
     // *each* half of that coordinate. The first shares the subject, and is what
     // an arm that ignored the period would wrongly find; the second shares the
@@ -617,10 +626,11 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     // The second is also ordinary data: the running subject uses the same group
     // list in both periods.
     //
-    // Row 7's twin has no such pair, and provably cannot: its subject is the
-    // one with interrogations disabled, and *any* entry naming that subject is
-    // row 7 itself. Only the period half is coverable there, and the entry on
-    // `period` above covers it.
+    //  `AssociationForSubjectWithoutInterrogations`'s twin has no such pair,
+    //  and provably cannot: its subject is the one with interrogations
+    //  disabled, and *any* entry naming that subject is
+    //  `AssociationForSubjectWithoutInterrogations` itself. Only the period
+    //  half is coverable there, and the entry on `period` above covers it.
     apply(
         &mut data,
         Op::GroupList(GroupListOp::AssignToSubject(
@@ -650,7 +660,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         "placing the students in the colloscope group list",
     );
     // A second placements row, on the list that excludes `excluded_student`.
-    // §8.2 row 15's twin adds her to *this* row, so the row has to exist first:
+    // `ColloscopeStudentExcluded`'s twin adds her to *this* row, so the row has
+    // to exist first:
     // the arm looks the list up and then tests membership, and only a successful
     // lookup leaves the membership test as the thing under test. The two
     // students placed here are the ones the list does not exclude, so the row is
@@ -674,17 +685,20 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "filling the colloscope cell",
     );
-    // Three more cells, each of them a coverage witness for §8.2 rows 11 and 12.
-    // Both rows are relational — they read the slot and the week *together* — so
+    // Three more cells, each of them a coverage witness for
+    // `InterrogationSlotNotRunningOnPeriod` and `InterrogationOnInactiveWeek`.
+    // Both arms are relational — they read the slot and the week *together* — so
     // neither half of the `(slot, week)` key condemns a cell on its own, and a
     // live neighbour sharing each half is therefore buildable, and required.
     //
-    // Row 11's twin sits at `(other_subject_slot, excluded_period_week)`. The
-    // first cell below shares its slot; the second shares its week.
-    // Row 12's twin sits at `(slot, other_week)`. The fixture's cell above
-    // shares its slot; the third cell below shares its week — `other_slot` wears
-    // no week pattern, so no week is ever inactive for it, which is what makes
-    // an innocent cell on `other_week` possible at all.
+    //  `InterrogationSlotNotRunningOnPeriod`'s twin sits at
+    //  `(other_subject_slot, excluded_period_week)`. The first cell below
+    //  shares its slot; the second shares its week.
+    //  `InterrogationOnInactiveWeek`'s twin sits at `(slot, other_week)`. The
+    //  fixture's cell above shares its slot; the third cell below shares its
+    //  week — `other_slot` wears no week pattern, so no week is ever inactive
+    //  for it, which is what makes an innocent cell on `other_week` possible at
+    //  all.
     apply(
         &mut data,
         Op::Colloscope(ColloscopeOp::SetInterrogation(
@@ -714,7 +728,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     );
     // `excluded_student` is in this row on purpose. She is absent for the
     // *second* period only, so taking this subject in the first one is ordinary
-    // data — and it is what §8.2 row 6's twin needs: that twin puts her in the
+    // data — and it is what `AssignedStudentNotPresentForPeriod`'s twin needs:
+    // that twin puts her in the
     // row on `other_period`, so the valid document must hold her somewhere
     // else, or an arm that searched every row for the named student instead of
     // reading the named coordinate would find nothing and pass for the wrong
@@ -728,7 +743,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         )),
         "filling the assignments row",
     );
-    // Two more rows, placed so that §8.2 row 5's twin — which puts a row at
+    // Two more rows, placed so that
+    // `AssignmentForSubjectNotRunningOnPeriod`'s twin — which puts a row at
     // `(other_period, excluded_subject)` — has a live neighbour sharing *each*
     // half of that coordinate: same period different subject, then same subject
     // different period. An arm that dropped either half of the key would find
@@ -736,7 +752,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
     // first period (it excludes only the second), so the second row is ordinary
     // data, not a contrivance.
     //
-    // The first of the two does double duty: it is the row §8.2 row 6's twin
+    // The first of the two does double duty: it is the row
+    // `AssignedStudentNotPresentForPeriod`'s twin
     // adds an excluded student to, so that arm's lookup succeeds and its
     // membership test is what the test is really about.
     apply(
@@ -938,8 +955,8 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
 /// then asks the untouched document, and `why` says in one sentence what makes
 /// it innocent.
 ///
-/// Arms whose corruption provably co-breaks a second invariant (§9bis names
-/// two) cannot use this helper: they pin a two-element set and then select the
+/// Arms whose corruption provably co-breaks a second invariant (there are two)
+/// cannot use this helper: they pin a two-element set and then select the
 /// element under test, which is not always `set.first()`.
 fn assert_arm_finds_nothing(
     valid: &Data,
@@ -961,7 +978,7 @@ fn assert_arm_finds_nothing(
 
 // ---- The arms ----
 
-/// `TeacherRefSite::SlotTeacher` — the arm that produced frame point 5.
+/// `TeacherRefSite::SlotTeacher`.
 ///
 /// The corruption points the slot at a dead teacher. That is a shape a user can
 /// really reach: `force_apply_slot`'s `Update` keeps only `CannotChangeSubject`
@@ -1327,7 +1344,7 @@ fn teacher_subjects_arm_spares_a_teacher_teaching_only_live_subjects() {
     );
 }
 
-/// `SubjectRefSite::SlotSubject` — **the two-element exception** (§9bis).
+/// `SubjectRefSite::SlotSubject` — **the two-element exception**.
 ///
 /// No state where a slot's subject dangles breaks only one invariant. The
 /// teacher-teaches check gates on the *teacher* lookup alone — the subject id is
@@ -2019,8 +2036,8 @@ fn incompat_week_pattern_arm_spares_an_incompat_wearing_a_live_pattern() {
 //   The op carries the key but not the value, so the identity test is the only
 //   thing tying the fix to the target — and the corruption *replaces* the live
 //   value, so the valid document answers `None` by comparing two live ids.
-// - The target is a **field inside the row** (the two pairing parts, and most of
-//   §8.1). Same as above: replace, and the comparison is real.
+// - The target is a **field inside the row** (the two pairing parts, and most
+//   of the rest). Same as above: replace, and the comparison is real.
 
 /// `SlotRefSite::SlotPairingRuleAntecedent` — the slot twin of 7.5c's two
 /// pairing-rule arms, and separate from its consequent for the same reason: an
@@ -2206,12 +2223,12 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
     );
 }
 
-// ---- `Convergence`, rows 1-4: the slot and teacher block ----
+// ---- `Convergence`: the slot and teacher block ----
 //
 // The dangling-FK half is behind us. From here the invariant is a *predicate*
 // over live rows rather than a reference, and that changes what an innocent
 // twin has to look like. The change is the same for all sixteen `Convergence`
-// rows, so it is worth stating once, here.
+// variants, so it is worth stating once, here.
 //
 // A `Convergence` variant names an offending *configuration*: a row together
 // with the field values that make it offending. The arm never re-checks the
@@ -2222,7 +2239,9 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
 // the arm compares**, and nowhere else.
 //
 // That rules out the corruption that first comes to mind in three of the four
-// rows. Turning a subject's interrogations off does make rows 2 and 3 fire —
+// variants. Turning a subject's interrogations off does make
+// `TeacherSubjectWithoutInterrogations` and
+// `SlotForSubjectWithoutInterrogations` fire —
 // but it leaves the teacher still teaching that subject and the slot still
 // sitting on it, so the *valid* document carries the very shape the arm tests
 // for, and `Some` is the right answer there. Said the short way: disabling a
@@ -2240,20 +2259,21 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
 // **The unit is one test per comparison, not one per arm.** A twin varies one
 // field, and the arm then answers `None` because of that one field — so any
 // second comparison the arm makes is left untouched, and a version of the arm
-// that dropped it would pass. Row 1 compares two fields and therefore gets two
-// tests. Rows 2, 3 and 4 compare one each. (Row 10 in the next block and row 16
-// in the last one compare two as well; §8.1 had the same situation with pairing
-// rules and solved it by making the two parts two separate *sites*, which is
-// why they already have a test each.)
+// that dropped it would pass. `SlotTeacherDoesNotTeachSubject` compares two
+// fields and therefore gets two tests. The other three in this block compare one
+// each. (`PairedSlotsNotInSameSubject` in the next block and
+// `ColloscopeStudentGroupOutOfBounds` in the last one compare two as well; the
+// pairing rules avoid the problem by making the two parts two separate *sites*,
+// which is why they already have a test each.)
 
-/// `Convergence::SlotTeacherDoesNotTeachSubject` — §8.2 row 1, **teacher half**.
+/// `Convergence::SlotTeacherDoesNotTeachSubject` — **teacher half**.
 ///
 /// The fix is `Slot::Remove(slot)`, which names only the slot, so both of the
 /// arm's comparisons are pure identity tests and each needs its own twin. This
-/// one varies the teacher, which §8.2 calls the load-bearing comparison; the
-/// next test varies the subject.
+/// one varies the teacher, the load-bearing comparison; the next test varies
+/// the subject.
 ///
-/// The corruption is row 1's reachable route, reached here by surgery: the slot
+/// The corruption is the arm's reachable route, reached here by surgery: the slot
 /// is pointed at `other_teacher`, who is alive and teaches `other_subject`
 /// only. A user gets to the same state with `SlotOp::Update` rewriting a slot's
 /// teacher over a document that was fine; the gate rolls that update back, and
@@ -2261,8 +2281,10 @@ fn colloscope_group_list_key_arm_spares_a_row_of_a_live_list() {
 ///
 /// **Exactly one break**: the teacher resolves, so the check runs rather than
 /// skipping, and fires. The slot's subject is untouched and still runs
-/// interrogations, so rows 3 and 4 have nothing to say about it, and the second
-/// teacher's own subject runs interrogations too, so row 2 stays quiet.
+/// interrogations, so `SlotForSubjectWithoutInterrogations` and
+/// `SlotOverflowsDay` have nothing to say about it, and the second teacher's own
+/// subject runs interrogations too, so
+/// `TeacherSubjectWithoutInterrogations` stays quiet.
 ///
 /// Without the identity test the answer here would be
 /// `Some(Slot::Remove(lone_slot))` merely because the slot exists — deleting a
@@ -2300,7 +2322,7 @@ fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_whose_teacher_teaches_i
     );
 }
 
-/// `Convergence::SlotTeacherDoesNotTeachSubject` — §8.2 row 1, **subject half**.
+/// `Convergence::SlotTeacherDoesNotTeachSubject` — **subject half**.
 ///
 /// The twin above leaves the arm's second comparison untested: it varies the
 /// teacher, so an arm that had dropped the `subject_id` comparison would still
@@ -2309,20 +2331,22 @@ fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_whose_teacher_teaches_i
 /// alone — so in the valid document the teacher matches the invariant exactly,
 /// and `None` can only come from the subject comparison.
 ///
-/// §8.2 calls that comparison defensive, and on today's code it is: a slot's
+/// That comparison is defensive, and on today's code it is: a slot's
 /// subject cannot change through an op, so the invariant can only carry a
 /// mismatched subject via `Op::GlobalUpdate`. That is a statement about how
 /// reachable the route is, not a reason to leave the comparison unpinned — the
 /// module docs already settle the same argument for arms whose `Some` branch
 /// cannot fire, and testing follows the arm.
 ///
-/// The move changes what subject the slot belongs to, so it goes through
-/// `remove_slot` + `insert_slot_at` like row 3's twin: the slot ordering is
-/// keyed by subject, and a raw write would desync the mirror.
+///  The move changes what subject the slot belongs to, so it goes through
+///  `remove_slot` + `insert_slot_at` like
+///  `SlotForSubjectWithoutInterrogations`'s twin: the slot ordering is keyed by
+///  subject, and a raw write would desync the mirror.
 ///
-/// **Exactly one break**: `other_subject` runs interrogations, so row 3 stays
-/// quiet; an hour from 16:00 does not overflow the day, so row 4 does; and
-/// `lone_slot` sits in no pairing rule and no colloscope cell.
+///  **Exactly one break**: `other_subject` runs interrogations, so
+///  `SlotForSubjectWithoutInterrogations` stays quiet; an hour from 16:00 does
+///  not overflow the day, so `SlotOverflowsDay` does; and `lone_slot` sits in
+///  no pairing rule and no colloscope cell.
 #[test]
 fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_on_another_subject() {
     let (valid, doc) = build_valid_document();
@@ -2351,13 +2375,13 @@ fn slot_teacher_does_not_teach_subject_arm_spares_a_slot_on_another_subject() {
     );
 }
 
-/// `Convergence::TeacherSubjectWithoutInterrogations` — §8.2 row 2, and the one
+/// `Convergence::TeacherSubjectWithoutInterrogations`, and the one
 /// row of this block whose fix keeps the row alive: `Teacher::subjects` is a
 /// set, so the element leaves and the teacher stays.
 ///
 /// The fix is `Teacher::Update(teacher, rebuilt)`, which names the teacher but
-/// not the subject being dropped, so rule 4 asks for an identity test — and
-/// frame point 4's corollary supplies it for free, since the membership test an
+/// not the subject being dropped, so rule 4 asks for an identity test — and it
+/// comes for free, since the membership test an
 /// element-removal rebuild needs *is* the identity test. This is the test that
 /// the arm really makes it.
 ///
@@ -2400,13 +2424,14 @@ fn teacher_subject_without_interrogations_arm_spares_a_teacher_of_live_subjects(
     );
 }
 
-/// `Convergence::SlotForSubjectWithoutInterrogations` — §8.2 row 3, and **the
-/// second two-element exception** (§9bis).
+/// `Convergence::SlotForSubjectWithoutInterrogations`, and **the
+/// second two-element exception**.
 ///
 /// No state where this fires breaks only one invariant: the slot's teacher
-/// either teaches the offending subject — row 2 — or does not — row 1 — or
-/// dangles, and then the `SlotTeacher` dangle fires. That is §8.2 row 3's
-/// shadowing argument, and it holds on a corrupted twin exactly as it does on a
+/// either teaches the offending subject — `TeacherSubjectWithoutInterrogations`
+/// — or does not — `SlotTeacherDoesNotTeachSubject` — or dangles, and then the
+/// `SlotTeacher` dangle fires. That is the shadowing argument, and it holds on a
+/// corrupted twin exactly as it does on a
 /// live state. So the expected literal is a **two-element set**, still
 /// hand-derived and still `assert_eq!`d whole, and step 4 runs on the element
 /// the test is about, picked out by shape.
@@ -2417,16 +2442,17 @@ fn teacher_subject_without_interrogations_arm_spares_a_teacher_of_live_subjects(
 /// the element it picked, and the canonical pick is the engine's business, which
 /// no test in this module touches.
 ///
-/// **The companion is row 1, and it cannot be anything else.** §9bis predicted
-/// row 2 and prescribed "turn the subject's `interrogation_parameters` to
-/// `None`". That recipe does not produce an innocent state at all: disabling a
+/// **The companion is `SlotTeacherDoesNotTeachSubject`, and it cannot be
+/// anything else.** The obvious recipe — turn the subject's
+/// `interrogation_parameters` to `None` — does not produce an innocent state at
+/// all: disabling a
 /// subject's interrogations is the legitimate cascade route itself, so the
 /// document it makes is one the map is *supposed* to repair — the slot still
 /// sits on the very subject the invariant names, and the arm rightly answers
 /// `Some`. An innocent twin has to move the slot onto a
 /// *different* subject that runs no interrogations — and no valid document ever
 /// lets a teacher teach such a subject, so the teacher-teaches check is
-/// guaranteed to fire beside row 3. The slot's teacher is kept live, which
+/// guaranteed to fire beside it. The slot's teacher is kept live, which
 /// makes that companion the deterministic one.
 ///
 /// The slot moved is the one referenced by nothing else, and the surgery goes
@@ -2473,7 +2499,7 @@ fn slot_for_subject_without_interrogations_arm_spares_a_slot_on_a_live_subject()
                 FixableInvariant::Convergence(Convergence::SlotForSubjectWithoutInterrogations(..))
             )
         })
-        .expect("the set was just asserted to hold row 3");
+        .expect("the set was just asserted to hold `SlotForSubjectWithoutInterrogations`");
 
     assert_eq!(
         valid.fix_invariant(&invariant),
@@ -2482,7 +2508,7 @@ fn slot_for_subject_without_interrogations_arm_spares_a_slot_on_a_live_subject()
     );
 }
 
-/// `Convergence::SlotOverflowsDay` — §8.2 row 4, and the arm frame point 5's
+/// `Convergence::SlotOverflowsDay`, and the arm the
 /// corollary was written for: it tests `start` and deliberately does **not**
 /// test `duration`.
 ///
@@ -2542,17 +2568,18 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
     );
 }
 
-// ---- `Convergence`, rows 5-8: assignments rows and group-list associations ----
+// ---- `Convergence`: assignments rows and group-list associations ----
 //
-// Four rows, and §8.2 calls three of them coordinate-shaped: the invariant
+// Four variants, three of them coordinate-shaped: the invariant
 // names a coordinate, the fix op carries that same coordinate, and the fix
 // removes the whole thing sitting at it. So there is no field left to compare
 // and no identity test to write — the arm's entire content is the lookup, and
-// the offending shape simply *is* the presence of the row or the entry. Row 6
-// is the one variation, and its membership test is an identity test that comes
-// for free (frame point 4).
+// the offending shape simply *is* the presence of the row or the entry.
+// `AssignedStudentNotPresentForPeriod` is the one variation, and its membership
+// test is an identity test that comes for free.
 //
-// Rows 7 and 8 share a single match arm, since both name the same offending
+// The two association variants share a single match arm, since both name the
+// same offending
 // configuration and both clear it. They still get a test each: what differs is
 // which predicate the *checker* fires, and a twin that produced the wrong one
 // would be asserting about an invariant nobody meant.
@@ -2570,17 +2597,17 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
 // document may hold that H again — so whatever the predicate reads on its own
 // is uncoverable.**
 //
-// - Rows 5 and 8 read the subject and the period *together*. Relational, so
-//   neither half alone is condemned and both witnesses are buildable. Both
-//   twins have both.
-// - Row 7 reads the subject alone. Any association naming a subject without
-//   interrogations *is* row 7, so the subject half has no witness at any
-//   fixture. The period half is covered.
-// - Row 6 reads the student and the period. Any assignments row on that period
-//   holding that student *is* row 6, so the period half has no witness. The
-//   subject half is covered.
+// - The two `...NotRunningOnPeriod` variants read the subject and the period
+//   *together*. Relational, so neither half alone is condemned and both
+//   witnesses are buildable. Both twins have both.
+// - `AssociationForSubjectWithoutInterrogations` reads the subject alone. Any
+//   association naming a subject without interrogations *is* that variant, so
+//   the subject half has no witness at any fixture. The period half is covered.
+// - `AssignedStudentNotPresentForPeriod` reads the student and the period. Any
+//   assignments row on that period holding that student *is* that variant, so
+//   the period half has no witness. The subject half is covered.
 
-/// `Convergence::AssignmentForSubjectNotRunningOnPeriod` — §8.2 row 5.
+/// `Convergence::AssignmentForSubjectNotRunningOnPeriod`.
 ///
 /// The twin puts a row at `(other_period, excluded_subject)`, a coordinate
 /// where the subject already excludes the period. That is the corruption the
@@ -2595,8 +2622,9 @@ fn slot_overflows_day_arm_spares_a_slot_that_starts_elsewhere() {
 /// having nothing to look at, and an arm that dropped either half of the key
 /// would find one of those rows and clear something nobody complained about.
 ///
-/// **Exactly one break**: the row's students exclude no period, so row 6 does
-/// not join, and every id in it is live.
+///  **Exactly one break**: the row's students exclude no period, so
+///  `AssignedStudentNotPresentForPeriod` does not join, and every id in it is
+///  live.
 #[test]
 fn assignment_for_subject_not_running_on_period_arm_spares_a_missing_row() {
     let (valid, doc) = build_valid_document();
@@ -2618,7 +2646,7 @@ fn assignment_for_subject_not_running_on_period_arm_spares_a_missing_row() {
     );
 }
 
-/// `Convergence::AssignedStudentNotPresentForPeriod` — §8.2 row 6, and the one
+/// `Convergence::AssignedStudentNotPresentForPeriod`, and the one
 /// row of this block whose fix keeps the row alive.
 ///
 /// The op is `SetRow(period, subject, rebuilt)`: it names the row but not the
@@ -2636,14 +2664,16 @@ fn assignment_for_subject_not_running_on_period_arm_spares_a_missing_row() {
 /// every row for the named student, rather than reading the named coordinate,
 /// would find that row and unassign her from a term nobody complained about.
 ///
-/// **The subject half of the coordinate has no innocent witness**, and the
-/// proof is the same shape as row 7's: a witness would be a row on
-/// `other_period` holding her, and that row *is* this invariant. The predicate
-/// depends on the pair `(student, period)` alone — the subject plays no part —
-/// so the period is the only half a valid document can vary.
+///  **The subject half of the coordinate has no innocent witness**, and the
+///  proof is the same shape as `AssociationForSubjectWithoutInterrogations`'s:
+///  a witness would be a row on `other_period` holding her, and that row *is*
+///  this invariant. The predicate depends on the pair `(student, period)` alone
+///  — the subject plays no part — so the period is the only half a valid
+///  document can vary.
 ///
-/// **Exactly one break**: the row's subject excludes no period, so row 5 stays
-/// quiet, and the two students already in the row exclude nothing.
+///  **Exactly one break**: the row's subject excludes no period, so
+///  `AssignmentForSubjectNotRunningOnPeriod` stays quiet, and the two students
+///  already in the row exclude nothing.
 #[test]
 fn assigned_student_not_present_for_period_arm_spares_a_row_of_present_students() {
     let (valid, doc) = build_valid_document();
@@ -2666,7 +2696,7 @@ fn assigned_student_not_present_for_period_arm_spares_a_row_of_present_students(
     );
 }
 
-/// `Convergence::AssociationForSubjectWithoutInterrogations` — §8.2 row 7.
+/// `Convergence::AssociationForSubjectWithoutInterrogations`.
 ///
 /// The twin associates a group list to `(period, excluded_subject)`: the entry
 /// is what is added, and the subject's interrogations — the other side of the
@@ -2685,9 +2715,10 @@ fn assigned_student_not_present_for_period_arm_spares_a_row_of_present_students(
 /// is covered: the fixture holds two entries on `period`, so an arm that
 /// ignored the subject would find one and detach it.
 ///
-/// **Exactly one break**: `excluded_subject` excludes `other_period`, not
-/// `period`, so row 8 does not join; the list associated has no colloscope row,
-/// so the colloscope block stays out of it.
+///  **Exactly one break**: `excluded_subject` excludes `other_period`, not
+///  `period`, so `AssociationForSubjectNotRunningOnPeriod` does not join; the
+///  list associated has no colloscope row, so the colloscope block stays out of
+///  it.
 #[test]
 fn association_for_subject_without_interrogations_arm_spares_a_missing_entry() {
     let (valid, doc) = build_valid_document();
@@ -2710,26 +2741,29 @@ fn association_for_subject_without_interrogations_arm_spares_a_missing_entry() {
     );
 }
 
-/// `Convergence::AssociationForSubjectNotRunningOnPeriod` — §8.2 row 8, which
-/// shares its match arm with row 7 and is tested separately because the
-/// *checker* is what tells the two apart.
+///  `Convergence::AssociationForSubjectNotRunningOnPeriod`, which shares its
+///  match arm with `AssociationForSubjectWithoutInterrogations` and is tested
+///  separately because the *checker* is what tells the two apart.
 ///
-/// The twin associates a group list to `(other_period, other_subject)`, the one
-/// coordinate in the fixture where a subject that runs interrogations is
-/// excluded on the period. That is what keeps row 7 out of the set: a subject
-/// with interrogations disabled would fire both.
+///  The twin associates a group list to `(other_period, other_subject)`, the
+///  one coordinate in the fixture where a subject that runs interrogations is
+///  excluded on the period. That is what keeps
+///  `AssociationForSubjectWithoutInterrogations` out of the set: a subject with
+///  interrogations disabled would fire both.
 ///
-/// Unlike row 7, this coordinate has a live neighbour on **both** halves, and
-/// that is not luck — row 8's predicate is *relational*, reading the subject
-/// and the period together, so neither half alone determines it and both
-/// witnesses are buildable. `(period, other_subject)` shares the subject and
-/// catches an arm that ignored the period; `(other_period, subject)` shares the
-/// period and catches an arm that ignored the subject. Either mistake finds a
-/// live entry and clears an association nothing complained about.
+///  Unlike `AssociationForSubjectWithoutInterrogations`, this coordinate has a
+///  live neighbour on **both** halves, and that is not luck —
+///  `AssociationForSubjectNotRunningOnPeriod`'s predicate is *relational*,
+///  reading the subject and the period together, so neither half alone
+///  determines it and both witnesses are buildable. `(period, other_subject)`
+///  shares the subject and catches an arm that ignored the period;
+///  `(other_period, subject)` shares the period and catches an arm that ignored
+///  the subject. Either mistake finds a live entry and clears an association
+///  nothing complained about.
 ///
-/// **Exactly one break**: `other_subject` runs interrogations, so row 7 stays
-/// quiet, and it hosts no slot, so nothing in the colloscope block is
-/// downstream of the entry.
+///  **Exactly one break**: `other_subject` runs interrogations, so
+///  `AssociationForSubjectWithoutInterrogations` stays quiet, and it hosts no
+///  slot, so nothing in the colloscope block is downstream of the entry.
 #[test]
 fn association_for_subject_not_running_on_period_arm_spares_a_missing_entry() {
     let (valid, doc) = build_valid_document();
@@ -2751,43 +2785,47 @@ fn association_for_subject_not_running_on_period_arm_spares_a_missing_entry() {
     );
 }
 
-// ---- `Convergence`, rows 9-12: balancing, pairing rules and colloscope cells ----
+// ---- `Convergence`: balancing, pairing rules and colloscope cells ----
 //
-// Four rows, five tests: row 10 compares two fields, so it gets one test per
-// comparison, exactly as row 1 did.
+// Four variants, five tests: `PairedSlotsNotInSameSubject` compares two fields,
+// so it gets one test per comparison, exactly as
+// `SlotTeacherDoesNotTeachSubject` did.
 //
 // All three site shapes of the series show up here, one per group:
 //
-// - **Row 9 is a pure key site.** The subject *is* the whole coordinate, and
+// - **`BalancingForSubjectWithoutInterrogations` is a pure key site.** The
+//   subject *is* the whole coordinate, and
 //   `SetSubject(subject, None)` carries it, so no identity test is expressible
 //   and the arm's entire content is one lookup. It joins the dangling-FK half's
 //   three pure key sites — `BalancingSubjectKey`, `SettingsStudentKey` and
 //   `ColloscopeGroupListKey`.
-// - **Row 10 is a row site with two fields.** The fix removes the rule outright
-//   and names only the rule, so both comparisons are pure identity tests and
-//   each needs its own twin.
-// - **Rows 11 and 12 are a two-half coordinate**, sharing one match arm the way
-//   rows 7 and 8 do, and tested separately because the *checker* is what tells
-//   them apart.
+// - **`PairedSlotsNotInSameSubject` is a row site with two fields.** The fix
+//   removes the rule outright and names only the rule, so both comparisons are
+//   pure identity tests and each needs its own twin.
+// - **The two colloscope-cell variants are a two-half coordinate**, sharing one
+//   match arm the way the two association variants do, and tested separately
+//   because the *checker* is what tells them apart.
 //
-// Both colloscope rows are relational — each reads the slot and the week
+// Both colloscope variants are relational — each reads the slot and the week
 // together — so by the block-2 rule both halves of `(slot, week)` are coverable,
 // and the fixture now covers all four. That is what the three extra colloscope
 // cells are for, along with the week in `other_period` and `other_subject_slot`,
 // the fixture's only slot outside `subject`.
 //
-// **A finding §8.2 does not record: row 11 can never break alone.** Its
-// predicate says the cell's slot sits on a subject that excludes the week's
-// period. The group-number bound for that same cell is read from the association
-// at `(the week's period, the slot's subject)` — and an association *there* is
-// exactly row 8, so no valid document holds one. The bound therefore falls to
-// its missing-association default of 0, every group number in the cell is out of
-// bounds, and `InterrogationGroupsOutOfBounds` fires beside row 11 every time.
-// Row 11's test is a two-element-set test for that reason, like row 3's. Unlike
-// row 3 this is not a shadowing: row 11 is declared *before* row 13, so it
-// remains the canonical pick and its `Some` branch stays reachable.
+// **`InterrogationSlotNotRunningOnPeriod` can never break alone.** Its predicate
+// says the cell's slot sits on a subject that excludes the week's period. The
+// group-number bound for that same cell is read from the association at `(the
+// week's period, the slot's subject)` — and an association *there* is exactly
+// `AssociationForSubjectNotRunningOnPeriod`, so no valid document holds one. The
+// bound therefore falls to its missing-association default of 0, every group
+// number in the cell is out of bounds, and `InterrogationGroupsOutOfBounds`
+// fires beside it every time. Its test is a two-element-set test for that
+// reason, like `SlotForSubjectWithoutInterrogations`'s. Unlike that one this is
+// not a shadowing: `InterrogationSlotNotRunningOnPeriod` is declared *before*
+// `InterrogationGroupsOutOfBounds`, so it remains the canonical pick and its
+// `Some` branch stays reachable.
 
-/// `Convergence::BalancingForSubjectWithoutInterrogations` — §8.2 row 9.
+/// `Convergence::BalancingForSubjectWithoutInterrogations`.
 ///
 /// The twin gives `excluded_subject`, which runs no interrogations, a
 /// per-subject balancing override. The block-1 rule fixes the direction:
@@ -2921,7 +2959,7 @@ fn pairing_rule_consequent_without_interrogations_arm_spares_a_rule_with_another
     );
 }
 
-/// `Convergence::PairedSlotsNotInSameSubject` — §8.2 row 10, **antecedent half**.
+/// `Convergence::PairedSlotsNotInSameSubject` — **antecedent half**.
 ///
 /// The fix is `SlotPairing::Remove(rule)`, which names only the rule, so both of
 /// the arm's comparisons are pure identity tests and each needs its own twin.
@@ -2973,14 +3011,14 @@ fn paired_slots_not_in_same_subject_arm_spares_a_rule_with_another_antecedent() 
     );
 }
 
-/// `Convergence::PairedSlotsNotInSameSubject` — §8.2 row 10, **consequent
+/// `Convergence::PairedSlotsNotInSameSubject` — **consequent
 /// half**, and the mirror of the test above: the antecedent is left alone and
 /// matches the invariant, so `None` can only come from the consequent
 /// comparison.
 ///
 /// Deleting a rule is the most destructive fix in this block, and each half of
-/// the rule can go wrong on its own — which is exactly the argument §8.1 made
-/// when it split the two pairing parts into two separate *sites*. Row 10 keeps
+/// the rule can go wrong on its own — which is why the two pairing parts are
+/// two separate *sites*. `PairedSlotsNotInSameSubject` keeps
 /// both parts inside one variant, so the split happens in the tests instead.
 #[test]
 fn paired_slots_not_in_same_subject_arm_spares_a_rule_with_another_consequent() {
@@ -3015,15 +3053,18 @@ fn paired_slots_not_in_same_subject_arm_spares_a_rule_with_another_consequent() 
     );
 }
 
-/// `Convergence::InterrogationSlotNotRunningOnPeriod` — §8.2 row 11, and **the
-/// second two-element-set test of the series**, for the reason the block comment
-/// proves: the association that would bound this cell's group numbers is exactly
-/// row 8, so no valid document holds one, the bound is 0, and
-/// `InterrogationGroupsOutOfBounds` always fires beside row 11.
+///  `Convergence::InterrogationSlotNotRunningOnPeriod`, and **the second
+///  two-element-set test of the series**, for the reason the block comment
+///  proves: the association that would bound this cell's group numbers is
+///  exactly `AssociationForSubjectNotRunningOnPeriod`, so no valid document
+///  holds one, the bound is 0, and `InterrogationGroupsOutOfBounds` always
+///  fires beside `InterrogationSlotNotRunningOnPeriod`.
 ///
-/// The set is asserted whole, so the literal has to name both; the element under
-/// test is then selected explicitly. Row 11 happens to sort first, but nothing
-/// here rests on that — the test calls `fix_invariant` on the element it picked.
+///  The set is asserted whole, so the literal has to name both; the element
+///  under test is then selected explicitly.
+///  `InterrogationSlotNotRunningOnPeriod` happens to sort first, but nothing
+///  here rests on that — the test calls `fix_invariant` on the element it
+///  picked.
 ///
 /// The twin puts a cell at `(other_subject_slot, excluded_period_week)`:
 /// `other_subject` excludes `other_period`, which is that week's period. The
@@ -3039,8 +3080,8 @@ fn paired_slots_not_in_same_subject_arm_spares_a_rule_with_another_consequent() 
 /// complained about, which for a colloscope means losing placements made by
 /// hand.
 ///
-/// **Row 12 stays quiet**: `other_subject_slot` wears no week pattern, so every
-/// week is active for it.
+///  **`InterrogationOnInactiveWeek` stays quiet**: `other_subject_slot` wears
+///  no week pattern, so every week is active for it.
 #[test]
 fn interrogation_slot_not_running_on_period_arm_spares_a_missing_cell() {
     let (valid, doc) = build_valid_document();
@@ -3077,7 +3118,7 @@ fn interrogation_slot_not_running_on_period_arm_spares_a_missing_cell() {
                 FixableInvariant::Convergence(Convergence::InterrogationSlotNotRunningOnPeriod(..))
             )
         })
-        .expect("the set was just asserted to hold row 11");
+        .expect("the set was just asserted to hold `InterrogationSlotNotRunningOnPeriod`");
 
     assert_eq!(
         valid.fix_invariant(&invariant),
@@ -3086,9 +3127,9 @@ fn interrogation_slot_not_running_on_period_arm_spares_a_missing_cell() {
     );
 }
 
-/// `Convergence::InterrogationOnInactiveWeek` — §8.2 row 12, which shares its
-/// match arm with row 11 and is tested separately because the *checker* is what
-/// tells the two apart.
+///  `Convergence::InterrogationOnInactiveWeek`, which shares its match arm with
+///  `InterrogationSlotNotRunningOnPeriod` and is tested separately because the
+///  *checker* is what tells the two apart.
 ///
 /// The twin puts a cell at `(slot, other_week)`. `slot` is the fixture's only
 /// patterned slot and its pattern excludes exactly `other_week`, so the cell
@@ -3096,10 +3137,11 @@ fn interrogation_slot_not_running_on_period_arm_spares_a_missing_cell() {
 /// leave the fixture's own cell on `week` offending, and the valid document
 /// would be guilty.
 ///
-/// Unlike row 11 this row breaks alone: the bound comes from the association at
-/// `(period, subject)`, which the fixture holds, so group 0 is in bounds. Week
-/// activity has nothing to do with the association, which is what lets row 12 be
-/// surgical where row 11 cannot.
+///  Unlike `InterrogationSlotNotRunningOnPeriod` this row breaks alone: the
+///  bound comes from the association at `(period, subject)`, which the fixture
+///  holds, so group 0 is in bounds. Week activity has nothing to do with the
+///  association, which is what lets `InterrogationOnInactiveWeek` be surgical
+///  where `InterrogationSlotNotRunningOnPeriod` cannot.
 ///
 /// Both halves have a live neighbour. The fixture's first cell, `(slot, week)`,
 /// shares the slot; `(other_slot, other_week)` shares the week, and is innocent
@@ -3108,7 +3150,7 @@ fn interrogation_slot_not_running_on_period_arm_spares_a_missing_cell() {
 /// relational: "inactive" is a fact about a week *and* a slot's pattern
 /// together, never about the week alone.
 ///
-/// **Row 11 stays quiet**: `subject` excludes no period.
+/// **`InterrogationSlotNotRunningOnPeriod` stays quiet**: `subject` excludes no period.
 #[test]
 fn interrogation_on_inactive_week_arm_spares_a_missing_cell() {
     let (valid, doc) = build_valid_document();
@@ -3129,15 +3171,17 @@ fn interrogation_on_inactive_week_arm_spares_a_missing_cell() {
     );
 }
 
-// ---- `Convergence`, rows 13-16: the colloscope block ----
+// ---- `Convergence`: the colloscope block ----
 //
-// Four rows, five tests: row 16 compares two things, so it gets one test per
-// comparison, like rows 1 and 10.
+// Four variants, five tests: `ColloscopeStudentGroupOutOfBounds` compares two
+// things, so it gets one test per comparison, like
+// `SlotTeacherDoesNotTeachSubject` and `PairedSlotsNotInSameSubject`.
 //
 // This block is where the block-1 rule — vary the row the fix destroys, never
 // the predicate's other side — stops being merely the way to build an innocent
-// twin and becomes the arms' actual specification. §8.2 proves it for row 14 and
-// the proof carries to 15 and 16. The offending configuration has **two routes**:
+// twin and becomes the arms' actual specification. The argument runs on
+// `ColloscopeGroupListPrefilled` and carries to the other two colloscope
+// variants. The offending configuration has **two routes**:
 // the op writes a row onto a list that is already prefilled, or the op flips an
 // existing list to prefilled while a row sits on it. On the first route the
 // pre-op state has no row, the presence test fails, and the engine convicts the
@@ -3159,11 +3203,11 @@ fn interrogation_on_inactive_week_arm_spares_a_missing_cell() {
 // which is worse in a different way, because the resulting colloscope looks
 // perfectly ordinary.
 
-/// `Convergence::InterrogationGroupsOutOfBounds` — §8.2 row 13.
+/// `Convergence::InterrogationGroupsOutOfBounds`.
 ///
 /// The op is `SetInterrogation(slot, week, cell minus group)`: it carries the
 /// coordinate but not the group number being dropped, so the membership test is
-/// the identity test (frame point 4).
+/// the identity test.
 ///
 /// The twin adds group 2 to the fixture's own cell, whose list has two groups
 /// and so bounds them at 0 and 1. The cell is edited, never the bound: shrinking
@@ -3177,7 +3221,8 @@ fn interrogation_on_inactive_week_arm_spares_a_missing_cell() {
 /// membership test is what answers.
 ///
 /// **Exactly one break**: the cell's week is active for the slot's pattern and
-/// its subject excludes no period, so rows 11 and 12 stay quiet.
+/// its subject excludes no period, so `InterrogationSlotNotRunningOnPeriod` and
+/// `InterrogationOnInactiveWeek` stay quiet.
 #[test]
 fn interrogation_group_out_of_bounds_arm_spares_a_cell_of_in_bounds_groups() {
     let (valid, doc) = build_valid_document();
@@ -3199,7 +3244,7 @@ fn interrogation_group_out_of_bounds_arm_spares_a_cell_of_in_bounds_groups() {
     );
 }
 
-/// `Convergence::ColloscopeGroupListPrefilled` — §8.2 row 14, a pure key site:
+/// `Convergence::ColloscopeGroupListPrefilled`, a pure key site:
 /// the group list *is* the coordinate, `SetGroupList(gl, ∅)` carries it, and the
 /// arm's whole content is one lookup. For a prefilled list there is no single
 /// element to blame — the offending thing is the whole row.
@@ -3214,9 +3259,10 @@ fn interrogation_group_out_of_bounds_arm_spares_a_cell_of_in_bounds_groups() {
 /// `SetGroupList(prefilled_group_list, ∅)` against a state with no such row — a
 /// perfect no-op, which the engine answers with a panic.
 ///
-/// **Exactly one break**: a prefilled filling reports an empty excluded set
-/// (`group_lists.rs:152-162`), so row 15 stays quiet, and the list has two
-/// groups, so group 0 is in bounds and row 16 does too.
+///  **Exactly one break**: a prefilled filling reports an empty excluded set
+///  (`group_lists.rs:152-162`), so `ColloscopeStudentExcluded` stays quiet, and
+///  the list has two groups, so group 0 is in bounds and
+///  `ColloscopeStudentGroupOutOfBounds` does too.
 #[test]
 fn colloscope_group_list_prefilled_arm_spares_a_missing_row() {
     let (valid, doc) = build_valid_document();
@@ -3236,7 +3282,7 @@ fn colloscope_group_list_prefilled_arm_spares_a_missing_row() {
     );
 }
 
-/// `Convergence::ColloscopeStudentExcluded` — §8.2 row 15.
+/// `Convergence::ColloscopeStudentExcluded`.
 ///
 /// The twin adds `excluded_student` to the placements of
 /// `excluding_group_list`, which is the list that excludes her. The row already
@@ -3251,8 +3297,9 @@ fn colloscope_group_list_prefilled_arm_spares_a_missing_row() {
 /// excluded set — the presence test has to serve both routes, cleaning the
 /// placement on one and rejecting the op on the other.
 ///
-/// **Exactly one break**: the list is automatic, so row 14 stays quiet, and it
-/// has two groups, so group 0 is in bounds and row 16 does too.
+///  **Exactly one break**: the list is automatic, so
+///  `ColloscopeGroupListPrefilled` stays quiet, and it has two groups, so group
+///  0 is in bounds and `ColloscopeStudentGroupOutOfBounds` does too.
 #[test]
 fn colloscope_student_excluded_arm_spares_a_row_of_included_students() {
     let (valid, doc) = build_valid_document();
@@ -3280,7 +3327,7 @@ fn colloscope_student_excluded_arm_spares_a_row_of_included_students() {
     );
 }
 
-/// `Convergence::ColloscopeStudentGroupOutOfBounds` — §8.2 row 16, **group
+/// `Convergence::ColloscopeStudentGroupOutOfBounds` — **group
 /// half**.
 ///
 /// The arm's test is one expression, `placements.get(student) != Some(group)`,
@@ -3297,9 +3344,10 @@ fn colloscope_student_excluded_arm_spares_a_row_of_included_students() {
 /// list is the legitimate route, and on it the live document really does hold
 /// the offending placement.
 ///
-/// **Exactly one break**: `group_list` excludes nobody, so row 15 stays quiet,
-/// and it is automatic, so row 14 does. The colloscope cells are unaffected —
-/// their bound is the list's group count, which the twin does not touch.
+///  **Exactly one break**: `group_list` excludes nobody, so
+///  `ColloscopeStudentExcluded` stays quiet, and it is automatic, so
+///  `ColloscopeGroupListPrefilled` does. The colloscope cells are unaffected —
+///  their bound is the list's group count, which the twin does not touch.
 #[test]
 fn colloscope_student_group_out_of_bounds_arm_spares_a_student_placed_elsewhere() {
     let (valid, doc) = build_valid_document();
@@ -3322,7 +3370,7 @@ fn colloscope_student_group_out_of_bounds_arm_spares_a_student_placed_elsewhere(
     );
 }
 
-/// `Convergence::ColloscopeStudentGroupOutOfBounds` — §8.2 row 16, **presence
+/// `Convergence::ColloscopeStudentGroupOutOfBounds` — **presence
 /// half**, and the mirror of the test above.
 ///
 /// The twin places `excluded_student` — who is in no colloscope row at all — in
@@ -3334,8 +3382,9 @@ fn colloscope_student_group_out_of_bounds_arm_spares_a_student_placed_elsewhere(
 /// which is a perfect no-op, and the engine answers a no-op fix with a panic in
 /// front of the user.
 ///
-/// **Exactly one break**: `group_list` excludes nobody, so row 15 stays quiet
-/// even though the student added is the one another list excludes.
+///  **Exactly one break**: `group_list` excludes nobody, so
+///  `ColloscopeStudentExcluded` stays quiet even though the student added is
+///  the one another list excludes.
 #[test]
 fn colloscope_student_group_out_of_bounds_arm_spares_a_row_that_places_somebody_else() {
     let (valid, doc) = build_valid_document();
@@ -3364,10 +3413,9 @@ fn colloscope_student_group_out_of_bounds_arm_spares_a_row_that_places_somebody_
 
 // ---- The two `GlobalUpdate` policy pins ----
 //
-// These two are not four-step tests and do run the engine. They close §9bis,
-// and they pin a policy rather than an arm: **a `GlobalUpdate` carrying a
-// corrupt document is rejected whole, never cleaned.** That is D4 applied to a
-// whole-document target, and it is user-visible, because an import takes exactly
+// These two are not four-step tests and do run the engine. They pin a policy
+// rather than an arm: **a `GlobalUpdate` carrying a corrupt document is rejected
+// whole, never cleaned.** It is user-visible, because an import takes exactly
 // that shape.
 //
 // One test per *half of the map* is enough, and deliberately so. Such a test

@@ -182,8 +182,8 @@ impl Colloscope {
     }
 }
 
-/// Precondition errors of the forced colloscope ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: the `SetGroupList` target existence
+/// Precondition errors of the forced colloscope ops — the carve-out subset.
+/// Kept: the `SetGroupList` target existence
 /// ([Self::InvalidGroupListId]) and the `SetInterrogation` coordinate existence
 /// ([Self::InvalidWeekId] / [Self::InvalidSlotId]). The `SetGroupList`
 /// prefilled/placement guards and all three `SetInterrogation` semantic guards
@@ -209,9 +209,9 @@ impl crate::Data {
     /// Force-applies a colloscope op: the coordinate-existence carve-outs
     /// are kept (returned as [ColloscopePrecheckError] — `SetGroupList` target,
     /// `SetInterrogation` week + slot), the `SetGroupList` prefilled/placement
-    /// guards and the three `SetInterrogation` semantic guards are stripped
-    /// (step-3 survey Table 1). Sparse writers copied verbatim. May leave the
-    /// state invalid; the caller owns checking and rollback.
+    /// guards and the three `SetInterrogation` semantic guards are stripped.
+    /// Sparse writers copied verbatim. May leave the state invalid; the caller
+    /// owns checking and rollback.
     pub(crate) fn force_apply_colloscope(
         &mut self,
         colloscope_op: &AnnotatedColloscopeOp,

@@ -25,8 +25,8 @@ use crate::ops::AnnotatedSlotOp;
 /// Row-key *liveness* (the subject exists) is deliberately not part of these
 /// `LogicError`s: a row keyed by a removed subject is the op-reachable dangling
 /// state, reported as `DanglingFk` through the per-slot `SlotSubject` sites and
-/// repaired by the cascade (design doc Appendix F.4). The interrogation flag is
-/// not part of them either: a slot on a subject without interrogations is
+/// repaired by the cascade. The interrogation flag is not part of them either:
+/// a slot on a subject without interrogations is
 /// `Convergence::SlotForSubjectWithoutInterrogations`, also in the fixable tier.
 ///
 /// All mutation goes through the compound `pub(crate)` helpers below so no
@@ -409,8 +409,8 @@ impl Slots {
     }
 }
 
-/// Precondition errors of the forced slot ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber, op-target existence
+/// Precondition errors of the forced slot ops — the carve-out subset. Kept:
+/// no-clobber, op-target existence
 /// ([Self::InvalidSlotId]), the `AddAfter` same-subject anchor
 /// ([Self::PreviousSlotIsNotInRightSubject]), position bounds, and the
 /// subject-immutability guard ([Self::CannotChangeSubject]). `validate_slot`,
@@ -448,9 +448,9 @@ impl crate::Data {
     ///
     /// Force-applies a slot op: carve-out guards kept (returned as
     /// [SlotPrecheckError] — no-clobber, target existence, `AddAfter` same-subject
-    /// anchor, position bounds, subject immutability), invariant guards stripped
-    /// (step-3 survey Table 1). May leave the state invalid; the caller owns
-    /// checking and rollback.
+    /// anchor, position bounds, subject immutability), invariant guards
+    /// stripped. May leave the state invalid; the caller owns checking and
+    /// rollback.
     pub(crate) fn force_apply_slot(
         &mut self,
         slot_op: &AnnotatedSlotOp,

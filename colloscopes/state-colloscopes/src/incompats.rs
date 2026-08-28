@@ -104,9 +104,8 @@ impl Incompats {
     }
 }
 
-/// Precondition errors of the forced incompat ops — the carve-out subset
-/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
-/// `validate_incompat` is stripped.
+/// Precondition errors of the forced incompat ops — the carve-out subset. Only
+/// no-clobber and op-target existence survive; `validate_incompat` is stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum IncompatPrecheckError {
     /// A incompat id is invalid
@@ -122,8 +121,8 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies an incompat op: carve-out guards kept (returned as
-    /// [IncompatPrecheckError]), invariant guards stripped (step-3 survey Table 1).
-    /// May leave the state invalid; the caller owns checking and rollback.
+    /// [IncompatPrecheckError]), invariant guards stripped. May leave the state
+    /// invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_incompat(
         &mut self,
         incompat_op: &AnnotatedIncompatOp,

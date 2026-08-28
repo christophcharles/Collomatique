@@ -320,7 +320,7 @@ impl GroupLists {
 /// Prefilled groups for a single group list
 // Deliberately **no** `ContentIdentity`: a prefilled group is identified by
 // its position in the list, never by its value, so it must never be matched
-// by `==` inside a container (plan step 6.5, decision 17).
+// by `==` inside a container.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, ContentOrd)]
 pub struct PrefilledGroup {
     /// Students set
@@ -413,9 +413,9 @@ impl GroupList {
     }
 }
 
-/// Precondition errors of the forced group-list ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber, op-target existence, and the
-/// `AssignToSubject` coordinate-existence checks
+/// Precondition errors of the forced group-list ops — the carve-out subset.
+/// Kept: no-clobber, op-target existence, and the `AssignToSubject`
+/// coordinate-existence checks
 /// ([Self::InvalidSubjectId] / [Self::InvalidPeriodId] / [Self::InvalidGroupListId]).
 /// With the op payload consolidated to a whole sealed [GroupList], the
 /// empty-first protocol guards and the prefill-count boundary have no place
@@ -446,9 +446,8 @@ impl crate::Data {
     ///
     /// Force-applies a group list op: carve-out guards kept (returned as
     /// [GroupListPrecheckError] — no-clobber, target existence, and the
-    /// `AssignToSubject` coordinate existence), invariant guards stripped
-    /// (step-3 survey Table 1). May leave the state invalid; the caller owns
-    /// checking and rollback.
+    /// `AssignToSubject` coordinate existence), invariant guards stripped. May
+    /// leave the state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_group_list(
         &mut self,
         group_list_op: &AnnotatedGroupListOp,
