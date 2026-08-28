@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use collomatique_python_runner::{SendError, TakenDocument};
 use collomatique_rpc::{ResultMsg, send_command};
 use collomatique_rpc_colloscopes::{
     AppAnswerMsg, AppCmdMsg, AppInitMsg, ColloCmdMsg, ColloProtocol, InternalDataStream,
@@ -21,15 +22,26 @@ struct RpcHost {
 }
 
 impl collomatique_python_runner::Host for RpcHost {
-    fn data(&self) -> collomatique_state_colloscopes::Data {
-        self.data.clone()
+    fn live(&self) -> bool {
+        false
     }
 
-    fn send(&self, data: &collomatique_state_colloscopes::Data) -> Result<(), String> {
+    fn data(&self) -> Result<TakenDocument, String> {
+        Ok(TakenDocument {
+            data: self.data.clone(),
+            token: None,
+        })
+    }
+
+    fn send(
+        &self,
+        data: &collomatique_state_colloscopes::Data,
+        _token: Option<u64>,
+    ) -> Result<Option<u64>, SendError> {
         let data_stream = InternalDataStream::from(data);
         send_command(ColloCmdMsg::App(AppCmdMsg::SetData(data_stream)))
-            .map(|_| ())
-            .map_err(|e| e.to_string())
+            .map(|_| None)
+            .map_err(|e| SendError::Failed(e.to_string()))
     }
 }
 

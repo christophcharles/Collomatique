@@ -148,6 +148,13 @@ create_exception!(
     "save() with no path on a document that was loaded with caveats."
 );
 
+create_exception!(
+    collomatique,
+    DocumentChanged,
+    SaveError,
+    "The application would not replace the document it holds with this one."
+);
+
 /// Declares the fifteen per-family write errors, and the table that finds one
 ///
 /// The names on the left are `collomatique_ops::UpdateError`'s own variants,
@@ -319,6 +326,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add("DialogUnavailable", py.get_type::<DialogUnavailable>())?;
     m.add("IdCeilingExceeded", py.get_type::<IdCeilingExceeded>())?;
     m.add("CaveatedOverwrite", py.get_type::<CaveatedOverwrite>())?;
+    m.add("DocumentChanged", py.get_type::<DocumentChanged>())?;
 
     register_families(m)
 }

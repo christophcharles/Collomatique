@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 use pyo3::prelude::*;
 use pyo3::types::PyFrozenSet;
@@ -85,6 +86,10 @@ impl Origin {
 pub struct Document {
     state: SessionStack<Data, Desc>,
     origin: Origin,
+    /// The application's own name for the document this one was taken from, and
+    /// then for the last one it accepted. `None` when it came from nowhere the
+    /// application knows.
+    host_token: Mutex<Option<u64>>,
 }
 
 /// Opens a colloscope file
@@ -112,6 +117,7 @@ pub fn load(path: PathBuf) -> PyResult<Document> {
     Ok(Document {
         state: SessionStack::new(data),
         origin: Origin::File { path, caveats },
+        host_token: Mutex::new(None),
     })
 }
 
@@ -124,6 +130,7 @@ pub fn new_document() -> Document {
     Document {
         state: SessionStack::new(Data::new()),
         origin: Origin::None,
+        host_token: Mutex::new(None),
     }
 }
 
@@ -207,16 +214,28 @@ impl Document {
     /// application's caveat set, so a script cannot see that the file behind
     /// it was opened with something missing. Showing that needs a protocol
     /// change.
-    pub(crate) fn hosted(data: Data) -> Document {
+    pub(crate) fn hosted(data: Data, token: Option<u64>) -> Document {
         Document {
             state: SessionStack::new(data),
             origin: Origin::Hosted,
+            host_token: Mutex::new(token),
         }
     }
 
     /// The document as it is now, for the collections to read through
     pub(crate) fn data(&self) -> &Data {
         self.state.get_data()
+    }
+
+    /// The token to send along with this document
+    pub(crate) fn host_token(&self) -> Option<u64> {
+        *self.host_token.lock().unwrap()
+    }
+
+    /// Keeps what the application answered a send with, so the next one speaks
+    /// of the document it now holds
+    pub(crate) fn set_host_token(&self, token: Option<u64>) {
+        *self.host_token.lock().unwrap() = token;
     }
 
     /// Applies one composite op, and keeps the repairs it had to make
@@ -916,6 +935,7 @@ impl Document {
                 // copy of the hosted document is an ordinary origin-less one.
                 Origin::Hosted => Origin::None,
             },
+            host_token: Mutex::new(None),
         })
     }
 

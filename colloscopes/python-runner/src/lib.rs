@@ -10,7 +10,7 @@ use pyo3::prelude::*;
 ///
 /// Re-exported rather than reached for directly, so that a caller of
 /// [run_python_script] needs this crate and nothing else.
-pub use collomatique_python::Host;
+pub use collomatique_python::{Host, SendError, TakenDocument};
 
 /// What a script's solves re-execute as their engine, re-exported for the same reason
 ///
