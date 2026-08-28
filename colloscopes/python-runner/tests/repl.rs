@@ -14,6 +14,11 @@ use collomatique_state_colloscopes::Data;
 
 static INIT: Once = Once::new();
 
+/// One session at a time, whatever cargo does with its threads
+///
+/// The host a session sees is process-global, so two of them must not overlap.
+static ONE_SESSION_AT_A_TIME: Mutex<()> = Mutex::new(());
+
 /// Registers the module and starts the interpreter, at most once per process
 fn interpreter() {
     INIT.call_once(collomatique_python_runner::initialize);
@@ -102,6 +107,9 @@ impl Host for FakeHost {
 
 #[test]
 fn the_console_runs_a_session_of_typed_lines() {
+    let _one_at_a_time = ONE_SESSION_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     interpreter();
 
     let io = Arc::new(FakeReplIo::new([
@@ -133,4 +141,36 @@ fn the_console_runs_a_session_of_typed_lines() {
     let prompts = io.prompts();
     assert!(prompts.iter().any(|prompt| prompt == ">>> "));
     assert!(prompts.iter().any(|prompt| prompt == "... "));
+}
+
+/// The session asks for plain text rather than for a terminal
+///
+/// The worker's output is a pty, so every isatty() check inside it says
+/// terminal, and `help()` would hand its text to a pager that writes escape
+/// sequences and then waits for a keypress nobody can send. What the session
+/// prints goes nowhere this test can read, so the session answers by sending a
+/// document: one send means it found what it needs, none means it did not.
+#[test]
+fn the_console_asks_for_plain_text_output() {
+    let _one_at_a_time = ONE_SESSION_AT_A_TIME
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    interpreter();
+
+    let io = Arc::new(FakeReplIo::new([
+        "import os",
+        "plain = os.environ[\"TERM\"] == \"dumb\" and \"PAGER\" not in os.environ",
+        "clm.send_to_host(clm.current_document()) if plain else None",
+    ]));
+    let host = Arc::new(FakeHost {
+        state: Mutex::new(FakeHostState {
+            token: 42,
+            sent: Vec::new(),
+        }),
+    });
+
+    collomatique_python_runner::run_python_repl(Some(host.clone()), None, io)
+        .expect("the session ends when the lines run out");
+
+    assert_eq!(host.sent(), vec![Some(42)]);
 }

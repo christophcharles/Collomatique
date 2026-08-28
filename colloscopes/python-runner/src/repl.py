@@ -1,11 +1,21 @@
 import builtins
 import code
+import os
 import sys
 
 import collomatique
 
 
 def run(read_line):
+    # The transcript is not a terminal, but the worker's output is a pty and
+    # every isatty() check says otherwise. Left alone, help() hands its text to
+    # `less`, which writes escape sequences and then waits for a keypress that
+    # can never arrive. This is the environment pydoc reads to answer "plain
+    # text, please".
+    os.environ.pop("PAGER", None)
+    os.environ.pop("MANPAGER", None)
+    os.environ["TERM"] = "dumb"
+
     def _input(prompt=""):
         _flush()
         return read_line(str(prompt))

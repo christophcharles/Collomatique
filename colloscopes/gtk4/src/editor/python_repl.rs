@@ -148,11 +148,19 @@ impl Component for Window {
                         #[name(entry)]
                         gtk::Entry {
                             set_hexpand: true,
-                            add_css_class: "monospace",
                             // Only while the console is asking for a line: at
                             // any other moment there is nobody to read it.
+                            // Made read-only rather than insensitive, which
+                            // would take the focus away and make gtk complain
+                            // about the focus-out event it never got.
                             #[watch]
-                            set_sensitive: model.pending_read.is_some(),
+                            set_editable: model.pending_read.is_some(),
+                            #[watch]
+                            set_css_classes: if model.pending_read.is_some() {
+                                &["monospace"]
+                            } else {
+                                &["monospace", "dimmed"]
+                            },
                             set_buffer = &gtk::EntryBuffer {
                                 connect_text_notify[sender] => move |widget| {
                                     let text: String = widget.text().into();
@@ -250,14 +258,16 @@ impl Component for Window {
                 self.entry_op = Some(String::new());
                 self.send_response(ResultMsg::App(AppAnswerMsg::Line(line)));
             }
+            // The entry keeps the focus between two lines, so the history only
+            // answers while there is a line to type.
             WindowInput::HistoryPrev => {
-                if self.history_cursor > 0 {
+                if self.pending_read.is_some() && self.history_cursor > 0 {
                     self.history_cursor -= 1;
                     self.entry_op = Some(self.history[self.history_cursor].clone());
                 }
             }
             WindowInput::HistoryNext => {
-                if self.history_cursor < self.history.len() {
+                if self.pending_read.is_some() && self.history_cursor < self.history.len() {
                     self.history_cursor += 1;
                     self.entry_op = Some(
                         self.history
