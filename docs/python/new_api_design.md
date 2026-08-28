@@ -851,8 +851,7 @@ itself is what could not be made sense of. A reference the document does not
 hold is refused earlier still, by the argument convention of §2.3.
 
 There are no objective weights to expose. The greedy maximizes one fixed
-objective (`docs/plans/greedy_algorithm.md` §2), and the retired ILP that had
-tunable ones is not coming back.
+objective, and the retired ILP that had tunable ones is not coming back.
 
 ### 10.1 The colloscope solve config
 
