@@ -218,7 +218,7 @@ impl Component for Dialog {
                 warning_running::DialogOutput::PresentParent => DialogInput::Present,
             });
 
-        let debug_view = DebugView::builder().launch(()).detach();
+        let debug_view = DebugView::builder().launch(None).detach();
 
         let errors = FactoryVecDeque::builder()
             .launch(gtk::ListBox::default())
@@ -345,6 +345,12 @@ impl Component for Dialog {
                                 self.send_response(ResultMsg::GlobalError(e.to_string()));
                             }
                         }
+                    }
+                    CmdMsg::App(AppCmdMsg::ReadLine { .. })
+                    | CmdMsg::App(AppCmdMsg::ReplaceData { .. }) => {
+                        self.send_response(ResultMsg::GlobalError(String::from(
+                            "cette commande n'est disponible que dans la console Python",
+                        )));
                     }
                     CmdMsg::Solver(_) | CmdMsg::Strategy(_) => {}
                 },

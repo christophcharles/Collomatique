@@ -243,9 +243,9 @@ impl<'a> JoinedPairingRule<'a> {
     }
 }
 
-/// Precondition errors of the forced pairing ops — the carve-out subset
-/// (step-3 survey Table 2). Only no-clobber and op-target existence survive;
-/// `validate_pairing_rule` is stripped.
+/// Precondition errors of the forced pairing ops — the carve-out subset. Only
+/// no-clobber and op-target existence survive; `validate_pairing_rule` is
+/// stripped.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum PairingPrecheckError {
     /// A pairing rule id is invalid
@@ -261,8 +261,8 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies a pairing op: carve-out guards kept (returned as
-    /// [PairingPrecheckError]), invariant guards stripped (step-3 survey Table 1).
-    /// May leave the state invalid; the caller owns checking and rollback.
+    /// [PairingPrecheckError]), invariant guards stripped. May leave the state
+    /// invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_pairing(
         &mut self,
         pairing_op: &AnnotatedPairingOp,

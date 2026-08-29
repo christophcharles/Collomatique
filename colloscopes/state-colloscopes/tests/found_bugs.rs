@@ -1,6 +1,4 @@
-//! Regression tests for the bugs found by the Phase-0 property harness
-//! (see §3 of the retired state consolidation plan, pinned at
-//! `git show 42c95756:docs/plans/state_consolidation_plan.md`).
+//! Regression tests for the bugs found by the property harness.
 //!
 //! Each test pins one bug deterministically, independent of
 //! property-test seed luck. Following the test-first workflow, every
@@ -492,10 +490,9 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
 
 /// `SlotOp::Update` must reject an update that moves the slot to a
 /// different subject: `slot.subject_id` is authoritative and the slots
-/// backend groups slots per subject. Since the flat-table restructure
-/// (phase B commit 3), the subject is carried by the slot itself; without
-/// this guard a changed `subject_id` would desynchronize the slot table
-/// from the per-subject ordering sidecar.
+/// backend groups slots per subject. The subject is carried by the slot
+/// itself; without this guard a changed `subject_id` would desynchronize the
+/// slot table from the per-subject ordering sidecar.
 #[test]
 fn slot_update_changing_subject_is_rejected() {
     let mut app_state = AppState::<_, String>::new(Data::new());

@@ -73,9 +73,8 @@ impl Teachers {
     }
 }
 
-/// Precondition errors of the forced teacher ops — the carve-out subset
-/// (step-3 survey Table 2). See [StudentPrecheckError](crate::StudentPrecheckError)
-/// for the shape rationale.
+/// Precondition errors of the forced teacher ops — the carve-out subset. See
+/// [StudentPrecheckError](crate::StudentPrecheckError) for the shape rationale.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum TeacherPrecheckError {
     /// A teacher id is invalid
@@ -91,8 +90,8 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies a teacher op: carve-out guards kept (returned as
-    /// [TeacherPrecheckError]), invariant guards stripped (step-3 survey Table 1).
-    /// May leave the state invalid; the caller owns checking and rollback.
+    /// [TeacherPrecheckError]), invariant guards stripped. May leave the state
+    /// invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_teacher(
         &mut self,
         teacher_op: &AnnotatedTeacherOp,

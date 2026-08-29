@@ -129,9 +129,8 @@ assert _same_class is collomatique.IncompatData
 assert collomatique.IncompatData.__module__ == "collomatique"
 
 # A field that names an entity takes a handle or an id, interchangeably. The
-# values below extract to the same incompatibility and — this is the wart §2.3
-# of the design records — do not compare equal, because a dataclass stores what
-# it was given.
+# values below extract to the same incompatibility and — this is the wart — do
+# not compare equal, because a dataclass stores what it was given.
 subject = list(doc.subjects)[0]
 pattern = list(doc.week_patterns)[0]
 noon = collomatique.TimeSlot(collomatique.Weekday.MONDAY, datetime.time(12, 0), 60)

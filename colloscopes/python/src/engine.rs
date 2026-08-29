@@ -2,8 +2,7 @@
 //!
 //! A solve does not run in the interpreter's own process: the model is handed
 //! to worker subprocesses, each of them a collomatique binary re-executed as
-//! `<exe> --rpc-engine`. So a script that solves has to say *which* binary,
-//! and `docs/python/new_api_design.md` §10 is where the answer comes from.
+//! `<exe> --rpc-engine`. So a script that solves has to say *which* binary.
 //!
 //! Four rungs, in order: what the call was given, what the runner injected,
 //! what the environment names, what the build baked in. Nothing found is a

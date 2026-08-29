@@ -117,9 +117,9 @@ assert collomatique.PairingRuleData.__module__ == "collomatique"
 assert collomatique.PairingRuleSideData.__module__ == "collomatique"
 
 # A field that names an entity takes a handle or an id, interchangeably. The
-# two rules below extract to the same rule and — this is the wart §2.3 of the
-# design records — do not compare equal, because a dataclass stores what it
-# was given, and a handle and an id hash differently.
+# two rules below extract to the same rule and — this is the wart — do not
+# compare equal, because a dataclass stores what it was given, and a handle and
+# an id hash differently.
 sortileges, metamorphose = list(doc.subjects)
 
 by_handle = collomatique.PairingRuleData(

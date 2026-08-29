@@ -85,9 +85,8 @@ $global:LASTEXITCODE = 0
 # The Rust documentation's version of this command also adds
 # Microsoft.VisualStudio.Component.VC.Tools.ARM64. Collomatique targets x86_64
 # only, so the ARM64 cross compiler is a couple of gigabytes bought for nothing.
-# Add it back here if that ever changes. (ARM64, code signing, a CI build and
-# distribution channels are the four things the retired roadmap put out of
-# scope; see the pointer at the top of build.ps1.)
+# Add it back here if that ever changes. ARM64, code signing, a CI build and
+# distribution channels are all deliberately out of scope.
 #
 # The SDK component carries its version, so it is a real pin: a rebuild next
 # year uses the SDK this line names, not whatever is current then.
@@ -114,14 +113,16 @@ $BuildToolsOverride = @(
 
 $Packages = @(
     @{
-        Id     = 'Microsoft.VisualStudio.2022.BuildTools'
-        Name   = 'Visual Studio Build Tools 2022'
+        # The year left the id with Visual Studio 2026: this is the 18.x line.
+        Id     = 'Microsoft.VisualStudio.BuildTools'
+        Name   = 'Visual Studio Build Tools 2026'
         Extra  = @('--force', '--override', $BuildToolsOverride)
         Verify = { [bool](Get-MsvcPath) }
     }
     @{
-        Id   = 'Git.Git'
-        Name = 'git'
+        Id     = 'Git.Git'
+        Name   = 'git'
+        Verify = { [bool](Get-Command git -ErrorAction SilentlyContinue) }
     }
     @{
         # The Python that runs gvsbuild, not the one the application embeds --
@@ -135,9 +136,22 @@ $Packages = @(
         # --scope machine picks the manifest's machine installer, which passes
         # InstallAllUsers=1 PrependPath=1, so python lands on the machine PATH
         # instead of in one account.
-        Id    = 'Python.Python.3.12'
-        Name  = 'Python 3.12 (for gvsbuild)'
-        Extra = @('--scope', 'machine')
+        Id     = 'Python.Python.3.12'
+        Name   = 'Python 3.12 (for gvsbuild)'
+        Extra  = @('--scope', 'machine')
+        Verify = {
+            # Get-Command is not enough: on a fresh Windows, "python" is a
+            # Store stub that prints no version. Any interpreter gvsbuild
+            # accepts will do -- 3.10 or newer, and not exactly 3.13.4 --
+            # because nothing links against this one.
+            if (-not (Get-Command python -ErrorAction SilentlyContinue)) { return $false }
+            $v = & python --version 2>$null
+            if ("$v" -notmatch '^Python (\d+)\.(\d+)\.(\d+)$') { return $false }
+            $major = [int]$Matches[1]
+            $minor = [int]$Matches[2]
+            if ($major -lt 3 -or ($major -eq 3 -and $minor -lt 10)) { return $false }
+            "$v" -ne 'Python 3.13.4'
+        }
     }
     @{
         # gvsbuild's documentation installs uv with exactly this, and no scope:
@@ -145,8 +159,9 @@ $Packages = @(
         # No --scope machine here, unlike the others. uv keeps the tools it
         # installs under the profile of whoever runs it, so a machine-wide uv
         # would not make a machine-wide gvsbuild anyway.
-        Id   = 'astral-sh.uv'
-        Name = 'uv'
+        Id     = 'astral-sh.uv'
+        Name   = 'uv'
+        Verify = { [bool](Get-Command uv -ErrorAction SilentlyContinue) }
     }
     @{
         # The build shell gvsbuild drives the GTK stack through. Its manifest
@@ -160,10 +175,15 @@ $Packages = @(
         Id    = 'MSYS2.MSYS2'
         Name  = 'MSYS2'
         Extra = @('--scope', 'machine')
+        # MSYS2 puts nothing on PATH, so this is a path check. $MsysRoot is
+        # defined below this list; the block only runs once the install loop
+        # calls it, by which time it is there.
+        Verify = { Test-Path (Join-Path $MsysRoot 'usr\bin\bash.exe') }
     }
     @{
-        Id   = 'Rustlang.Rustup'
-        Name = 'rustup'
+        Id     = 'Rustlang.Rustup'
+        Name   = 'rustup'
+        Verify = { [bool](Get-Command rustup -ErrorAction SilentlyContinue) }
     }
     @{
         # The unsuffixed JRSoftware.InnoSetup id is the older 6.x line. The
@@ -171,9 +191,10 @@ $Packages = @(
         #
         # --scope machine because winget's default put it under LOCALAPPDATA,
         # and a build tool belongs on the machine, not in one account.
-        Id    = 'JRSoftware.InnoSetup.7'
-        Name  = 'Inno Setup 7'
-        Extra = @('--scope', 'machine')
+        Id     = 'JRSoftware.InnoSetup.7'
+        Name   = 'Inno Setup 7'
+        Extra  = @('--scope', 'machine')
+        Verify = { [bool](Get-IsccPath) }
     }
 )
 
@@ -185,10 +206,22 @@ $Packages = @(
 $VcpkgRoot = 'C:\vcpkg'
 $VcpkgRepository = 'https://github.com/microsoft/vcpkg.git'
 
-# Where the MSYS2 manifest puts it, for the report at the end. Nothing is
-# installed here; gvsbuild finds MSYS2 by searching the usual locations, of
-# which this is the first.
+# Where the MSYS2 manifest puts it, for the check above and the report at the
+# end. Nothing is installed here; gvsbuild finds MSYS2 by searching the usual
+# locations, of which this is the first.
 $MsysRoot = 'C:\msys64'
+
+# ISCC.exe is the Inno Setup command line compiler. Its installer does not put
+# it on PATH, so both the check above and the report at the end have to name
+# these paths.
+#
+# Only the machine-wide locations are searched, because the install asks for
+# --scope machine. A copy under LOCALAPPDATA is a per-user install that this
+# script did not ask for, and finding it would hide that the scope was ignored.
+$IsccCandidates = @(
+    (Join-Path $env:ProgramFiles        'Inno Setup 7\ISCC.exe')
+    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
+)
 
 # The host triple is named rather than left to rustup's autodetection, so the
 # script says out loud which toolchain the build expects. msvc, not gnu: every
@@ -218,24 +251,9 @@ function Update-SessionPath {
     $env:Path = (@($machine, $user) | Where-Object { $_ }) -join ';'
 }
 
-# `winget list` exits 0 when it finds the package and non-zero when it does
-# not. Which non-zero code means "nothing matched" has moved between winget
-# versions, so only the zero is trusted here.
-#
-# --accept-source-agreements matters even for a query: on a machine where they
-# have not been accepted, winget asks, and this call throws its output away, so
-# the question would be invisible and the script would wait for an answer to a
-# prompt nobody can see.
-#
-# stderr goes to $null rather than being merged with 2>&1: merging turns a
-# native command's stderr into error records, and $ErrorActionPreference =
-# 'Stop' then throws on them, which would fail the check for a package that is
-# perfectly well installed.
-function Test-PackageInstalled {
-    param([string]$Id)
-
-    $null = & winget list --exact --id $Id --accept-source-agreements 2>$null
-    return ($LASTEXITCODE -eq 0)
+# Where the Inno Setup compiler is, or $null.
+function Get-IsccPath {
+    return ($IsccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1)
 }
 
 # Where the MSVC toolset is, or $null. vswhere.exe ships with any Visual Studio
@@ -246,7 +264,10 @@ function Get-MsvcPath {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path $vswhere)) { return $null }
 
-    $found = & $vswhere -products '*' `
+    # The version range names the Visual Studio major this build expects
+    # (VS2026 is 18), so a machine that only has an older one answers $null and
+    # gets the right Build Tools installed, instead of looking fine.
+    $found = & $vswhere -products '*' -version '[18.0,19.0)' `
         -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
         -property installationPath -latest 2>$null
 
@@ -274,25 +295,23 @@ function Install-Package {
     $id   = $Package.Id
     $name = $Package.Name
 
-    # Announced before the query, not after: the query is silent and can take a
-    # while, so without this a slow one is indistinguishable from a hang.
+    # Announced before the check, not after: a check that shells out -- vswhere,
+    # python --version -- is silent, so without this a slow one is
+    # indistinguishable from a hang.
     Write-Step "checking $name"
 
-    # A package can be registered with winget and still not be usable -- an
-    # interrupted Visual Studio install leaves exactly that. Where an entry
-    # carries a Verify block, it, and not winget's list, decides whether there
-    # is anything to do.
-    if (Test-PackageInstalled -Id $id) {
-        if ((-not $Package.ContainsKey('Verify')) -or (& $Package.Verify)) {
-            Write-Step "$name is already installed, skipping"
-            if ($Package.ContainsKey('Extra')) {
-                Write-Note "to change how it was installed, re-run winget by hand:"
-                Write-Note "  winget install --exact --id $id --source winget $($Package.Extra -join ' ')"
-            }
-            $script:InstallOk = $true
-            return
+    # The Verify block, not winget's records, decides whether there is anything
+    # to do: the tool may be there without winget having installed it -- a CI
+    # runner image is exactly that -- and it may be registered without being
+    # usable, which is what an interrupted Visual Studio install leaves behind.
+    if (& $Package.Verify) {
+        Write-Step "$name is already there, skipping"
+        if ($Package.ContainsKey('Extra')) {
+            Write-Note "to change how it is installed, run winget by hand:"
+            Write-Note "  winget install --exact --id $id --source winget $($Package.Extra -join ' ')"
         }
-        Write-Step "$name is registered but incomplete, installing it again"
+        $script:InstallOk = $true
+        return
     }
 
     Write-Step "installing $name ($id)"
@@ -343,7 +362,7 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
 # Install
 # ---------------------------------------------------------------------------
 
-Write-Step "asking winget what is already installed"
+Write-Step "checking what is already installed"
 
 $failed = @()
 foreach ($package in $Packages) {
@@ -598,23 +617,14 @@ foreach ($probe in @(
     }
 }
 
-# ISCC.exe is the Inno Setup command line compiler. Its installer does not put
-# it on PATH, so the build script will have to name this path; find it here
-# rather than discover it is elsewhere at the end of a build.
-#
-# Only the machine-wide locations are searched, because the install above asks
-# for --scope machine. A copy under LOCALAPPDATA is a per-user install that this
-# script did not ask for, and finding it would hide that the scope was ignored.
-$isccCandidates = @(
-    (Join-Path $env:ProgramFiles        'Inno Setup 7\ISCC.exe')
-    (Join-Path ${env:ProgramFiles(x86)} 'Inno Setup 7\ISCC.exe')
-)
-$iscc = $isccCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+# The build script will have to name ISCC.exe's path, so report which one was
+# found rather than discover it is elsewhere at the end of a build.
+$iscc = Get-IsccPath
 if ($iscc) {
     Write-Note "Inno Setup: $iscc"
 } else {
     Write-Note "Inno Setup: NOT FOUND, looked in:"
-    foreach ($candidate in $isccCandidates) { Write-Note "  $candidate" }
+    foreach ($candidate in $IsccCandidates) { Write-Note "  $candidate" }
 }
 
 Write-Host

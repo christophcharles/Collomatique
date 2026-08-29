@@ -32,6 +32,7 @@ assert [f.name for f in dataclasses.fields(collomatique.ConductorStrategy)] == [
     "warm_start_config",
     "incremental_config",
     "fuzzy_config",
+    "warm_start_incumbent",
 ]
 
 # The classes are the module's, not a private submodule's, like every other
@@ -54,6 +55,9 @@ assert bare.default_config is None
 assert bare.warm_start_config == collomatique.WarmStartConfig()
 assert bare.incremental_config is None
 assert bare.fuzzy_config is None
+# A run is handed no warm start from here, so this one changes nothing today.
+# It is still the application's own default, on.
+assert bare.warm_start_incumbent is True
 
 # The enabled sub-config is a fresh object every time, and not one shared
 # between every strategy ever built: it is mutable, so editing one strategy's
@@ -106,6 +110,7 @@ spelled_out = collomatique.ConductorStrategy(
         time_limit=None,
         incumbent_time_limit=7,
     ),
+    warm_start_incumbent=False,
 )
 
 # The strategies the boundary must refuse. They are built without complaint —

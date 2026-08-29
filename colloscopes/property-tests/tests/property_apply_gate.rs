@@ -1,0 +1,254 @@
+//! Property fuzz over the apply/check/rollback gate ([`Data::apply`]).
+//!
+//! Randomized coverage of the exact primitive production runs on: the gate
+//! `apply` = snapshot + `force_apply` + `broken_invariants` + rollback. The
+//! walk-and-probe shape is expressed as *properties of the gate alone*:
+//!
+//! * **atomicity** — every `Err` arm (precheck, logic, invariants) leaves the
+//!   state bit-identical to before the op, and carries a non-empty error set on
+//!   the two rolled-back arms;
+//! * **honesty** — every `Ok` landing is fully valid (`broken_invariants()` is
+//!   `Ok(∅)`), and its returned reverse restores the pre-state exactly;
+//! * **coverage** — every [`CorruptionKind`] is attempted, each corrupting kind
+//!   is rejected at least once, and each one is rejected *at the tier it was
+//!   built to reach*: `ForceLogic` reaches the [`InvalidOp::Logic`] tier (the
+//!   external-data route the sealing left standing), and the three kinds that
+//!   aim at the checker reach [`Error::BrokenInvariants`]. The tier-specific
+//!   counters are what make the coverage claim honest: a corrupting kind whose
+//!   every probe bounced at the *precheck* would satisfy a bare
+//!   "was rejected once" guard while never exercising the checker at all.
+//!
+//! **Fuzz shape — depth-1 probes off a validated walk.** A validated random walk
+//! (the testgen harness, byte-untouched) is interrupted every [`PROBE_STRIDE`]
+//! successful ops by a corruption probe: snapshot the state, run *one* op through
+//! [`Data::apply`], assert the gate properties, then restore the snapshot and
+//! resume. In production `apply` only ever runs on a consistent state, so
+//! `{valid state} + {one gated op}` is the exact target distribution.
+//!
+//! On failure the harness prints the seed and the full op log so the sequence
+//! replays exactly.
+
+use std::cell::Cell;
+use std::collections::BTreeSet;
+
+use collomatique_testgen_colloscopes::generator::CorruptionKind;
+use collomatique_testgen_colloscopes::rand::Rng;
+use collomatique_testgen_colloscopes::{generator, harness};
+
+use collomatique_state::InMemoryData;
+use collomatique_state::traits::Manager;
+use collomatique_state_colloscopes::{Data, Error, InnerData, InvalidOp};
+
+use harness::RunConfig;
+
+// The five documents the walk starts from.
+#[path = "support/start_points.rs"]
+mod start_points;
+
+/// House scale, matching `property_ops.rs`. `seeds` is the budget for the
+/// bootstrap start; the four big starts share the same again between them
+/// (`start_points::seeds_for`).
+const CONFIG: RunConfig = RunConfig {
+    seeds: 100,
+    ops_per_run: 1000,
+    invalid_fraction: 0.15,
+};
+
+/// One corruption probe every this many *successful* walk ops.
+const PROBE_STRIDE: usize = 10;
+
+/// Index of `kind` in [`CorruptionKind::ALL`], for the per-kind counters.
+fn kind_index(kind: CorruptionKind) -> usize {
+    CorruptionKind::ALL
+        .iter()
+        .position(|k| *k == kind)
+        .expect("every kind is in ALL")
+}
+
+/// Whether `kind`'s designed outcome is a *checker* rejection
+/// ([`Error::BrokenInvariants`]) — the tier the stripped invariant guards were
+/// handed to.
+///
+/// [`CorruptionKind::ForceRemove`] dangles FKs by removing a referenced entity,
+/// [`CorruptionKind::ForceRetarget`] buries a dangling id in an `Update`
+/// payload, and [`CorruptionKind::ForceSemantic`] lands a state that breaks a
+/// convergence fact: all three are fixable-invariant material.
+/// [`CorruptionKind::ForceLogic`] aims one tier up, at [`InvalidOp::Logic`]
+/// (counted separately by `logic_seen`), and [`CorruptionKind::ForceValid`] is
+/// not corrupting at all. The match is exhaustive on purpose: a new kind must
+/// state which tier it aims at rather than fall into a wildcard.
+fn aims_at_the_checker(kind: CorruptionKind) -> bool {
+    match kind {
+        CorruptionKind::ForceRemove
+        | CorruptionKind::ForceRetarget
+        | CorruptionKind::ForceSemantic => true,
+        CorruptionKind::ForceLogic | CorruptionKind::ForceValid => false,
+    }
+}
+
+/// Walk `Data` through the gate (like property 4 of `property_ops.rs`), probing
+/// `apply` every [`PROBE_STRIDE`] ops and asserting the gate's atomicity and
+/// honesty on the resulting (usually rejected) op.
+#[test]
+fn apply_gate_is_atomic_and_honest() {
+    // Cross-run honesty counters, over every (start, seed) pair (interior
+    // mutability: `for_each_start_and_seed` takes a `Fn` closure). They count
+    // outcomes and ask for at least one of each, so running more starts can
+    // only make them easier to satisfy — none of them is a fraction or a mean.
+    let landed = Cell::new(0usize); // probes that returned Ok
+    let rejected = Cell::new(0usize); // probes that returned Err (rolled back)
+    let attempted: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
+    let rejected_by_kind: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
+    // Rejections that reached the *checker* tier, per kind. `rejected_by_kind`
+    // counts any `Err`, which a precheck bounce also satisfies — so it alone
+    // cannot witness that a kind's material ever got past `force_apply` to the
+    // tier the stripped guards were moved to.
+    let broken_by_kind: [Cell<usize>; 5] = std::array::from_fn(|_| Cell::new(0));
+    let logic_seen = Cell::new(0usize);
+
+    harness::for_each_start_and_seed(
+        "apply_gate_is_atomic_and_honest",
+        &CONFIG,
+        &start_points::all(),
+        |start| start_points::seeds_for(start, &CONFIG),
+        |start, rng, log, stats| {
+            let (state, _) = start_points::open(start, rng);
+            let mut data: Data = state.get_data().clone();
+            let mut inner_snapshots: Vec<InnerData> = vec![];
+            let mut since_probe = 0usize;
+
+            for _ in 0..CONFIG.ops_per_run {
+                // --- validated walk op through the gate (feeds category coverage) ---
+                let (category, op) = generator::gen_op(
+                    rng,
+                    data.get_inner_data(),
+                    &inner_snapshots,
+                    CONFIG.invalid_fraction,
+                );
+                log.push(category, &op);
+                let (annotated, _) = data.annotate(op);
+                let before = data.clone();
+
+                match data.apply(&annotated) {
+                    Ok(_) => {
+                        stats.record(category, true);
+                        if inner_snapshots.len() < 8 && rng.random_bool(0.02) {
+                            inner_snapshots.push(data.get_inner_data().clone());
+                        }
+                    }
+                    Err(_) => {
+                        stats.record(category, false);
+                        assert!(
+                            data == before,
+                            "a failed walk apply must leave the state unchanged",
+                        );
+                        continue;
+                    }
+                }
+
+                since_probe += 1;
+                if since_probe < PROBE_STRIDE {
+                    continue;
+                }
+                since_probe = 0;
+
+                // --- corruption probe off the current (valid) state ---
+                let (kind, op) = generator::gen_corruption_op(rng, data.get_inner_data());
+                log.push(kind.label(), &op);
+                let i = kind_index(kind);
+                attempted[i].set(attempted[i].get() + 1);
+
+                let (annotated, _) = data.annotate(op);
+                // Snapshot after annotate (like the walk's `before`): the clone
+                // carries the already-advanced id issuer, matching production
+                // rollback (which restores the issuer too).
+                let snapshot = data.clone();
+                match data.apply(&annotated) {
+                    Err(e) => {
+                        rejected.set(rejected.get() + 1);
+                        rejected_by_kind[i].set(rejected_by_kind[i].get() + 1);
+                        // Atomicity: every error arm rolls back to bit-identical.
+                        assert!(
+                            data == snapshot,
+                            "a rejected apply must leave the state unchanged",
+                        );
+                        match e {
+                            // Precheck bounced before any mutation.
+                            Error::InvalidOp(InvalidOp::Precheck(_)) => {}
+                            Error::InvalidOp(InvalidOp::Logic(set)) => {
+                                logic_seen.set(logic_seen.get() + 1);
+                                assert!(!set.is_empty(), "a Logic error carries a non-empty set");
+                            }
+                            Error::BrokenInvariants(set) => {
+                                broken_by_kind[i].set(broken_by_kind[i].get() + 1);
+                                assert!(
+                                    !set.is_empty(),
+                                    "an Invariants error carries a non-empty set",
+                                );
+                            }
+                        }
+                    }
+                    Ok(reverse) => {
+                        landed.set(landed.get() + 1);
+                        // Honesty: a landing the gate accepts really is fully valid.
+                        assert_eq!(
+                            data.get_inner_data().broken_invariants(),
+                            Ok(BTreeSet::new()),
+                            "apply returned Ok but the state is not fully valid",
+                        );
+                        // The returned reverse restores the pre-state exactly
+                        // (the clean-landing reverse pin).
+                        let mut redo = data.clone();
+                        redo.force_apply(&reverse)
+                            .expect("reverse of a gated op must apply");
+                        assert!(
+                            redo.get_inner_data() == snapshot.get_inner_data(),
+                            "reverse of a gated op must restore the pre-state",
+                        );
+                        // ForceValid needs no special arm: the gate only ever
+                        // lands fully-valid states, asserted just above, and a
+                        // valid landing is honest whether it changed state or
+                        // was a perfect no-op.
+                    }
+                }
+
+                // Production rollback semantics: the probe never persists.
+                data = snapshot;
+            }
+        },
+    );
+
+    // --- honesty guards (cross-seed, over the whole run) ---
+    assert!(
+        landed.get() > 0,
+        "no corruption probe ever landed a valid state"
+    );
+    assert!(rejected.get() > 0, "no corruption probe was ever rejected");
+
+    for kind in CorruptionKind::ALL {
+        let i = kind_index(kind);
+        assert!(
+            attempted[i].get() > 0,
+            "corruption kind {kind:?} was never attempted across all seeds",
+        );
+        if kind.corrupting() {
+            assert!(
+                rejected_by_kind[i].get() > 0,
+                "corrupting kind {kind:?} was never rejected across all seeds",
+            );
+        }
+        if aims_at_the_checker(kind) {
+            assert!(
+                broken_by_kind[i].get() > 0,
+                "corrupting kind {kind:?} was never rejected *by the checker* across all \
+                 seeds — every one of its probes bounced at an earlier tier, so the \
+                 invariant it was built to break was never exercised",
+            );
+        }
+    }
+
+    assert!(
+        logic_seen.get() > 0,
+        "no ForceLogic probe ever reached the InvalidOp::Logic tier across all seeds",
+    );
+}

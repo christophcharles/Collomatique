@@ -1,9 +1,9 @@
 //! The collections a document is read and written through
 //!
-//! `docs/python/new_api_design.md` §5: "the collection object *is* the module
-//! grouping". `doc.periods` is the general-planning ops, `doc.subjects` will be
-//! the subject ones, and so on — one collection per family, reached from the
-//! document and never built by hand.
+//! A collection object *is* the module grouping: `doc.periods` is the
+//! general-planning ops, `doc.subjects` will be the subject ones, and so on —
+//! one collection per family, reached from the document and never built by
+//! hand.
 //!
 //! A collection is a view, not a copy: it holds the document it came from and
 //! reads through it every time, so a script can keep one in a variable and see

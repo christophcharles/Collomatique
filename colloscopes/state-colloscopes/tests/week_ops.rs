@@ -1,4 +1,4 @@
-//! Unit tests for the `WeekOp` family (commit 2 of the WeekId split).
+//! Unit tests for the `WeekOp` family.
 //!
 //! These pin the guard and content-preservation behaviour of the week ops
 //! through the apply gate deterministically — scenarios the property harness

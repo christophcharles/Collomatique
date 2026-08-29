@@ -1,9 +1,9 @@
 //! The cascade: apply an op; when it fails on broken invariants, fix the
-//! smallest one and retry — depth-first, discovering breakage through failure
-//! (design doc §5). Every landed op passed the full apply/check/rollback gate,
-//! so no invalid state ever escapes a single elementary `apply`.
+//! smallest one and retry — depth-first, discovering breakage through
+//! failure. Every landed op passed the full apply/check/rollback gate, so no
+//! invalid state ever escapes a single elementary `apply`.
 //!
-//! The engine works entirely in **annotated** ops (design doc D6): the caller
+//! The engine works entirely in **annotated** ops: the caller
 //! annotates the target itself and keeps its `NewInfo`, then hands the
 //! [InMemoryData::AnnotatedOperation] to [apply_cascade]; fixes arrive from the
 //! map as [FixOp] values it translates into annotated ops (the map holds only
@@ -20,15 +20,15 @@
 //! Termination rests on the resolution map's contract, and the engine holds it
 //! to it in-flight, on both routes a map bug could hang it. Fixes that land:
 //! after every fix, the new state must compare **strictly below** the pre-fix
-//! state in the document order ([ContentOrd], step 6.5) — landing equivalent
-//! (the old perfect-no-op panic), above, or incomparable panics. Fixes that
-//! never land: re-picking the same invariant with no landing in between panics
-//! (the no-progress ledger) — state only changes on landings and the map is a
-//! pure function of state, so such a re-pick is a cycle, not a repair. The one
-//! shape neither check can catch in-flight is a map that answers a failing fix
-//! with ever-fresh invented material instead of the state's own; the
-//! presence-test frame rule (design doc H.3) is what excludes it, and its
-//! material is finite, so a conforming map either lands or repeats a pick.
+//! state in the document order ([ContentOrd]) — landing equivalent, above, or
+//! incomparable panics. Fixes that never land: re-picking the same invariant
+//! with no landing in between panics (the no-progress ledger) — state only
+//! changes on landings and the map is a pure function of state, so such a
+//! re-pick is a cycle, not a repair. The one shape neither check can catch
+//! in-flight is a map that answers a failing fix with ever-fresh invented
+//! material instead of the state's own; the presence-test frame rule is what
+//! excludes it, and its material is finite, so a conforming map either lands
+//! or repeats a pick.
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -72,15 +72,15 @@ pub trait Fixable: InMemoryData + ContentOrd {
     /// only come from the failing op's own payload — [apply_cascade] rejects
     /// the target op, or panics if a fix op produced the invariant).
     ///
-    /// # Contract (the engraved cascade contract — design doc §5)
+    /// # Contract
     ///
     /// States form a **well-founded** partial order — the document order,
-    /// materialized by the [ContentOrd] supertrait bound (design doc §8,
-    /// step 6.5); the empty document `Default::default()` is a minimal
-    /// element. Every returned fix must land **strictly below** the current
-    /// state in that order: it removes a row or entity, clears an edge, or
-    /// rewrites a value minus an element — never creates, and never lands
-    /// equivalent. Return `None`, or a strictly-decreasing fix. Because the
+    /// materialized by the [ContentOrd] supertrait bound; the empty document
+    /// `Default::default()` is a minimal element. Every returned fix must
+    /// land **strictly below** the current state in that order: it removes a
+    /// row or entity, clears an edge, or rewrites a value minus an element —
+    /// never creates, and never lands equivalent. Return `None`, or a
+    /// strictly-decreasing fix. Because the
     /// order is well-founded, this contract bounds the number of fixes that
     /// *land*, and [apply_cascade] asserts it after every one: a fix landing
     /// equivalent, above, or incomparable panics instead of hanging. Fix
@@ -220,8 +220,7 @@ impl<T: Fixable> CascadeReceipt<T> {
 ///
 /// See the module docs and [Fixable] for the full contract. Returns the
 /// [CascadeReceipt] of everything that landed on success; on failure restores
-/// the entry snapshot and returns the target's most informative error (design
-/// doc D4).
+/// the entry snapshot and returns the target's most informative error.
 pub fn apply_cascade<T: Fixable>(
     data: &mut T,
     target: T::AnnotatedOperation,
@@ -237,7 +236,7 @@ pub fn apply_cascade<T: Fixable>(
     // parent links exactly. Depth 1 is the target.
     let mut applied: Vec<(ReversibleOp<T::AnnotatedOperation>, Option<T::Fix>, usize)> = Vec::new();
     // The target's most recent BrokenInvariants set: the informative error
-    // when the target is convicted mid-cascade (D4 — the SlotOverflowsDay trace).
+    // when the target is convicted mid-cascade.
     let mut last_target_break: Option<BTreeSet<T::Invariant>> = None;
     // Picks since the last landed op. State only changes on landings and the
     // map is a pure function of (state, invariant), so re-picking the same
@@ -253,17 +252,17 @@ pub fn apply_cascade<T: Fixable>(
         let is_target = stack.len() == 1;
 
         // Snapshot for the monotonicity check; only fix ops are held to it (a
-        // no-op *target* is a legitimate perfect no-op, G.2).
+        // no-op *target* is a legitimate perfect no-op).
         let before = (!is_target).then(|| data.clone());
 
         match data.apply(&front) {
             Ok(backward) => {
                 if let Some(before) = before {
-                    // The in-flight monotonicity check (step 6.5): a fix
-                    // must land strictly below the pre-fix state in the
-                    // document order. Equivalent = the old no-op panic;
-                    // above or incomparable = a growing/sideways map, which
-                    // without this check would hang the cascade instead.
+                    // The in-flight monotonicity check: a fix must land
+                    // strictly below the pre-fix state in the document order.
+                    // Equivalent = a perfect no-op; above or incomparable = a
+                    // growing/sideways map, which without this check would
+                    // hang the cascade instead.
                     match (*data).content_cmp(&before) {
                         Some(Ordering::Less) => {}
                         Some(Ordering::Equal) => panic!(
@@ -419,7 +418,7 @@ mod tests {
     }
 
     // 2. Replaying the landed steps' backwards, in reverse order, returns the
-    //    exact original state (the compound reverse works stepwise, §5).
+    //    exact original state (the compound reverse works stepwise).
     #[test]
     fn undo_replays_backwards_to_the_original_state() {
         let original = quote_data(&[1], &[(10, 1), (20, 1)]);
@@ -555,8 +554,8 @@ mod tests {
     }
 
     // 10. A fix that grows the state: the map "fixes" the dangling author by
-    //     creating the missing student. Before step 6.5 this landed a quiet
-    //     creative Ok; the document-order check panics instead.
+    //     creating the missing student. This used to land a quiet creative
+    //     Ok; the document-order check panics instead.
     #[test]
     #[should_panic(expected = "did not land strictly below")]
     fn a_growing_fix_panics() {
@@ -612,7 +611,7 @@ mod tests {
         let _ = apply_cascade(&mut data, target);
     }
 
-    // 13. The remembered-error conviction (D4): a fix consumes the target's
+    // 13. The remembered-error conviction: a fix consumes the target's
     //     own target, the retried target hits a precheck, and the user is told
     //     what the target kept breaking — not a baffling "unknown quote" for a
     //     quote they can see.

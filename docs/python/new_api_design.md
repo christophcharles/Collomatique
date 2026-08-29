@@ -326,6 +326,17 @@ colloscope, export config).
 | Colloscope (4 + 1 new) | `doc.colloscope.set_group_list(gl, {student: group})`, `.set_interrogation(slot, week, groups)`, `.erase()`, `.erase_group_lists()`, `.install(ColloscopeData)` (`InstallColloscope`, §11.1) |
 | ExportConfig (11) | `doc.export_config.set_global(...)`, `.set_colloscope_enabled(bool)` / `_config(...)`, `.set_all_groups_enabled/_config`, `.set_prefilled_groups_enabled/_config`, `.set_automatic_groups_enabled/_config`, `.set_per_group_list_enabled/_config` |
 
+> **Added since**, on the `greedy_group_lists` branch (`e99f861b`, `42fd5a74`):
+> `group_lists.remove_all()` and `group_lists.clear_associations(period)`,
+> mirroring the two new ops `DeleteAllGroupLists` and `ClearPeriodAssociations`.
+> The GroupLists row counts neither, and neither does the total above it.
+>
+> And `group_lists.add_generated(entries)`, mirroring
+> `AddGeneratedGroupLists` — the landing door of the generation §10 describes,
+> fed by `doc.generate_group_lists` and `doc.default_generation_request`. It
+> mints a list per entry and reports no id back, so it answers a plain
+> `OpResult` rather than the `AddResult` of `add`.
+
 No elementary `Op` is exposed. The cascade architecture makes raw elementary access
 unsafe to hand out (`force_apply` fixes nothing by design), and ops + the coarse
 door (§8) already cover everything.
@@ -437,7 +448,10 @@ worker-killing `panic!`s:
   a diagnosis: `IdCeilingExceeded` names `compacted()` as the way out (§9.5), and
   `CaveatedOverwrite` lists what was lost and names `ignore_caveats=True` (§9.2). Both
   are `SaveError`s, so a script that only cares that the write failed catches one
-  thing. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
+  thing. `DocumentChanged` is a third: the application declined the document
+  `send_to_host` offered it. Only the interactive console meets it — there the user
+  goes on editing while the console is open, so the document may have moved since it
+  was read, and the application asks before overwriting. `NoOrigin` stays generic — a document has an origin or it has not, and nothing
   tracks how it was produced.
 - `ModelBuildError` for a colloscope model the constraint builder refuses to
   build (`doc.build_colloscope_model`, §10.2), carrying the builder's own
@@ -799,12 +813,48 @@ dataclasses mirroring the (serde) Rust structs, with the GUI's presets exposed:
 - Colloscope solve: `ColloscopeSolveConfig` and its two sub-configs, mirroring
   `constraints_colloscopes::SolveConfig` — settled in §10.1 below.
 
-**Group-list generation stays out of the API.** The feature itself is not settled
-yet, so there is no shape to mirror and the API does not invent one: no
-generation request, no objective weights, no `doc.generate_group_lists`, and no
-`group_lists.add_generated` landing door. Scripts get the colloscope solve, and
-nothing else of the solver. When the feature settles, its API is designed against
-whatever it has become by then.
+**Group-list generation is in**, settled once the generator was. It stayed out
+while there was no shape to mirror — the feature was still an ILP with objective
+weights of its own — and it is mirrored now that the greedy answers in
+milliseconds and the GUI drives it directly. Three doors, and the document is
+touched only by the last of them:
+
+- `doc.default_generation_request()` hands back a `GroupListsGenerationRequest`
+  — `rebuild`, a set of `(period, subject)` pairs, and `kept_lists`, the
+  prefilled lists the generator must respect. It is the selection the
+  application's own generate dialog opens with, built by the very function that
+  dialog calls (`greedy_groups::default_generation_request`), so the two cannot
+  drift. It says nothing about what will work: a pair whose students the group
+  sizes cannot split is offered here exactly as the dialog offers it.
+- `doc.generate_group_lists(request, *, on_log=None)` builds the lists and
+  writes nothing. Synchronous — the greedy is milliseconds on a whole class, so
+  there is no run to wait on and nothing to stop — and `on_log` follows
+  `build_colloscope_model`'s contract, one line at a time, the first raising
+  callback winning with no result handed back. What comes back is a
+  `GroupListsGenerationResult`: `entries`, the lists paired with the
+  coordinates each must serve, and `skipped`, the requested pairs nobody is
+  registered for, which is a report and not a refusal.
+- `doc.group_lists.add_generated(entries)` lands them, one op and one undo slot.
+  It reads its argument structurally, so entries a script built by hand land
+  through the same door.
+
+There is **no `names` parameter**, and there cannot be one: pairs sharing a
+student set and a size range share a single list, so how many names a caller
+would owe is not knowable until the plan exists. The lists come out carrying the
+coverage labels the application's naming dialog seeds its own rows with —
+« Sortilèges (période 1) », « Sortilèges et Métamorphose (périodes 1 et 2) » —
+which live in `ui-text` because two front ends now print them. Renaming is
+editing `.name` on the returned values before landing them.
+
+`GroupListsGenerationError` is what a request the plan will not build raises,
+carrying the generator's own sentence: a subject that runs no interrogations, a
+kept list that is not prefilled, a class the group sizes cannot split. It is not
+under `UpdateError` — nothing was written and no op was refused, the request
+itself is what could not be made sense of. A reference the document does not
+hold is refused earlier still, by the argument convention of §2.3.
+
+There are no objective weights to expose. The greedy maximizes one fixed
+objective, and the retired ILP that had tunable ones is not coming back.
 
 ### 10.1 The colloscope solve config
 
@@ -860,14 +910,16 @@ class ColloscopeSolveConfig:
 
 ### 10.2 The model object
 
-The config is the common gate to both remaining doors — writing the problem out
-and solving it. Both take the same road: build the model once, then use it.
+The config is the common gate to the remaining doors — writing the problem out,
+solving it, and asking what a colloscope breaks. They all take the same road:
+build the model once, then use it.
 
 ```python
 model = doc.build_colloscope_model(config, on_log=...)   # config is required
 model.export_mps("problem.mps")                          # §9.4
 model.export_mps("checker.mps", checker=True)
 run = model.solve(strategy, on_progress=..., on_log=...)
+violations = model.blame(colloscope)                     # §10.4
 ```
 
 - `config` is **required**. The GUI never solves without passing its dialog, and
@@ -995,6 +1047,56 @@ alive, and a script run from `pkgs/nix/python-env.nix` solves without naming
 anything. A wheel built anywhere else simply has no fourth rung unless its builder
 sets the variable. `--python-no-engine` (§1) withholds the injection, which is how a
 script — and `colloscopes/gtk4/tests/e2e/` — reaches the rungs below it.
+
+### 10.4 The blame: what a colloscope breaks
+
+The third door on a model answers the other question — not « what is the best
+colloscope » but « what is wrong with this one », which is what the GUI shows
+under « Vérification du colloscope ».
+
+```python
+for violation in model.blame(doc.colloscope.to_data()):
+    print(violation.severity, "-", violation)
+```
+
+- **It takes a `ColloscopeData`** — `doc.colloscope.to_data()`, or a solve's
+  `outcome.colloscope`. The model is detached (§10.2), so there is no document
+  to resolve a handle against: the keys are **ids alone**, which is what
+  `to_data()` hands back, and a handle is a `TypeError` saying so.
+- **It blocks**, unlike `solve()`. Filling in what a colloscope does not say —
+  the helper variables the constraints are really written against — takes a
+  solver, so an engine runs in its own process here too; it is a quick
+  feasibility problem with nothing to optimize, and there is no progress to
+  report, so a run handle would be an empty ceremony. `engine=` and `on_log=`
+  mean what they mean for `solve()`. Ctrl-C interrupts the wait and kills the
+  engine with it.
+- **A violation is a severity and a sentence**, and nothing else:
+  `ConstraintViolation` carries a `SeverityLevel` and the French text
+  `ConstraintDesc::user_readable` writes, which is what `str()` gives. A
+  structured mirror of the model's constraint descriptions would pin the
+  internal vocabulary of `constraints-colloscopes` as public API — the same rule
+  that keeps the model itself opaque (§10.2).
+- **`SeverityLevel` has six members where the model has five.** `FIXED <
+  INFEASIBILITY < STRUCTURAL < QUALITY < PROGRESSIVE < PREFERENCE`, worst first,
+  so `sorted()` and `min()` do the obvious thing. `FIXED` is not one of the
+  model's tiers: it marks a broken **pin** of the solve configuration — a
+  variable the config said not to recompute, which the colloscope contradicts —
+  and that outranks anything the model says, being the one thing the person
+  driving the solve asked for by hand. Its sentence lives in
+  `collomatique_ui_text::solver::fixed_pin_violation_text`, beside the solve
+  dialog's own. The Rust `SeverityLevel` keeps its five tiers.
+- **The list is the *minimal* blame**, sorted worst first: a violation another
+  reported one already implies is left out. Every constraint of the model is
+  hard, so a `PREFERENCE` violation is a real violation — the tiers say what a
+  relaxation would give up first, not what the colloscope is allowed to break.
+  An empty list is a colloscope the model has nothing against.
+- **Refusal order, as `solve()`'s** (§5): the value is read, then judged against
+  the model's parameters, and only then is an engine looked for. A colloscope
+  this model cannot read — an unknown slot or week, a group number past the
+  list's last group, a student it does not place — is a `ValueError` raised
+  before any machine is asked for; an engine that cannot verify it is a
+  `SolveError`. Nothing is written to the document, which the model is not
+  attached to anyway.
 
 ## 11. Rust-side prerequisites
 

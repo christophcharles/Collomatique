@@ -11,8 +11,9 @@
 //! associations keyed by `(period, subject)` — the hop every script makes
 //! between a colloscope cell and the names it should print.
 //!
-//! Written through `add`, `update` and `remove` for the lists themselves, and
-//! through `set_association` and `duplicate_previous_period` for the table
+//! Written through `add`, `update`, `remove` and `remove_all` for the lists
+//! themselves, and through `set_association`, `duplicate_previous_period` and
+//! `clear_associations` for the table
 //! beside them. An `update` carries the whole list — the parameters *and* the
 //! filling — because that is what the op carries: the model seals the two
 //! together, so there is no writing one without the other.
@@ -36,10 +37,9 @@
 //! ([crate::handles::argument]), and a filling naming a student the document
 //! does not hold is the value boundary's.
 //!
-//! The family's sixth op, `add_generated`, is the landing door of group-list
-//! generation and is not published here: that feature is not settled yet, so
-//! the API fronts nothing for it — neither the generation call nor this door
-//! (`docs/python/new_api_design.md` §10).
+//! The family's eighth op, `add_generated`, is the landing door of group-list
+//! generation: `doc.generate_group_lists` builds the lists and writes nothing,
+//! and this door lands what it built as one undo slot.
 
 use pyo3::exceptions::PyIndexError;
 use pyo3::prelude::*;
@@ -133,8 +133,8 @@ impl GroupLists {
 
     /// The group list a subject uses on a period, or `None`
     ///
-    /// The `(period, subject) → group list` hop of the design: the one every
-    /// script makes between a colloscope cell and the names it should print.
+    /// The `(period, subject) → group list` hop: the one every script makes
+    /// between a colloscope cell and the names it should print.
     ///
     /// The read is total over valid addresses, like the assignments': a period
     /// or a subject the document does not hold raises `StaleHandleError`, and
@@ -202,8 +202,7 @@ impl GroupLists {
     /// the model keeps the two apart.
     fn add(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<Py<AddResult>> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5).
+        // an entity is resolved against this document, which borrows it to ask.
         let group_list = GroupListData::from_py(&self.doc, data)?;
 
         crate::results::created::<GroupList>(
@@ -274,6 +273,26 @@ impl GroupLists {
         self.write(
             py,
             UpdateOp::GroupLists(GroupListsUpdateOp::DeleteGroupList(id)),
+        )
+    }
+
+    /// Removes every group list at once
+    ///
+    /// [GroupLists::remove] run over the whole collection, and it drags along
+    /// exactly what one removal does, once per list: every association that
+    /// gave a list to a subject on a period, the colles those associations
+    /// bounded, and the placement row of every automatic list. What is left is
+    /// a document whose periods and subjects simply use no list at all.
+    ///
+    /// One operation, and so one undo slot, however many lists it removed.
+    /// Every handle naming a list goes stale.
+    ///
+    /// A document holding no list is not a refusal — there is nothing to
+    /// remove, and the answer's `warnings` is empty.
+    fn remove_all(&self, py: Python<'_>) -> PyResult<OpResult> {
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::DeleteAllGroupLists),
         )
     }
 
@@ -356,6 +375,72 @@ impl GroupLists {
         )
     }
 
+    /// Drops every association a period holds
+    ///
+    /// [GroupLists::set_association] with `None` run over the whole period, and
+    /// nothing beyond it: the lists themselves stay — a list nobody uses is an
+    /// ordinary document — and the other periods keep their own rows.
+    ///
+    /// Taking an association away takes the group bound of its coordinate to
+    /// zero, so the colles written there are out of range and the cascade
+    /// empties their cells, one repair per cleared coordinate that held any.
+    ///
+    /// One operation, and so one undo slot, however many rows it cleared.
+    /// Neither refusal `set_association` keeps arises here: a subject that runs
+    /// no interrogations and a subject that does not run on the period both
+    /// hold no association there to begin with, so neither is ever addressed.
+    /// A period a script clears twice running is likewise no refusal — the
+    /// second call has nothing to clear and repairs nothing.
+    fn clear_associations(&self, py: Python<'_>, period: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        let period_id = argument::<Period>(&self.doc, period)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::ClearPeriodAssociations(period_id)),
+        )
+    }
+
+    /// Lands generated group lists — one operation, one undo slot
+    ///
+    /// ```python
+    /// result = doc.generate_group_lists(doc.default_generation_request())
+    /// doc.group_lists.add_generated(result.entries)
+    /// ```
+    ///
+    /// Takes `result.entries` from [crate::Document::generate_group_lists], or
+    /// anything of that shape: pairs of a `GroupListData` and the
+    /// `(period, subject)` coordinates it must serve. So a script may land a
+    /// subset of a generation, or entries it built itself with no generation
+    /// behind them.
+    ///
+    /// Each entry adds its list and writes its associations. An association
+    /// overwrites whatever the coordinate held; the list that held it is kept,
+    /// not deleted, and a list nobody uses is an ordinary document. The colles
+    /// of an overwritten coordinate are measured against the list that lands,
+    /// so the cascade trims what no longer fits, and every repair comes back
+    /// on the result.
+    ///
+    /// The answer is a plain `OpResult`, not the `AddResult` [GroupLists::add]
+    /// gives: this op mints a list per entry and reports no id back, so there
+    /// is no one created thing to hand over. The lists are read off the
+    /// collection afterwards.
+    ///
+    /// The two refusals the model keeps reach a script as `GroupListsError`: a
+    /// coordinate whose subject runs no interrogations, and one whose subject
+    /// does not run on the period. A reference the document does not hold is
+    /// caught above the write — the students of a filling by the value
+    /// boundary, the coordinates by the argument convention.
+    fn add_generated(&self, py: Python<'_>, entries: &Bound<'_, PyAny>) -> PyResult<OpResult> {
+        // Extracted before the mutable borrow below and never inside it, like
+        // every other value this family writes.
+        let entries = crate::generation::entries_from_py(&self.doc, entries)?;
+
+        self.write(
+            py,
+            UpdateOp::GroupLists(GroupListsUpdateOp::AddGeneratedGroupLists(entries)),
+        )
+    }
+
     fn __repr__(&self, py: Python<'_>) -> String {
         format!("<collomatique.GroupLists count={}>", self.__len__(py))
     }
@@ -364,7 +449,9 @@ impl GroupLists {
 impl GroupLists {
     /// Writes through the document the view came from
     ///
-    /// The four mutators that create nothing end here. The creating one ends in
+    /// The seven mutators that report no created id end here — six that create
+    /// nothing, and [GroupLists::add_generated], whose op mints a list per
+    /// entry and hands none of their ids back. The one that does ends in
     /// [crate::results::created], which takes the same borrow and keeps the id
     /// the op issued as well.
     fn write(&self, py: Python<'_>, op: UpdateOp) -> PyResult<OpResult> {

@@ -16,7 +16,7 @@ name = "collomatique-python"
 # both come from `collomatique_settings::current_version()`, which is the
 # workspace version, exact. The pre-commit hook derives this string from
 # Cargo.toml and refuses a commit where the two disagree.
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace = true
 authors.workspace = true
 
@@ -29,11 +29,20 @@ crate-type = [ "rlib", "cdylib" ]
 
 [dependencies]
 # The solve configuration `ColloscopeSolveConfig` mirrors, and the model
-# builder it will be handed to (`docs/python/new_api_design.md` §10).
+# builder it will be handed to.
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
-# The MPS writer `model.export_mps` hands the built problem to
-# (`docs/python/new_api_design.md` §9.4) — the same one the application's own
-# diagnostics export calls, so a script and a click write the same file.
+# The group-list generator `doc.generate_group_lists` runs, and the request
+# vocabulary it shares with the application's own dialog — the default
+# selection included, so a script and a click open on the same one.
+collomatique-greedy-groups = { path = "../../colloscopes/greedy-groups" }
+# `solution_to_config_data`, for `model.blame`: the engine answers a
+# reconstruction with a bare row of numbers, and that is what puts them back
+# on the variables they belong to. The application's own verification
+# (`gtk4`'s `launch_ilp_repr`) reads its subprocess's answer the same way.
+collomatique-ilp = { path = "../../generic/ilp" }
+# The MPS writer `model.export_mps` hands the built problem to — the same one
+# the application's own diagnostics export calls, so a script and a click write
+# the same file.
 collomatique-mps = { path = "../../generic/mps" }
 collomatique-ops = { path = "../../colloscopes/ops" }
 collomatique-settings = { path = "../../colloscopes/settings" }
@@ -41,26 +50,25 @@ collomatique-state = { path = "../../generic/state" }
 collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
 collomatique-storage = { path = "../../colloscopes/storage" }
 # The worker subprocesses a solve runs in, and `EngineExe` — which collomatique
-# binary they re-execute (`docs/python/new_api_design.md` §10).
+# binary they re-execute.
 collomatique-subprocesses = { path = "../../generic/subprocesses" }
 # The solve strategies `ConductorStrategy` mirrors, and the two presets its
-# classmethods hand back (`docs/python/new_api_design.md` §13) — the
-# application's own structs, so a script and a click run the same solve.
+# classmethods hand back — the application's own structs, so a script and a
+# click run the same solve.
 collomatique-strategies = { path = "../../generic/strategies" }
 collomatique-time = { path = "../../generic/time" }
 # The entity renderers the pairing-rule reprs name a rule with.
 collomatique-ui-text = { path = "../../colloscopes/ui-text" }
-# The spreadsheet writer `doc.export_xlsx` hands the document to
-# (`docs/python/new_api_design.md` §9.4) — the same one the application's own
-# export button calls, so a script and a click write the same workbook.
+# The spreadsheet writer `doc.export_xlsx` hands the document to — the same one
+# the application's own export button calls, so a script and a click write the
+# same workbook.
 collomatique-xlsx = { path = "../../colloscopes/xlsx" }
 chrono.workspace = true
 # `chrono`: `datetime.date` <-> `chrono::NaiveDate`, for the first week of the
 # colles.
 pyo3 = { workspace = true, features = [ "chrono" ] }
 rfd.workspace = true
-# `rfd`: the native file dialogs of the `dialogs` submodule
-# (`docs/python/new_api_design.md` §9.3).
+# `rfd`: the native file dialogs of the `dialogs` submodule.
 serde.workspace = true
 # `serde`: nothing here is read or written. The `Serializer` trait is how the
 # model's write errors and the cascade's repairs are walked without naming a

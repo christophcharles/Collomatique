@@ -5,11 +5,10 @@
 //! is its python face — one class per variant, under a common base so a script
 //! can write `isinstance(c, clm.Caveat)` without listing them.
 //!
-//! These are rust classes rather than the `.py` dataclasses of
-//! `docs/python/new_api_design.md` §2. That section's reason for dataclasses is
-//! that a pyo3 getter clones the struct it hands back, which brings the
-//! temporary trap back for nested data — it does not apply to a flat immutable
-//! value that only ever travels *out* of rust.
+//! These are rust classes rather than `.py` dataclasses. The reason the value
+//! classes are dataclasses is that a pyo3 getter clones the struct it hands
+//! back, which brings the temporary trap back for nested data — it does not
+//! apply to a flat immutable value that only ever travels *out* of rust.
 
 use pyo3::prelude::*;
 

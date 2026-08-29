@@ -12,13 +12,21 @@
 //!
 //! What every family shares lives here rather than in one of them: the binary
 //! they all spawn, and the assertion they all end on.
+//!
+//! Real solves in a debug build cost about two minutes, so this target is not
+//! part of the day-to-day `cargo test`: it is behind the package's `e2e`
+//! feature, and `cargo e2e` (or `cargo full-test`) is what turns it on.
 
 use std::process::{Command, Output};
 
 const COLLOMATIQUE: &str = env!("CARGO_BIN_EXE_collomatique-gtk4");
 
+#[path = "e2e/blame.rs"]
+mod blame;
 #[path = "e2e/open_and_solve.rs"]
 mod open_and_solve;
+#[path = "e2e/script_document.rs"]
+mod script_document;
 #[path = "e2e/solve.rs"]
 mod solve;
 

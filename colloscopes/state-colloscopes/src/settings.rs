@@ -72,15 +72,14 @@ pub struct Limits {
 
 // A whole-entry override record: a `None` field means "disabled" — an active
 // choice, not absent content — so the document order treats the whole record
-// as one atom (plan step 6.5, decision 13). Clearing one limit is therefore
-// not a step *down*; two different limit records are simply incomparable.
+// as one atom. Clearing one limit is therefore not a step *down*; two
+// different limit records are simply incomparable.
 collomatique_state::impl_content_ord_atom!(Limits);
 
-/// Precondition errors of the forced settings op — the carve-out subset
-/// (step-3 survey Table 2). The whole-value `Update` had no
-/// transition/input guards at all (only `validate_settings`, which strips);
-/// the targeted [crate::SettingsOp::SetStudent] adds the coordinate
-/// carve-out its key needs.
+/// Precondition errors of the forced settings op — the carve-out subset. The
+/// whole-value `Update` had no transition/input guards at all (only
+/// `validate_settings`, which strips); the targeted
+/// [crate::SettingsOp::SetStudent] adds the coordinate carve-out its key needs.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum SettingsPrecheckError {
     /// A student id is invalid
@@ -92,11 +91,10 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies a settings op: `validate_settings` is an invariant guard
-    /// and is stripped (step-3 survey Table 1); what remains is the
-    /// coordinate-existence check on the per-student key, checked uniformly
-    /// whether the override is being set or cleared — the same choice
-    /// `force_apply_assignment`'s `SetRow` makes. May leave the state invalid;
-    /// the caller owns checking and rollback.
+    /// and is stripped; what remains is the coordinate-existence check on the
+    /// per-student key, checked uniformly whether the override is being set or
+    /// cleared — the same choice `force_apply_assignment`'s `SetRow` makes. May
+    /// leave the state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_settings(
         &mut self,
         settings_op: &AnnotatedSettingsOp,

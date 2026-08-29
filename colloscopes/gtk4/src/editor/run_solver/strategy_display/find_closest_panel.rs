@@ -50,7 +50,7 @@ impl SimpleComponent for FindClosestPanel {
             gtk::Box {
                 set_orientation: gtk::Orientation::Horizontal,
                 gtk::Label {
-                    set_label: "Coût obtenu : ",
+                    set_label: "Objectif obtenu : ",
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                 },
                 gtk::Label {
@@ -100,7 +100,7 @@ impl FindClosestPanel {
             Some(
                 FindClosestProgressData::ClosestFound
                 | FindClosestProgressData::ObjectiveReconstruction(_),
-            ) => "3/3 (calcul du coût)".to_string(),
+            ) => "3/3 (calcul de l'objectif)".to_string(),
         }
     }
 

@@ -207,7 +207,7 @@ impl FactoryComponent for StrategyFrame {
         _index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
-        let debug_view = DebugView::builder().launch(()).detach();
+        let debug_view = DebugView::builder().launch(None).detach();
 
         StrategyFrame {
             debug_view,

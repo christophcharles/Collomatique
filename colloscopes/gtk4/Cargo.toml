@@ -32,7 +32,7 @@ collomatique-rpc-colloscopes = { path = "../../colloscopes/rpc-colloscopes" }
 collomatique-rpc-engine-colloscopes = { path = "../../colloscopes/rpc-engine-colloscopes" }
 collomatique-settings = { path = "../../colloscopes/settings" }
 collomatique-constraints-colloscopes = { path = "../../colloscopes/constraints-colloscopes" }
-collomatique-constraints-groups = { path = "../../colloscopes/constraints-groups" }
+collomatique-greedy-groups = { path = "../../colloscopes/greedy-groups" }
 collomatique-xlsx = { path = "../../colloscopes/xlsx" }
 collomatique-mps = { path = "../../generic/mps" }
 collomatique-strategies = { path = "../../generic/strategies" }
@@ -64,3 +64,15 @@ windows-sys = { version = "0.59", features = [
 # `rfd` 0.15 speaks.
 gdk4-win32 = "0.9"
 raw-window-handle = "0.6"
+
+# The end-to-end tests drive the built binary through real solves, which costs
+# about two minutes. They are off by default and turned on by `cargo e2e` (see
+# .cargo/config.toml). This is the package's only test target, so `cargo test`
+# builds and runs nothing here.
+[features]
+e2e = []
+
+[[test]]
+name = "e2e"
+path = "tests/e2e.rs"
+required-features = ["e2e"]

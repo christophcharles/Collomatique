@@ -1,0 +1,103 @@
+name: Windows
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+  # Called by release.yml on a version tag. Same job, same steps: a release is
+  # built by the workflows that are proven on staging, not by a copy of them.
+  workflow_call:
+
+# vcpkg honors this instead of its default under LOCALAPPDATA, which gives the
+# binary cache a fixed path the cache steps below can name. CI-only: the VM just
+# uses vcpkg's default location.
+env:
+  VCPKG_DEFAULT_BINARY_CACHE: C:\collo-build\vcpkg-binary-cache
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # The same two scripts as the VM, in the same order, with no arguments.
+      # The image already has most of the tool list (git, vcpkg at C:\vcpkg,
+      # MSYS2, rustup, Python, and Visual Studio 2026 satisfying the Build Tools
+      # check), so bootstrap skips those and installs what is missing: uv,
+      # gvsbuild, Inno Setup 7. winget ships in the box with Windows Server 2025.
+      - name: Bootstrap
+        run: .\pkgs\windows\bootstrap.ps1
+
+      # bootstrap ends with "open a new terminal so PATH is picked up". A
+      # workflow step's environment comes from the runner service, not the
+      # registry, so this is that new terminal: re-read the registry PATH and
+      # hand it to the following steps.
+      - name: Pick up PATH changes
+        run: |
+          $machine = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          $user    = [Environment]::GetEnvironmentVariable('Path', 'User')
+          (@($machine, $user) -join ';').Split(';') |
+            Where-Object { $_ } |
+            Add-Content -Path $env:GITHUB_PATH
+
+      # gvsbuild's build tree, which is what --fast-build in build.ps1 reads to
+      # skip projects already built. Keyed on the run id so every run saves its
+      # own copy and the restore-keys prefix picks up the newest earlier one --
+      # that is what lets a run which died mid-build, or timed out, resume from
+      # where it got to. The toolset is part of the key (keep it in step with
+      # build.ps1's --vs-ver): a toolset change would otherwise leave
+      # --fast-build trusting stale build markers.
+      - name: Restore the gvsbuild tree
+        uses: actions/cache/restore@v6
+        with:
+          path: C:\collo-build\gtk-build
+          key: windows-gtk-vs2026-${{ github.run_id }}
+          restore-keys: windows-gtk-vs2026-
+
+      # vcpkg's binary cache: finished packages, content-addressed by vcpkg's own
+      # ABI hash, so stale entries are dead weight rather than wrong -- the bare
+      # restore-keys prefix is safe even across a baseline change.
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache/restore@v6
+        with:
+          path: C:\collo-build\vcpkg-binary-cache
+          key: windows-vcpkg-${{ github.run_id }}
+          restore-keys: windows-vcpkg-
+
+      # vcpkg refuses a binary-cache path that does not exist, and on a cache
+      # miss nothing above created it.
+      - name: Create the binary cache directory
+        run: New-Item -ItemType Directory -Force -Path $env:VCPKG_DEFAULT_BINARY_CACHE | Out-Null
+
+      - name: Build
+        run: .\pkgs\windows\build.ps1
+
+      # Saved even when the build failed: a partial gvsbuild tree, or a few
+      # finished vcpkg packages, are exactly what makes the retry cheap.
+      - name: Save the gvsbuild tree
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: C:\collo-build\gtk-build
+          key: windows-gtk-vs2026-${{ github.run_id }}
+
+      - name: Save the vcpkg binary cache
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: C:\collo-build\vcpkg-binary-cache
+          key: windows-vcpkg-${{ github.run_id }}
+
+      # For the artifact label only, like the flatpak workflow. Read off the file
+      # build.ps1 named rather than parsed out of Cargo.toml a second time.
+      - name: Read the version
+        id: version
+        run: |
+          $setup = @(Get-Item 'C:\collo-build\Collomatique-Setup-*.exe')[0]
+          "version=$($setup.BaseName.Substring('Collomatique-Setup-'.Length))" >> $env:GITHUB_OUTPUT
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: collomatique-${{ steps.version.outputs.version }}-windows-setup
+          path: C:\collo-build\Collomatique-Setup-*.exe
+          retention-days: 14

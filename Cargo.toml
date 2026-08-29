@@ -8,9 +8,10 @@ members = [
     "generic/rpc-engine", "generic/state", "generic/state-derive",
     "generic/strategies", "generic/subprocesses", "generic/time",
 
-    "colloscopes/constraints-colloscopes", "colloscopes/constraints-groups",
+    "colloscopes/constraints-colloscopes", "colloscopes/greedy-groups",
     "colloscopes/gtk4", "colloscopes/ops", "colloscopes/python",
-    "colloscopes/python-runner", "colloscopes/rpc-colloscopes",
+    "colloscopes/property-tests", "colloscopes/python-runner",
+    "colloscopes/rpc-colloscopes",
     "colloscopes/rpc-engine-colloscopes", "colloscopes/settings",
     "colloscopes/state-colloscopes", "colloscopes/storage",
     "colloscopes/testgen-colloscopes", "colloscopes/ui-text",
@@ -20,7 +21,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition = "2024"
 authors = ["Christoph Charles"]
 
@@ -45,3 +46,32 @@ pyo3 = "0.29"
 # features across the workspace, so a crate asking for `async-std` here would
 # hand every other crate a `zbus` with both runtimes turned on.
 rfd = { version = "0.15", default-features = false, features = [ "xdg-portal", "tokio" ] }
+
+# Unoptimized, building the model and moving it between processes is slow
+# enough to get in the way of testing. So the crates that do that work are
+# compiled optimized even in the dev profile. The list is selective on purpose:
+# optimizing everything would trade the slow run for a slow build.
+[profile.dev.package.collomatique-ilp]
+opt-level = 2
+[profile.dev.package.collomatique-ilp-modeler]
+opt-level = 2
+[profile.dev.package.collomatique-state]
+opt-level = 2
+[profile.dev.package.collomatique-state-colloscopes]
+opt-level = 2
+[profile.dev.package.collomatique-constraints-colloscopes]
+opt-level = 2
+[profile.dev.package.collomatique-strategies]
+opt-level = 2
+[profile.dev.package.collomatique-subprocesses]
+opt-level = 2
+[profile.dev.package.collomatique-rpc]
+opt-level = 2
+[profile.dev.package.collomatique-rpc-engine]
+opt-level = 2
+[profile.dev.package.serde_json]
+opt-level = 2
+[profile.dev.package.itoa]
+opt-level = 2
+[profile.dev.package.zmij]
+opt-level = 2

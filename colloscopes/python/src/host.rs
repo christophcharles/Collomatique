@@ -2,7 +2,7 @@
 //!
 //! A script started from the GUI's script editor is *hosted*: the application
 //! hands it the document it has open, and takes one back if the script asks it
-//! to. `docs/python/new_api_design.md` §9.2 is the design.
+//! to.
 //!
 //! This crate knows nothing about how the two sides talk. The host is a trait
 //! whoever runs the interpreter implements — in the application that is the rpc
@@ -16,25 +16,48 @@ use pyo3::prelude::*;
 use collomatique_state_colloscopes::Data;
 
 use crate::Document;
-use crate::errors::{NotHosted, SaveError};
+use crate::errors::{DocumentChanged, Error, NotHosted, SaveError};
+
+/// What the application handed over, and how it recognises it later
+///
+/// The token is the application's own name for that document; this crate only
+/// carries it back and forth.
+pub struct TakenDocument {
+    pub data: Data,
+    pub token: Option<u64>,
+}
+
+/// Why the application did not take a document
+pub enum SendError {
+    /// The user was asked and said no.
+    Refused(String),
+    /// Something went wrong: the transport, or the application applying it.
+    Failed(String),
+}
 
 /// The application a hosted script is running inside
 ///
-/// Both methods carry the whole document: the handoff is a document, not a
-/// stream of edits, in either direction.
+/// Both directions carry the whole document: the handoff is a document, not a
+/// stream of edits.
 pub trait Host: Send + Sync {
+    /// Whether [Host::data] answers with the application's document as it is
+    /// now
+    ///
+    /// A live host is asked again on every call, so nothing is cached between
+    /// them and two calls give two documents.
+    fn live(&self) -> bool;
+
     /// The document the application is offering
     ///
-    /// Answered from what the runner already fetched, so this does not go back
-    /// to the application on every call.
-    fn data(&self) -> Data;
+    /// The `Err` is a sentence for the script to read.
+    fn data(&self) -> Result<TakenDocument, String>;
 
     /// Replaces what the application holds. Not a merge.
     ///
-    /// The `Err` is a sentence for the script to read: whatever went wrong is
-    /// the transport's business, and there is nothing a script can do about it
-    /// but report it.
-    fn send(&self, data: &Data) -> Result<(), String>;
+    /// `token` is what came with the document, when it came from the
+    /// application. The answer carries the token of what the application holds
+    /// afterwards, when it has one.
+    fn send(&self, data: &Data, token: Option<u64>) -> Result<Option<u64>, SendError>;
 }
 
 /// The application the current run is talking to, if there is one
@@ -75,19 +98,31 @@ pub fn set_host(host: Option<Arc<dyn Host>>) {
 /// if doc is None:
 ///     doc = clm.load(sys.argv[1])
 /// ```
+///
+/// The console is the exception: it takes the document the application holds at
+/// that moment, so each call there is a fresh copy.
 #[pyfunction]
 pub fn current_document(py: Python<'_>) -> PyResult<Option<Py<Document>>> {
-    if let Some(doc) = HOSTED_DOCUMENT.lock().unwrap().as_ref() {
-        return Ok(Some(doc.clone_ref(py)));
-    }
-
     let Some(host) = HOST.lock().unwrap().clone() else {
         return Ok(None);
     };
 
-    // Built with no lock held: `Host::data` belongs to the runner and this
-    // crate does not get to assume it is quick.
-    let doc = Py::new(py, Document::hosted(host.data()))?;
+    if !host.live()
+        && let Some(doc) = HOSTED_DOCUMENT.lock().unwrap().as_ref()
+    {
+        return Ok(Some(doc.clone_ref(py)));
+    }
+
+    // Built with no lock held, and with the GIL given back: `Host::data`
+    // belongs to the runner and this crate does not get to assume it is quick.
+    let taken = py
+        .detach(|| host.data())
+        .map_err(|e| Error::new_err(format!("collomatique did not hand over a document: {e}")))?;
+    let doc = Py::new(py, Document::hosted(taken.data, taken.token))?;
+
+    if host.live() {
+        return Ok(Some(doc));
+    }
 
     let mut cached = HOSTED_DOCUMENT.lock().unwrap();
     // Another thread may have got here first while this one was building; the
@@ -114,7 +149,9 @@ pub fn current_document(py: Python<'_>) -> PyResult<Option<Py<Document>>> {
 /// a document other than the hosted one composable.
 ///
 /// Raises `NotHosted` when the script is standalone, since there is then
-/// nothing to send to and doing nothing quietly would hide it.
+/// nothing to send to and doing nothing quietly would hide it. From the console
+/// the application may also ask the user, and a refusal raises
+/// `DocumentChanged`.
 #[pyfunction]
 pub fn send_to_host(py: Python<'_>, doc: &Document) -> PyResult<()> {
     let Some(host) = HOST.lock().unwrap().clone() else {
@@ -125,12 +162,21 @@ pub fn send_to_host(py: Python<'_>, doc: &Document) -> PyResult<()> {
     };
 
     let data = doc.data().clone();
+    let token = doc.host_token();
 
     // The GIL goes back for the trip: the real host blocks on a round trip to
     // the application, and holding it through that would freeze every other
     // thread the script started.
-    py.detach(|| host.send(&data))
-        .map_err(|e| SaveError::new_err(format!("collomatique refused the document: {e}")))
+    match py.detach(|| host.send(&data, token)) {
+        Ok(token) => {
+            doc.set_host_token(token);
+            Ok(())
+        }
+        Err(SendError::Refused(message)) => Err(DocumentChanged::new_err(message)),
+        Err(SendError::Failed(message)) => Err(SaveError::new_err(format!(
+            "collomatique refused the document: {message}"
+        ))),
+    }
 }
 
 /// Adds the host functions to the module

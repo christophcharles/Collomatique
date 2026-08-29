@@ -1,4 +1,4 @@
-//! Colloscope cascade fixtures (step-6 commits 7 and 7.6, plan §9 and §9ter).
+//! Colloscope cascade fixtures.
 //!
 //! Each fixture builds a document through the public op surface
 //! (`AppState` + `Manager::apply`), then takes `app.get_data().clone()`,
@@ -19,8 +19,8 @@
 //! Two rules govern the assertions in this file.
 //!
 //! **The expected fix list is derived on paper first.** Every fixture asserts
-//! something about the fixes that landed, and that list comes from the plan's
-//! §8.1 / §8.2 arm tables *before* the test is ever run. A difference between
+//! something about the fixes that landed, and that list is worked out from the
+//! resolution map's arms *before* the test is ever run. A difference between
 //! the hand-derived list and what the engine produced is a finding to explain —
 //! possibly a map bug — never a value to paste back in.
 //!
@@ -31,15 +31,14 @@
 //! canonical pick order; every later fixture asserts content (length plus
 //! `contains`) and is deliberately blind to order.
 //!
-//! The `fixture_*` tests are commit 7's (plan §9): the cascade repairs the
-//! document and the target lands, so they all assert `Ok`. The `rejection_*`
-//! tests at the end are commit 7.6's (plan §9ter): the op's payload is bad on
-//! its own terms, no state fix can help, and the target is convicted — so they
-//! assert `Err`, plus the document unchanged. They read the engine's
-//! `None if is_target` branch (`generic/state/src/cascade.rs:114-119`), which is the
-//! production-visible half of the design doc's frame point 5: if an arm
-//! answered `Some` there, the cascade would quietly repair the state and the
-//! user would be told an edit succeeded that was in fact refused.
+//! In the `fixture_*` tests the cascade repairs the document and the target
+//! lands, so they all assert `Ok`. In the `rejection_*` tests at the end the
+//! op's payload is bad on its own terms, no state fix can help, and the target
+//! is convicted — so they assert `Err`, plus the document unchanged. They read
+//! the engine's `None if is_target` branch
+//! (`generic/state/src/cascade.rs:114-119`): if an arm answered `Some` there,
+//! the cascade would quietly repair the state and the user would be told an
+//! edit succeeded that was in fact refused.
 
 use collomatique_state::{AppState, CascadeReceipt, InMemoryData, apply_cascade, traits::Manager};
 use collomatique_state_colloscopes::{
@@ -417,9 +416,8 @@ fn fixture_1a_two_simultaneous_breaks_are_fixed_in_canonical_order() {
 /// That is depth three — a fix of a fix of the target — which no engine test
 /// reaches (the toy tests in `cascade.rs` stop at depth two).
 ///
-/// **One deviation from the plan's §9 description, found while deriving the
-/// expected list.** The plan asks for a document where every round reports
-/// exactly one break. That is not constructible: a colloscope cell must be
+/// **A document where every round reports exactly one break is not
+/// constructible**, which is why this one does not: a colloscope cell must be
 /// non-empty (an empty one is canonical-absent), and every group number in it
 /// is checked against the group count of the group list associated to
 /// `(period of the week, subject of the slot)` — with no association the bound
@@ -764,7 +762,7 @@ fn build_period_document(app: &mut AppState<Data, String>, depth: bool) -> Perio
 }
 
 /// The seven flat fixes a period removal draws off `build_period_document`,
-/// hand-derived from the §8.1 table — one per `PeriodRefSite` variant, in
+/// hand-derived — one per `PeriodRefSite` variant, in
 /// declaration order. `1c` lands exactly these; `1e` lands these plus the
 /// fixes of the two sub-cascades.
 fn seven_flat_period_fixes(doc: &PeriodDocument, week: WeekId) -> Vec<Fix> {
@@ -916,7 +914,7 @@ fn fixture_1c_all_seven_period_sites_are_repaired() {
 /// adds a student to `excluded_students` makes both
 /// `ColloscopeStudentExcluded(gl, st)` and
 /// `ColloscopeStudentGroupOutOfBounds(gl, st, 1)` fire against a live
-/// colloscope row placing `st` at group 1. Per §8.2 both arms answer the same
+/// colloscope row placing `st` at group 1. Both arms answer the same
 /// [Fix::RemoveStudentColloscopePlacement] — the collapse the vocabulary makes
 /// explicit.
 ///
@@ -1111,7 +1109,7 @@ fn fixture_1e_the_flagship_period_removal() {
 /// seven period sites that gives the suite full site coverage for three target
 /// kinds — period, teacher and slot.
 ///
-/// Two construction choices, both load-bearing and both taken from §9.
+/// Two construction choices, both load-bearing.
 ///
 /// **A second teacher `t2`, with a slot of their own.** When a fix is as
 /// explosive as "delete a whole teacher's timetable", what it leaves alone is
@@ -1340,7 +1338,7 @@ fn fixture_2_teacher_removal_fans_out_below_the_root() {
 /// balancing override on `S`. Target:
 /// `SubjectOp::Update(S, the same subject with interrogations off)`.
 ///
-/// The trace, derived from §8.2's table and not from a run. `Convergence`'s
+/// The trace, hand-derived from the arms and not from a run. `Convergence`'s
 /// declaration order is the canonical pick order.
 ///
 /// - **Round 1.** The target applies and breaks **four** invariants at once:
@@ -1369,13 +1367,13 @@ fn fixture_2_teacher_removal_fans_out_below_the_root() {
 /// Note what is *not* in the landed set: `SlotForSubjectWithoutInterrogations`
 /// is never picked, even though it fires in round 1. Its slot is already gone,
 /// removed by a different arm. That is structural rather than an artefact of
-/// this document — §8.2's row 3 carries the argument — and this fixture is where
-/// it shows.
+/// this document, and this fixture is where it shows.
 ///
 /// **A second subject `S2`, also taught by `t`**, is the innocent bystander. It
 /// keeps its interrogations, so it takes no part in the trace; what it buys is
-/// the shape of the teacher fix. `Teacher::subjects` is a set, so §8.2's row 2
-/// claims the offending *element* leaves and the teacher survives — and with a
+/// the shape of the teacher fix. `Teacher::subjects` is a set, so
+/// `TeacherSubjectWithoutInterrogations`'s arm drops the offending *element*
+/// and the teacher survives — and with a
 /// single-subject teacher the resulting empty set is indistinguishable from an
 /// arm that cleared the whole thing. The fix carries the rebuilt teacher and is
 /// compared whole, so `S2` still being in it is the assertion that separates the
@@ -1505,8 +1503,8 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
         inner.params.slots.find_slot(slot).is_none(),
         "the slot went with the teacher's trim, not with the target"
     );
-    // §8.2 row 2: the offending element leaves, the teacher stays — and `S2` is
-    // what tells that apart from a cleared set.
+    // The offending element leaves, the teacher stays — and `S2` is what tells
+    // that apart from a cleared set.
     assert_eq!(
         inner.params.teachers.teacher_map.get(&teacher),
         Some(&Teacher {
@@ -1577,13 +1575,12 @@ fn fixture_3_a_rejected_fix_cascades_through_convergence_breaks() {
 /// assignments row holding `st` (`AssignmentsStudent { period, subject }`).
 ///
 /// **Why the fixture is worth its weight: `gl1` and `gl2`.** Their two arms are
-/// the sealed `GroupList::new` rebuilds of §8.1, each carrying an `.expect`.
-/// Commit 7.5 tests only their `None` branch, and no other fixture in this file
-/// reaches a group list at all — so without this one those two `.expect`s are
-/// never executed by any test in the suite. (`1c` covers the other two sealed
-/// rebuilds, `PairingRule` and `SlotPairingRule`.) It is also the only fixture
-/// exercising `SettingsOp::SetStudent`, the elementary op split out in commit
-/// 5.98.
+/// the sealed `GroupList::new` rebuilds, each carrying an `.expect`. The
+/// innocent-state tests reach only their `None` branch, and no other fixture in
+/// this file reaches a group list at all — so without this one those two
+/// `.expect`s are never executed by any test in the suite. (`1c` covers the
+/// other two sealed rebuilds, `PairingRule` and `SlotPairingRule`.) It is also
+/// the only fixture exercising `SettingsOp::SetStudent`.
 ///
 /// **A second student `st2`**, sitting in the *same* prefilled group, the *same*
 /// assignments row and the *same* colloscope row. Three of the five fixes carry
@@ -1975,8 +1972,7 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
     }
 }
 
-/// Fixture `5a` — **the deliberate divergence from the legacy cleaning**
-/// (design-doc D5.4).
+/// Fixture `5a` — **the deliberate divergence from the legacy cleaning**.
 ///
 /// Target: `WeekPatternOp::Remove(WP)`. Both sites hold the pattern in an
 /// `Option` whose `None` is a legal, documented value, so the reference can go
@@ -1986,7 +1982,7 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
 /// One round, two breaks — `SlotWeekPattern(slot)` and
 /// `IncompatWeekPattern(incompat)` — whose fixes are independent. Content, not
 /// sequence: the order here would teach nothing `1a` does not already pin.
-/// Two fixes, and that length is the concrete form of §8.1's argument that
+/// Two fixes, and that length is the concrete form of the argument that
 /// clearing to `None` can only ever *remove* instances of
 /// `InterrogationOnInactiveWeek`, never create one. If a future change made
 /// widening break something, the length is where it would surface.
@@ -2144,25 +2140,26 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
     );
 }
 
-/// Fixture `5b` — the **legacy-agreement** case, and the only commit-7 fixture
-/// that reaches §8.2 row 12.
+/// Fixture `5b` — the **legacy-agreement** case, and the only fixture here that
+/// reaches `InterrogationOnInactiveWeek`.
 ///
 /// Target: `WeekPatternOp::Update(WP, excluded_weeks + cell_week)`, with the
 /// slot's colloscope cell sitting on `cell_week`. One break,
 /// `InterrogationOnInactiveWeek(slot, cell_week)`; the fix clears the cell; then
 /// the update lands. One fix, then the target.
 ///
-/// It sits next to `5a` on purpose. When the pattern *narrows*, the map does
-/// what the legacy cleaning did — `UpdateWeekPattern`
-/// (`colloscopes/ops/src/week_patterns.rs:200-226`) clears exactly the newly excluded cells,
-/// one at a time. When the pattern *disappears*, the map deliberately does not
-/// (`5a`). A reader who finds `5a` strange gets the contrast here.
+///  It sits next to `5a` on purpose. When the pattern *narrows*, the map does
+///  what the legacy cleaning did — `UpdateWeekPattern`
+///  (`colloscopes/ops/src/week_patterns.rs:200-226`) clears exactly the newly
+///  excluded cells, one at a time. When the pattern *disappears*, the map
+///  deliberately does not (`5a`). A reader who finds `5a` strange gets the
+///  contrast here.
 ///
 /// `1b` and `1e` also clear colloscope cells, but through the
 /// `ColloscopeInterrogation` dangling-FK arm on week removal, which is a
-/// different arm entirely. Without this fixture §8.2 row 12 is covered only by
-/// commit 7.5's `None` branch and by whatever commit 8's random walk happens to
-/// hit.
+/// different arm entirely. Without this fixture `InterrogationOnInactiveWeek`
+/// is covered only by the innocent-state test's `None` branch and by whatever
+/// the property harness's random walk happens to hit.
 ///
 /// The mirror of `5a`'s flip closes the pair: narrowing makes the cell's week
 /// impossible for the slot, where removing the pattern made a blocked week
@@ -2245,14 +2242,14 @@ fn fixture_5b_week_pattern_update_clears_the_newly_inactive_cell() {
 ///
 /// ```ignore
 /// // Snapshot for the no-op-fix panic; only fix ops are held to it (a
-/// // no-op *target* is a legitimate perfect no-op, G.2).
+/// // no-op *target* is a legitimate perfect no-op).
 /// let before = (!is_target).then(|| data.clone());
 /// ```
 ///
 /// A fix that applies as a perfect no-op is a map-contract violation and the
 /// engine panics on it — the map owes a `None` when there is nothing to repair.
 /// A *target* that applies as a perfect no-op is legitimate, because the apply
-/// gate accepts perfect no-ops (the G.2 widening), so the target is exempt from
+/// gate accepts perfect no-ops, so the target is exempt from
 /// that check on purpose. Drop the `(!is_target)` guard and make the snapshot
 /// unconditional, and every no-op target starts panicking — and without this
 /// fixture no test in the suite would notice. The toy tests in `cascade.rs` do
@@ -2412,7 +2409,7 @@ fn fixture_7_turning_interrogations_off_takes_the_pairing_rules_with_it() {
 }
 
 // ---------------------------------------------------------------------------
-// Commit 7.6 (plan §9ter) — the rejection fixtures.
+// The rejection fixtures.
 // ---------------------------------------------------------------------------
 
 /// The document both `SlotOverflowsDay` fixtures start from: a subject whose
@@ -2483,13 +2480,14 @@ fn document_with_a_slot_ending_at_midnight()
 /// **What the failure would look like.** Without the `start` comparison the arm
 /// has only one possible answer, `Some(Slot::Remove(slot))`: the user asks to
 /// move a slot half an hour later, and the application deletes it and reports
-/// success. This fixture is the end-to-end reason commit 5.97 put `start` in
-/// the payload — before that enrichment the variant carried a `SlotId` alone
-/// and the arm had no second conjunct to test.
+/// success. This fixture is the end-to-end reason the variant carries `start`
+/// in its payload: with a `SlotId` alone the arm would have no second conjunct
+/// to test.
 ///
-/// The op is unwritable through `colloscopes/ops/`, which guards it with
-/// `UpdateSlotError::SlotOverlapsWithNextDay` (`colloscopes/ops/src/slots.rs:481`) — but
-/// that guard reads a `BrokenInvariants` error, so this is the trace it reads.
+///  The op is unwritable through `colloscopes/ops/`, which guards it with
+///  `UpdateSlotError::SlotOverlapsWithNextDay`
+///  (`colloscopes/ops/src/slots.rs:481`) — but that guard reads a
+///  `BrokenInvariants` error, so this is the trace it reads.
 #[test]
 fn rejection_1a_a_slot_moved_past_midnight_is_convicted_not_deleted() {
     let (app, subject, teacher, slot) = document_with_a_slot_ending_at_midnight();
@@ -2547,14 +2545,14 @@ fn rejection_1a_a_slot_moved_past_midnight_is_convicted_not_deleted() {
 /// this file's second rule: every round here reports exactly one break, so the
 /// order is forced by the data and pinning it would pin depth, not choice.
 ///
-/// This is also §8.2 row 4's only pin. That row has **no legacy behaviour to
-/// compare against**: `colloscopes/ops/src/subjects.rs` does not read `BrokenInvariants` at
-/// all on this route — it applies the update under
-/// `.expect("All data should be valid at this point")` (`subjects.rs:758`, and
-/// again at `:895`), so lengthening an interrogation over a late slot aborts
-/// the process today. This fixture is what states the new answer. (The
-/// neighbouring `colloscopes/ops/src/slots.rs` *does* match on the overflow, at `:481`,
-/// which is `1a`'s route and a different story.)
+///  This is also `SlotOverflowsDay`'s only pin. It has **no legacy behaviour to
+///  compare against**: `colloscopes/ops/src/subjects.rs` does not read
+///  `BrokenInvariants` at all on this route — it applies the update under
+///  `.expect("All data should be valid at this point")` (`subjects.rs:758`, and
+///  again at `:895`), so lengthening an interrogation over a late slot aborts
+///  the process today. This fixture is what states the new answer. (The
+///  neighbouring `colloscopes/ops/src/slots.rs` *does* match on the overflow,
+///  at `:481`, which is `1a`'s route and a different story.)
 #[test]
 fn rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows() {
     let (app, subject, _teacher, slot) = document_with_a_slot_ending_at_midnight();
@@ -2603,7 +2601,7 @@ fn rejection_1b_a_lengthened_interrogation_removes_the_slot_it_overflows() {
 /// holds `A` alone. `row.contains(B)` is false, the arm answers `None`, and the
 /// target is convicted.
 ///
-/// **The construction obeys §9ter.2 — fail on the last conjunct.** The arm is a
+/// **The construction fails on the last conjunct.** The arm is a
 /// two-step chain: the row exists, *and* it holds the named student. The row is
 /// made to pre-exist, with a legitimate member in it, so the first step passes
 /// and the second is the one that decides. Written the lazy way — no row at all
@@ -2723,16 +2721,17 @@ fn rejection_2_a_student_absent_from_the_period_convicts_the_assignment() {
 /// holds `0` alone. `{7}` is not a subset of it, the arm answers `None`, and
 /// the target is convicted.
 ///
-/// §9ter.2 again, and it is the reason the cell pre-exists holding `0`: the arm
+/// Failing on the last conjunct again, and it is the reason the cell pre-exists
+/// holding `0`: the arm
 /// looks the cell up first and only then asks whether the named group is in it.
 /// Writing `{7}` into a cell that did not exist would fail at the lookup and
 /// prove nothing about the second step. Group `0` is also what keeps the
 /// pre-op document valid, since a cell must be non-empty to exist at all.
 ///
-/// The enrichment this fixture needs is **commit 5** — the offending group
-/// number in the payload. Without it the invariant names only `(slot, week)`,
-/// and an arm that can merely see a cell there has no way to tell this trace
-/// from a legitimate one.
+/// The enrichment this fixture needs is the offending group number in the
+/// payload. Without it the invariant names only `(slot, week)`, and an arm that
+/// can merely see a cell there has no way to tell this trace from a legitimate
+/// one.
 ///
 /// The counterfactual is the same as rejection `2`'s: were the subset test
 /// gone, removing `7` from `{0}` would give `{0}` back — a perfect no-op fix,
@@ -2855,11 +2854,10 @@ fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
 /// which holds `A` alone: `row.contains(D)` is false, the arm answers `None`,
 /// and the target is convicted.
 ///
-/// **Why this fixture exists.** Until the pre-step-7 review the state layer
-/// swept `SetRow`'s payload students in its precheck, so this op was refused
-/// one tier up, as `AssignmentPrecheckError::InvalidStudentId`, and never
-/// reached the cascade at all. The sweep was removed on the address/content
-/// split (design doc D.3): the op's *address* is prechecked, the ids the op
+/// **Why this fixture exists.** The state layer does not sweep `SetRow`'s
+/// payload students in its precheck, so the op is not refused one tier up as
+/// `AssignmentPrecheckError::InvalidStudentId`. That follows the
+/// address/content split: the op's *address* is prechecked, the ids the op
 /// writes *into* the document are content and belong to the dangling-FK net —
 /// the same tier `ColloscopeOp::SetGroupList`'s placements have always been
 /// reported at. The two ops are now symmetric.
@@ -2873,7 +2871,7 @@ fn rejection_3_an_out_of_bounds_group_convicts_the_interrogation() {
 /// (`resolution.rs:376-383`) then answers `None`, and the engine convicts,
 /// handing the user back the break the target itself introduced.
 ///
-/// **§9ter.2 — fail on the last conjunct.** As in rejection `2`, the row is made
+/// **Failing on the last conjunct.** As in rejection `2`, the row is made
 /// to pre-exist with a legitimate member in it. The arm is a two-step chain (the
 /// row exists, *and* it holds the named student); with no row at all the first
 /// step would fail and the fixture would stay green even for a map that had
@@ -3112,8 +3110,7 @@ fn identity_pin_incompat(subject_id: SubjectId) -> Incompatibility {
 /// An integration test cannot fabricate one: the id types are opaque and carry
 /// no public constructor. The route is **create-then-remove** — add a teacher
 /// nothing references, remove it, keep the id. The removal cascades to nothing
-/// and lands alone. Three lines, but it is the step someone reading the plan
-/// would otherwise stall on.
+/// and lands alone.
 fn dead_teacher_id(app: &mut AppState<Data, String>) -> TeacherId {
     let id: TeacherId = apply_new!(
         app,
@@ -3411,14 +3408,11 @@ fn identity_pin_3_a_pairing_antecedent_pointed_at_a_dead_subject_survives() {
 /// Identity pin `4` — a pairing rule whose **consequent** points at a dead
 /// subject. The mirror of pin `3`, and the pair is the point.
 ///
-/// §8.1 insists the antecedent and the consequent are **two arms, not one**.
-/// The first draft of this plan had only pin `3`, described as "the antecedent
-/// arm returns `None`, and the consequent arm must not fire at all". The second
-/// half of that sentence is not an assertion a test can make: with only the
-/// antecedent's subject dead the checker reports only the antecedent site, so
-/// the consequent arm is never called and pin `3` tests it in no way
-/// whatsoever. This mirror is what makes "two arms" true of the test suite as
-/// well, and it costs three lines.
+/// The antecedent and the consequent are **two arms, not one**, and pin `3`
+/// alone does not test that: with only the antecedent's subject dead the checker
+/// reports only the antecedent site, so the consequent arm is never called. This
+/// mirror is what makes "two arms" true of the test suite as well, and it costs
+/// three lines.
 #[test]
 fn identity_pin_4_a_pairing_consequent_pointed_at_a_dead_subject_survives() {
     let mut app = AppState::<Data, String>::new(Data::new());

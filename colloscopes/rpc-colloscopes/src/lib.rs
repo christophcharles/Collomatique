@@ -5,9 +5,14 @@
 //! which is exactly why it is not there.
 //!
 //! What rides on it is the hosted Python script: the host says which script to
-//! run, and the script asks for the document and hands one back.
+//! run, and the script asks for the document and hands one back. The
+//! interactive console is the same thing with the lines typed by the user
+//! coming down as they are asked for.
 
 use serde::{Deserialize, Serialize};
+
+#[cfg(test)]
+mod tests;
 
 /// The application half of the protocol, for a channel that hosts a Python script.
 ///
@@ -27,13 +32,27 @@ impl collomatique_rpc::AppProtocol for ColloProtocol {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppInitMsg {
     RunPythonScript(String),
+    StartPythonRepl,
 }
 
-/// What the script asks of the host.
+/// What the script, or the console, asks of the host.
+///
+/// [`AppCmdMsg::ReadLine`] and [`AppCmdMsg::ReplaceData`] only make sense for
+/// the console: the script has no user to type at it, and it hands its document
+/// over without asking.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppCmdMsg {
     GetData,
     SetData(InternalDataStream),
+    ReadLine {
+        prompt: String,
+    },
+    /// `token` is what [`InternalDataStream::token`] gave for the document the
+    /// console read, and `None` when it never read one.
+    ReplaceData {
+        data: InternalDataStream,
+        token: Option<u64>,
+    },
 }
 
 /// What the host answers, when the answer is not one of the generic ones
@@ -41,6 +60,13 @@ pub enum AppCmdMsg {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AppAnswerMsg {
     Data(InternalDataStream),
+    Line(String),
+    /// The document now held by the host, as a token.
+    ReplaceDone {
+        token: u64,
+    },
+    /// The user declined the replacement.
+    ReplaceRefused,
 }
 
 impl AppAnswerMsg {
@@ -57,6 +83,18 @@ pub type ColloResultMsg = collomatique_rpc::ResultMsg<ColloProtocol>;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InternalDataStream {
     serialized: String,
+}
+
+impl InternalDataStream {
+    /// Identity token of this exact document, for comparing two of them across
+    /// the channel. Never persisted, never sent to another build.
+    pub fn token(&self) -> u64 {
+        use std::hash::{DefaultHasher, Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        self.serialized.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 // The data stream carries the storage crate's file-format (spec-2) JSON, not a

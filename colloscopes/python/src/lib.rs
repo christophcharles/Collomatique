@@ -1,12 +1,11 @@
 //! The `collomatique` python module
 //!
-//! This crate is the new scripting API described in
-//! `docs/python/new_api_design.md`. Running an interpreter is
-//! `collomatique-python-runner`'s job; this crate only defines what the module
-//! contains.
+//! Running an interpreter is `collomatique-python-runner`'s job; this crate
+//! only defines what the module contains.
 
 use pyo3::prelude::*;
 
+pub mod blame;
 pub mod caveats;
 pub mod collections;
 pub mod data;
@@ -14,6 +13,7 @@ pub mod dialogs;
 pub mod document;
 pub mod engine;
 pub mod errors;
+pub mod generation;
 pub mod handles;
 pub mod host;
 pub mod ids;
@@ -28,7 +28,7 @@ pub mod values;
 pub use dialogs::{Dialogs, FileRequest, set_dialogs};
 pub use document::Document;
 pub use engine::{EngineExe, set_engine};
-pub use host::{Host, set_host};
+pub use host::{Host, SendError, TakenDocument, set_host};
 pub use model::ColloscopeModel;
 pub use transaction::Transaction;
 
@@ -40,11 +40,13 @@ pub fn collomatique(m: &Bound<'_, PyModule>) -> PyResult<()> {
         collomatique_settings::current_version().to_string(),
     )?;
 
+    blame::register(m)?;
     caveats::register(m)?;
     collections::register(m)?;
     data::register(m)?;
     dialogs::register(m)?;
     errors::register(m)?;
+    generation::register(m)?;
     host::register(m)?;
     ids::register(m)?;
     model::register(m)?;

@@ -12,10 +12,10 @@
 // too. That costs it nothing: its standard streams are pipes the parent
 // creates and hands over, which need no console at either end.
 //
-// The cost is the command line: with no console, `--help`, `--version` and
-// `--debug` have nowhere to print. `windows_stdio` stops that from being fatal,
-// and `windows_cli` answers in a dialog instead of in silence. Unix is
-// unaffected throughout, command line included.
+// The cost is the command line: with no console, `--help` and `--version` have
+// nowhere to print. `windows_stdio` stops that from being fatal, and
+// `windows_cli` answers in a dialog instead of in silence. Unix is unaffected
+// throughout, command line included.
 #![cfg_attr(windows, windows_subsystem = "windows")]
 
 use anyhow::Context as _;
@@ -24,7 +24,7 @@ use collomatique_gtk4::AppModel;
 use relm4::RelmApp;
 use std::path::PathBuf;
 
-mod debug;
+mod cli_script;
 #[cfg(windows)]
 mod windows_cli;
 #[cfg(windows)]
@@ -35,24 +35,22 @@ const WORKER_THREAD_COUNT: usize = 4;
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 // The two python arguments name one script between them, so they exclude each
-// other; and a script runs instead of the application, so they exclude
-// everything that says what the application should open or do. The group is
-// also what `--python-no-engine` hangs off: that flag only means anything
-// about a script, so without one it is a mistake rather than a no-op.
+// other; and a script runs instead of the application, so it excludes the
+// other whole mode, `--rpc-engine`. What the application would open, a script
+// can be hosted with: `[FILE]` and `--new` name its document (see
+// `cli_script`), so neither conflicts with the group. The group is also what
+// `--python-no-engine` and `--out` hang off: those only mean anything about a
+// script, so without one they are a mistake rather than a no-op.
 #[command(group(
     ArgGroup::new("script")
         .args(["python", "python_file"])
-        .conflicts_with_all(["rpc_engine", "debug", "new"]),
+        .conflicts_with_all(["rpc_engine"]),
 ))]
 /// Collomatique gtk4 UI
 struct Args {
     /// Ignore all other parameters and run the python engine
     #[arg(long, default_value_t = false)]
     rpc_engine: bool,
-
-    /// Run in debug mode (requires a file argument)
-    #[arg(long, value_enum)]
-    debug: Option<debug::DebugMode>,
 
     /// Open Collomatique directly editing a new colloscope
     #[arg(short, long, default_value_t = false)]
@@ -71,6 +69,11 @@ struct Args {
     #[arg(long, default_value_t = false, requires = "script")]
     python_no_engine: bool,
 
+    /// With --python/--python-file: save the script's document here when it
+    /// ends (combine with [FILE] or --new for what it starts from)
+    #[arg(long, requires = "script")]
+    out: Option<PathBuf>,
+
     /// Pass a file as argument to open it with Collomatique
     file: Option<PathBuf>,
 
@@ -85,9 +88,9 @@ fn main() -> Result<(), anyhow::Error> {
     #[cfg(windows)]
     windows_stdio::discard_output();
 
-    // On windows the parse can end in a dialog rather than in a return: the
-    // arguments that only make sense at a terminal are refused there, `--debug`
-    // among them, so the block below is unix-only in practice.
+    // On windows the parse can end in a dialog rather than in a return:
+    // `--help`, `--version` and a mistyped option have no terminal to answer
+    // in, so they answer in a message box and exit.
     #[cfg(windows)]
     let args = windows_cli::parse();
     #[cfg(not(windows))]
@@ -98,26 +101,15 @@ fn main() -> Result<(), anyhow::Error> {
     }
 
     if let Some(code) = python_code(&args)? {
-        // The same door the graphical interface's script runner uses, minus
-        // the host: nothing is open, so `current_document()` is None and the
-        // script works on files it names itself.
-        //
         // This process is a collomatique binary, so it is an engine a solve
         // can re-execute, and it says so — unless `--python-no-engine`
         // withholds it, which is what lets a script (or a test) exercise the
-        // other rungs of `python`'s engine resolution.
+        // other rungs of `python`'s engine resolution. Everything else — the
+        // document `[FILE]` or `--new` gives the script, and where `--out`
+        // saves it — is `cli_script`'s.
         let engine =
             (!args.python_no_engine).then_some(collomatique_python_runner::EngineExe::Current);
-        collomatique_python_runner::initialize();
-        return collomatique_python_runner::run_python_script(code, None, engine);
-    }
-
-    if let Some(mode) = args.debug {
-        if matches!(mode, debug::DebugMode::Help) {
-            return debug::print_help();
-        }
-        let file = args.file.expect("--debug requires a file argument");
-        return debug::run(mode, file);
+        return cli_script::run(code, args.new, args.file, args.out, engine);
     }
 
     let payload = collomatique_gtk4::AppInit {

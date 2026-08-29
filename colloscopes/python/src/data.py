@@ -1,7 +1,6 @@
 """The values a script builds, and what a read hands back detached.
 
-§2 of `docs/python/new_api_design.md` is the design, and it
-says why these are python dataclasses rather than rust classes: a value nests
+These are python dataclasses rather than rust classes because a value nests
 and holds real mutable containers, and a pyo3 getter hands back a *clone* of
 the struct it holds — so `value.nested.field = x` would quietly write to a
 temporary that is thrown away. A dataclass has no such trap.
@@ -95,6 +94,7 @@ __all__ = [
     "IncrementalConfig",
     "FuzzyConfig",
     "ConductorStrategy",
+    "GroupListsGenerationRequest",
 ]
 
 
@@ -1172,7 +1172,6 @@ class GroupListSolveConfig:
 class ColloscopeSolveConfig:
     """What a solve recomputes, and what it must leave alone.
 
-    §10 of `docs/python/new_api_design.md` is the design.
     `doc.build_colloscope_model(config)` takes one of these, and the model it
     hands back is what the MPS export writes:
 
@@ -1306,7 +1305,6 @@ class FuzzyConfig:
 class ConductorStrategy:
     """How a solve is run: which substrategies, on how many worker slots.
 
-    §10 of `docs/python/new_api_design.md` is the design.
     `model.solve(strategy)` takes one of these:
 
         strategy = clm.ConductorStrategy.optimize()
@@ -1322,6 +1320,13 @@ class ConductorStrategy:
     worker, warm-start only, which finds a colloscope and stops there. The two
     classmethods below are the application's own presets.
 
+    `warm_start_incumbent` says what the run does with a ready-made solution
+    handed to it as a warm start: `True` evaluates it against the model and
+    adopts it as the initial incumbent if it holds up, `False` leaves it its
+    weaker role of a hint each worker starts from. A solve run from here hands
+    no warm start over, so the field changes nothing today; it is here because
+    a strategy built in a script is the application's structure, whole.
+
     A strategy is not stored on the model. It is an argument, and every solve
     takes its own.
     """
@@ -1331,6 +1336,7 @@ class ConductorStrategy:
     warm_start_config: WarmStartConfig | None = field(default_factory=WarmStartConfig)
     incremental_config: IncrementalConfig | None = None
     fuzzy_config: FuzzyConfig | None = None
+    warm_start_incumbent: bool = True
 
     @classmethod
     def search(cls) -> ConductorStrategy:
@@ -1375,3 +1381,42 @@ class ConductorStrategy:
         import collomatique
 
         return collomatique._conductor_warnings(self)
+
+
+@dataclass
+class GroupListsGenerationRequest:
+    """What to generate: which subjects get a new group list, and what the
+    generator must respect while it builds them.
+
+    `doc.generate_group_lists(request)` takes one, and
+    `doc.default_generation_request()` hands back the very selection the
+    application's own generation dialog opens with:
+
+        req = doc.default_generation_request()
+        req.rebuild = {(period, maths) for period in doc.periods}
+        result = doc.generate_group_lists(req)
+
+    `rebuild` is a set of `(period, subject)` pairs, each of which gets a
+    freshly built list, associated to that pair. Two pairs whose students and
+    group-size range are the same share *one* list rather than getting two
+    alike — so the generation produces at most as many lists as there are
+    pairs, and often fewer.
+
+    `kept_lists` is a set of group lists the generator reads as fixed: the
+    partners they already put together count in what it is trying to
+    maximize, and nothing about them is rewritten. They must be prefilled
+    lists, since an automatic one has no groups yet to respect.
+
+    Every reference here is an entity of the document the request is handed
+    to, a handle or an id indifferently, like everywhere else in this API.
+
+    The value is dumb, like every other: what a request cannot ask for —
+    a subject that runs no interrogations, a kept list that is not prefilled,
+    a class the group sizes cannot split — is decided when it is used, and
+    `doc.generate_group_lists` is where those refusals are written down.
+    """
+
+    rebuild: set[tuple[Period | PeriodId, Subject | SubjectId]] = field(
+        default_factory=set
+    )
+    kept_lists: set[GroupList | GroupListId] = field(default_factory=set)

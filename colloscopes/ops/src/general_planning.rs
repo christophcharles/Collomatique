@@ -330,7 +330,7 @@ impl GeneralPlanningUpdateOp {
                         ),
                         self.get_desc(),
                     )
-                    // ★ D13: a dead period id used to die on an `.expect` here,
+                    // A dead period id used to die on an `.expect` here,
                     // reachable straight from the Python API — the error
                     // variant existed and was never constructed. Everything
                     // else a period removal leaves behind (the exclusion sets
@@ -1188,9 +1188,9 @@ mod tests {
     //! Merging two periods now **keeps the colloscope**: the weeks travel with
     //! their colles and only the genuinely invalidated ones are repaired, where
     //! the old body reconciled the two periods first and erased what it could
-    //! not carry (`docs/todos/fixme_ops.md`). And deleting a period on a dead
-    //! id **returns an error** instead of killing the process — the variant
-    //! existed all along and was never constructed (★ D13).
+    //! not carry. And deleting a period on a dead id **returns an error**
+    //! instead of killing the process — the variant existed all along and was
+    //! never constructed.
     //!
     //! The frozen hogwarts base carries three periods of 4, 14 and 22 weeks,
     //! two week patterns that split every week between them — « Semaines
@@ -1787,7 +1787,7 @@ mod tests {
         );
     }
 
-    /// ★ D13. The variant was there from the start and nothing ever built it:
+    /// The variant was there from the start and nothing ever built it:
     /// the arm had no precheck and the dead id died on « All data should be
     /// valid at this point », one Python call away. Now the state layer's own
     /// precheck is translated, and a rejected op leaves the session untouched.
@@ -2081,19 +2081,19 @@ mod tests {
         assert_eq!(state.get_data(), expected_document(&base, ops).get_data());
     }
 
-    /// The divergence, and the bug of `docs/todos/fixme_ops.md`. The weeks of
-    /// the merged period are appended to the previous one — the two are
-    /// neighbours, so the global week order does not move and no pattern
-    /// changes meaning — and their colles travel with them. Both periods use
-    /// the same group list for Potions here, so the moved cell is as legal at
-    /// its new coordinate as it was at the old one: **it survives**, where the
-    /// old body erased every cell its reconciliation could not carry.
+    /// The divergence. The weeks of the merged period are appended to the
+    /// previous one — the two are neighbours, so the global week order does not
+    /// move and no pattern changes meaning — and their colles travel with them.
+    /// Both periods use the same group list for Potions here, so the moved cell
+    /// is as legal at its new coordinate as it was at the old one: **it
+    /// survives**, where the old body erased every cell its reconciliation
+    /// could not carry.
     ///
     /// The dead period's own keyed material — its eight assignment rows and its
-    /// six associations — is dropped rather than reconciled (the plan's
-    /// divergence 5), and **in silence**: every one of them is byte-identical to
-    /// the surviving period's, so the merged weeks read exactly as they did and
-    /// there is nothing to tell the user about.
+    /// six associations — is dropped rather than reconciled, and **in
+    /// silence**: every one of them is byte-identical to the surviving
+    /// period's, so the merged weeks read exactly as they did and there is
+    /// nothing to tell the user about.
     #[test]
     fn merging_two_periods_keeps_the_colles_of_the_one_that_goes() {
         let mut base = hogwarts();

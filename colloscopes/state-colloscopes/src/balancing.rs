@@ -87,8 +87,7 @@ pub struct BalancingOptions {
 
 // A whole-entry override record, exactly like [crate::settings::Limits]: a
 // bundle of independent boolean choices with no natural partial order between
-// two records — so the document order treats the whole record as one atom
-// (plan step 6.5, decision 13).
+// two records — so the document order treats the whole record as one atom.
 collomatique_state::impl_content_ord_atom!(BalancingOptions);
 
 impl Default for BalancingOptions {
@@ -106,11 +105,10 @@ impl Default for BalancingOptions {
     }
 }
 
-/// Precondition errors of the forced balancing op — the carve-out subset
-/// (step-3 survey Table 2). The whole-value `Update` had no
-/// transition/input guards at all (only `validate_balancing`, which strips);
-/// the targeted [crate::BalancingOp::SetSubject] adds the coordinate
-/// carve-out its key needs.
+/// Precondition errors of the forced balancing op — the carve-out subset. The
+/// whole-value `Update` had no transition/input guards at all (only
+/// `validate_balancing`, which strips); the targeted
+/// [crate::BalancingOp::SetSubject] adds the coordinate carve-out its key needs.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
 pub enum BalancingPrecheckError {
     /// A subject id is invalid
@@ -122,11 +120,10 @@ impl crate::Data {
     /// Used internally by [crate::Data::force_apply]
     ///
     /// Force-applies a balancing op: `validate_balancing` is an invariant guard
-    /// and is stripped (step-3 survey Table 1); what remains is the
-    /// coordinate-existence check on the per-subject key, checked uniformly
-    /// whether the override is being set or cleared — the same choice
-    /// `force_apply_assignment`'s `SetRow` makes. May leave the state invalid;
-    /// the caller owns checking and rollback.
+    /// and is stripped; what remains is the coordinate-existence check on the
+    /// per-subject key, checked uniformly whether the override is being set or
+    /// cleared — the same choice `force_apply_assignment`'s `SetRow` makes. May
+    /// leave the state invalid; the caller owns checking and rollback.
     pub(crate) fn force_apply_balancing(
         &mut self,
         balancing_op: &AnnotatedBalancingOp,

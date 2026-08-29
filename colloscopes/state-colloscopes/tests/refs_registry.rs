@@ -3,8 +3,7 @@
 //!
 //! These lock the exact set and order of reference sites the walker emits for a
 //! document that exercises every relationship — entity families, dense mirrors
-//! and the colloscope. They are the phase-C spec: the derive-based reroute
-//! (commit 3) must keep them passing.
+//! and the colloscope.
 //!
 //! Three things are pinned: the full ordered `walk_refs` output (per referenced
 //! kind), each `references_to_*` reverse lookup on the interesting ids, and the

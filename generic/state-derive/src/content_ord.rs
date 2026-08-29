@@ -1,9 +1,9 @@
 //! The `ContentOrd` and `ContentIdentity` derives
 //!
 //! `#[derive(ContentOrd)]` implements the document order as the **product of
-//! all fields** (design doc §8, step 6.5): the macro walks every field by
-//! construction, so a forgotten field is impossible and a new field whose
-//! type has no `ContentOrd` impl is a compile error that forces a decision.
+//! all fields**: the macro walks every field by construction, so a forgotten
+//! field is impossible and a new field whose type has no `ContentOrd` impl is
+//! a compile error that forces a decision.
 //! Four field attributes override the default per-type dispatch — see
 //! [FieldRule].
 //!

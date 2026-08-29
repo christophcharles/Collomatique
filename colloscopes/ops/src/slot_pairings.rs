@@ -775,11 +775,11 @@ mod tests {
         assert_eq!(session.get_data(), base.get_data());
     }
 
-    /// Which break wins when a payload carries several is public API (D5): the
-    /// old validator checked the antecedent slot, then the consequent slot,
-    /// then the same-subject rule, then the excluded periods, and the four
-    /// scans are copied in that order. The set the engine hands over holds
-    /// every break at once, so only the scan order decides.
+    /// Which break wins when a payload carries several is public API: the old
+    /// validator checked the antecedent slot, then the consequent slot, then
+    /// the same-subject rule, then the excluded periods, and the four scans are
+    /// copied in that order. The set the engine hands over holds every break at
+    /// once, so only the scan order decides.
     ///
     /// Three of the four steps are pinned below; the fourth — antecedent slot
     /// over same-subject — is unreachable rather than untested: the checker

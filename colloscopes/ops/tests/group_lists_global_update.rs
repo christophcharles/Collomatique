@@ -21,8 +21,8 @@
 //!
 //! The tests below pin one case each: out-of-range placements, out-of-range
 //! interrogation groups, newly-excluded students, and the non-prefilled →
-//! prefilled transition — plus the silence of the shrink. Since step 7 the
-//! repairs are the cascade's, so each is read back as the [Fix] it landed.
+//! prefilled transition — plus the silence of the shrink. The repairs are the
+//! cascade's, so each is read back as the [Fix] it landed.
 
 use collomatique_ops::{
     AddNewGroupListError, CascadeWarning, GroupListsUpdateError, GroupListsUpdateOp, OpCategory,

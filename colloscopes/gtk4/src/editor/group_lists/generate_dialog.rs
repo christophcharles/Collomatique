@@ -1,44 +1,25 @@
-mod advanced_dialog;
 mod kept_list_row;
 mod period_group;
 
-use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, ToggleButtonExt, WidgetExt};
+use gtk::prelude::{BoxExt, ButtonExt, GtkWindowExt, OrientableExt, WidgetExt};
 use relm4::factory::FactoryVecDeque;
-use relm4::{
-    Component, ComponentController, ComponentParts, ComponentSender, Controller, RelmWidgetExt,
-    SimpleComponent,
-};
+use relm4::{ComponentParts, ComponentSender, RelmWidgetExt, SimpleComponent};
 use relm4::{adw, gtk};
 
-use collomatique_constraints_groups::{
-    GenerationRequest, GroupListSpec, GroupListSpecError, ObjectiveWeights,
+use collomatique_greedy_groups::{
+    GenerationRequest, GroupListSpec, GroupListSpecError, default_generation_request,
 };
-use collomatique_state_colloscopes::NonEmptyRangeInclusive;
 use collomatique_state_colloscopes::colloscope_params::Parameters;
-use collomatique_strategies::ConductorStrategy;
-use std::num::NonZeroU32;
 
-use crate::editor::run_solver::conductor_config;
-
+/// First step of the generation chain: *what* to generate. The solver's own settings are no
+/// longer part of it — the greedy that runs next needs none, and the optional ILP polish
+/// configures itself in its own window, downstream of the naming dialog.
 pub struct Dialog {
     hidden: bool,
     move_front: bool,
     /// The parameters the request is assembled against, set on `Show` and echoed back on
-    /// `Accepted` so the rest of the chain builds its model from exactly these.
+    /// `Accepted` so the rest of the chain builds its plan from exactly these.
     params: Parameters,
-    /// The solver strategy this window is assembling, seeded from the page's last choice.
-    strategy: ConductorStrategy,
-    /// The advanced solver-configuration dialog, opened via "Personnalisée".
-    conductor_config_dialog: Controller<conductor_config::Dialog>,
-    /// The objective weights this window carries: seeded from the page on `Show`, edited
-    /// through the "Paramètres avancés" dialog, echoed back on `Accepted`.
-    weights: ObjectiveWeights,
-    /// The canonical group-size override this window carries, travelling with
-    /// `weights`: `None` asks the planner to elect the size itself.
-    canonical_range: Option<NonEmptyRangeInclusive<NonZeroU32>>,
-    /// The advanced model-parameter dialog (objective weights and canonical
-    /// size), opened via the "Paramètres avancés" button.
-    advanced_dialog: Controller<advanced_dialog::Dialog>,
     /// One titled [`adw::PreferencesGroup`] per period, shown in the left panel.
     periods_list: FactoryVecDeque<period_group::PeriodGroup>,
     /// One switch row per existing prefilled list, shown in the right panel.
@@ -52,54 +33,30 @@ pub struct Dialog {
 
 #[derive(Debug)]
 pub enum DialogInput {
-    Show(
-        ConductorStrategy,
-        ObjectiveWeights,
-        Option<NonEmptyRangeInclusive<NonZeroU32>>,
-        Parameters,
-    ),
+    Show(Parameters),
     Cancel,
     Accept,
-    OpenAdvanced,
-    UpdateStrategy(ConductorStrategy),
-    OpenAdvancedParams,
-    UpdateAdvancedParams(ObjectiveWeights, Option<NonEmptyRangeInclusive<NonZeroU32>>),
-    IgnoreOrRefresh,
     /// (period index, subject index within that period, new value)
     SetSubjectRebuild(usize, usize, bool),
+    /// (period index, new value for every subject of that period)
+    SetPeriodRebuild(usize, bool),
+    /// Every subject of every period takes the given value.
+    SetAllRebuild(bool),
+    /// Every prefilled list takes the given value.
+    SetAllKept(bool),
     /// (prefilled-list index, new value)
     SetKeptList(usize, bool),
-    /// One of this window's own dialogs just closed: bring this window back to
-    /// the front.
-    Present,
+    /// Recompute both panes from the document, as if the window had just opened.
+    ResetToDefaults,
 }
 
 #[derive(Debug)]
 pub enum DialogOutput {
     Cancelled,
-    Accepted(
-        GenerationRequest,
-        ConductorStrategy,
-        ObjectiveWeights,
-        Parameters,
-    ),
+    Accepted(GenerationRequest, Parameters),
     /// This window just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
     PresentParent,
-}
-
-impl Dialog {
-    fn is_opt_strategy(&self) -> bool {
-        self.strategy == ConductorStrategy::with_parallelism_defaults()
-    }
-
-    fn is_search_strategy(&self) -> bool {
-        self.strategy == ConductorStrategy::default()
-    }
-
-    fn is_other_strategy(&self) -> bool {
-        !self.is_opt_strategy() && !self.is_search_strategy()
-    }
 }
 
 impl Dialog {
@@ -134,8 +91,8 @@ impl Dialog {
     }
 
     /// The subjects eligible on a period, in document order: they must have interrogation
-    /// parameters (the roadmap's rule) and must not exclude the period. The group size range
-    /// comes along, since the eligibility filter is what proves it is there.
+    /// parameters and must not exclude the period. The group size range comes along, since
+    /// the eligibility filter is what proves it is there.
     fn eligible_subjects(
         &self,
         period_id: collomatique_state_colloscopes::PeriodId,
@@ -178,6 +135,11 @@ impl Dialog {
     /// are a function of the current document (rebuild what has no list yet, keep every prefilled
     /// list), so nothing is carried over between openings.
     fn set_data_from_params(&mut self) {
+        // The defaults themselves live beside the generator, because the Python
+        // API opens on the very same selection (`doc.default_generation_request`)
+        // and the two must not drift.
+        let defaults = default_generation_request(&self.params);
+
         let periods_data: Vec<period_group::Data> = self
             .params
             .periods
@@ -236,7 +198,7 @@ impl Dialog {
                             title: name,
                             subtitle,
                             // The default: rebuild exactly the pairs that have no list yet.
-                            rebuild: current.is_none(),
+                            rebuild: defaults.rebuild.contains(&(period_id, subject_id)),
                             error,
                         }
                     })
@@ -276,7 +238,7 @@ impl Dialog {
                     title,
                     subtitle: format!("{} groupes, {} élèves", groups, students),
                     // The default: every existing prefilled list is kept as a stability anchor.
-                    keep: true,
+                    keep: defaults.kept_lists.contains(&group_list_id),
                 },
             )
             .collect();
@@ -306,7 +268,6 @@ impl Dialog {
                 .filter(|list| list.keep)
                 .map(|list| list.group_list_id)
                 .collect(),
-            canonical_range: self.canonical_range.clone(),
         }
     }
 
@@ -343,9 +304,6 @@ impl SimpleComponent for Dialog {
             set_visible: !model.hidden,
             set_title: Some("Génération automatique de listes de groupes"),
             set_default_size: (1024, 576),
-            // Unfinished feature: GNOME's development-build striping on the header bar,
-            // as `run_python_script` does.
-            add_css_class: "devel",
             adw::ToolbarView {
                 add_top_bar = &adw::HeaderBar {
                     set_show_start_title_buttons: false,
@@ -353,6 +311,12 @@ impl SimpleComponent for Dialog {
                     pack_start = &gtk::Button {
                         set_label: "Annuler",
                         connect_clicked => DialogInput::Cancel,
+                    },
+                    pack_start = &gtk::Button {
+                        set_icon_name: "view-refresh-symbolic",
+                        add_css_class: "flat",
+                        set_tooltip: "Réinitialiser : recalculer les matières à recalculer et les listes à conserver comme à l'ouverture",
+                        connect_clicked => DialogInput::ResetToDefaults,
                     },
                     pack_end = &gtk::Button {
                         set_label: "Valider",
@@ -372,11 +336,6 @@ impl SimpleComponent for Dialog {
                         },
                         connect_clicked => DialogInput::Accept,
                     },
-                },
-                add_top_bar = &adw::Banner {
-                    set_title: "Fonctionnalité en cours de développement : \
-                                les listes produites peuvent être incorrectes ou incomplètes.",
-                    set_revealed: true,
                 },
                 #[wrap(Some)]
                 set_content = &gtk::Box {
@@ -402,13 +361,38 @@ impl SimpleComponent for Dialog {
                                 set_margin_all: 0,
                                 set_orientation: gtk::Orientation::Vertical,
                                 set_spacing: 5,
-                                gtk::Label {
-                                    set_halign: gtk::Align::Center,
+                                gtk::Box {
+                                    set_hexpand: true,
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_spacing: 5,
                                     set_margin_all: 10,
-                                    set_label: "<b><big>Matières à recalculer</big></b>",
-                                    set_use_markup: true,
                                     #[watch]
                                     set_visible: model.has_rebuildable_pairs(),
+                                    // Two spacers, not `set_halign: Center`: the heading stays
+                                    // optically centred on the pane while the buttons keep the
+                                    // right edge.
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Label {
+                                        set_label: "<b><big>Matières à recalculer</big></b>",
+                                        set_use_markup: true,
+                                    },
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Button {
+                                        set_icon_name: "object-select-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Activer toutes les listes"),
+                                        connect_clicked => DialogInput::SetAllRebuild(true),
+                                    },
+                                    gtk::Button {
+                                        set_icon_name: "edit-delete-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Désactiver toutes les listes"),
+                                        connect_clicked => DialogInput::SetAllRebuild(false),
+                                    },
                                 },
                                 gtk::ScrolledWindow {
                                     set_hexpand: true,
@@ -442,13 +426,37 @@ impl SimpleComponent for Dialog {
                                 set_margin_all: 0,
                                 set_orientation: gtk::Orientation::Vertical,
                                 set_spacing: 5,
-                                gtk::Label {
-                                    set_halign: gtk::Align::Center,
+                                gtk::Box {
+                                    set_hexpand: true,
+                                    set_orientation: gtk::Orientation::Horizontal,
+                                    set_spacing: 5,
                                     set_margin_all: 10,
-                                    set_label: "<b><big>Listes existantes à conserver</big></b>",
-                                    set_use_markup: true,
                                     #[watch]
                                     set_visible: model.has_prefilled_lists(),
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    gtk::Label {
+                                        set_label: "<b><big>Listes existantes à conserver</big></b>",
+                                        set_use_markup: true,
+                                    },
+                                    gtk::Box {
+                                        set_hexpand: true,
+                                    },
+                                    // This pane's switches mean *keep*, not *rebuild*, so its
+                                    // wording follows the pane rather than the other side.
+                                    gtk::Button {
+                                        set_icon_name: "object-select-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Conserver toutes les listes"),
+                                        connect_clicked => DialogInput::SetAllKept(true),
+                                    },
+                                    gtk::Button {
+                                        set_icon_name: "edit-delete-symbolic",
+                                        add_css_class: "flat",
+                                        set_tooltip_text: Some("Ne conserver aucune liste"),
+                                        connect_clicked => DialogInput::SetAllKept(false),
+                                    },
                                 },
                                 gtk::ScrolledWindow {
                                     set_hexpand: true,
@@ -475,87 +483,6 @@ impl SimpleComponent for Dialog {
                             },
                         },
                     },
-                    gtk::Box {
-                        set_margin_all: 0,
-                        set_orientation: gtk::Orientation::Horizontal,
-                        set_hexpand: true,
-                        gtk::Frame {
-                            set_hexpand: true,
-                            set_margin_all: 5,
-                            gtk::Box {
-                                set_orientation: gtk::Orientation::Horizontal,
-                                set_spacing: 5,
-                                gtk::Label {
-                                    set_margin_start: 10,
-                                    set_margin_all: 5,
-                                    set_label: "<b>Configuration du résolveur :</b>",
-                                    set_use_markup: true,
-                                },
-                                gtk::Box {
-                                    set_spacing: 0,
-                                    add_css_class: "linked",
-                                    #[name(opt_toggle_btn)]
-                                    gtk::ToggleButton {
-                                        set_margin_top: 5,
-                                        set_margin_bottom: 5,
-                                        set_label: "Optimisation complète",
-                                        #[track(opt_toggle_btn.is_active() != model.is_opt_strategy())]
-                                        set_active: model.is_opt_strategy(),
-                                        connect_toggled[sender] => move |widget| {
-                                            let new_state = widget.is_active();
-                                            sender.input(if new_state {
-                                                DialogInput::UpdateStrategy(ConductorStrategy::with_parallelism_defaults())
-                                            } else {
-                                                DialogInput::IgnoreOrRefresh
-                                            });
-                                        }
-                                    },
-                                    #[name(search_toggle_btn)]
-                                    gtk::ToggleButton {
-                                        set_margin_top: 5,
-                                        set_margin_bottom: 5,
-                                        set_label: "Recherche simple",
-                                        #[track(search_toggle_btn.is_active() != model.is_search_strategy())]
-                                        set_active: model.is_search_strategy(),
-                                        connect_toggled[sender] => move |widget| {
-                                            let new_state = widget.is_active();
-                                            sender.input(if new_state {
-                                                DialogInput::UpdateStrategy(ConductorStrategy::default())
-                                            } else {
-                                                DialogInput::IgnoreOrRefresh
-                                            });
-                                        }
-                                    },
-                                },
-                                gtk::Label {
-                                    set_margin_all: 5,
-                                    set_label: "<i><small>Personnalisée</small></i>",
-                                    set_use_markup: true,
-                                    #[watch]
-                                    set_visible: model.is_other_strategy(),
-                                },
-                                gtk::Box {
-                                    set_hexpand: true,
-                                },
-                                gtk::Button {
-                                    add_css_class: "frame",
-                                    set_margin_all: 5,
-                                    set_label: "Personnalisée",
-                                    connect_clicked => DialogInput::OpenAdvanced,
-                                },
-                            },
-                        },
-                        gtk::Button {
-                            add_css_class: "frame",
-                            add_css_class: "warning",
-                            set_margin_all: 5,
-                            adw::ButtonContent {
-                                set_icon_name: "emblem-system-symbolic",
-                                set_label: "Paramètres avancés",
-                            },
-                            connect_clicked => DialogInput::OpenAdvancedParams,
-                        },
-                    },
                 },
             },
         }
@@ -566,33 +493,14 @@ impl SimpleComponent for Dialog {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let conductor_config_dialog = conductor_config::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                conductor_config::DialogOutput::Accepted(strategy) => {
-                    DialogInput::UpdateStrategy(strategy)
-                }
-                conductor_config::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
-                conductor_config::DialogOutput::PresentParent => DialogInput::Present,
-            });
-
-        let advanced_dialog = advanced_dialog::Dialog::builder()
-            .transient_for(&root)
-            .launch(())
-            .forward(sender.input_sender(), |msg| match msg {
-                advanced_dialog::DialogOutput::Accepted(weights, canonical_range) => {
-                    DialogInput::UpdateAdvancedParams(weights, canonical_range)
-                }
-                advanced_dialog::DialogOutput::Cancelled => DialogInput::IgnoreOrRefresh,
-                advanced_dialog::DialogOutput::PresentParent => DialogInput::Present,
-            });
-
         let periods_list = FactoryVecDeque::builder()
             .launch(gtk::Box::default())
             .forward(sender.input_sender(), |msg| match msg {
                 period_group::PeriodGroupOutput::SubjectToggled(period, subject, value) => {
                     DialogInput::SetSubjectRebuild(period, subject, value)
+                }
+                period_group::PeriodGroupOutput::SetAll(period, value) => {
+                    DialogInput::SetPeriodRebuild(period, value)
                 }
             });
         let kept_lists_list = FactoryVecDeque::builder()
@@ -607,11 +515,6 @@ impl SimpleComponent for Dialog {
             hidden: true,
             move_front: false,
             params: Parameters::default(),
-            strategy: ConductorStrategy::with_parallelism_defaults(),
-            conductor_config_dialog,
-            weights: ObjectiveWeights::default(),
-            canonical_range: None,
-            advanced_dialog,
             periods_list,
             kept_lists_list,
             periods_data: Vec::new(),
@@ -629,41 +532,15 @@ impl SimpleComponent for Dialog {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.move_front = false;
         match msg {
-            DialogInput::Show(strategy, weights, canonical_range, params) => {
+            DialogInput::Show(params) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.params = params;
-                self.strategy = strategy;
-                self.weights = weights;
-                self.canonical_range = canonical_range;
                 self.set_data_from_params();
 
                 self.refresh_periods_list();
                 self.refresh_kept_lists_list();
             }
-            DialogInput::OpenAdvanced => {
-                self.conductor_config_dialog
-                    .sender()
-                    .send(conductor_config::DialogInput::Show(self.strategy.clone()))
-                    .unwrap();
-            }
-            DialogInput::UpdateStrategy(strategy) => {
-                self.strategy = strategy;
-            }
-            DialogInput::OpenAdvancedParams => {
-                self.advanced_dialog
-                    .sender()
-                    .send(advanced_dialog::DialogInput::Show(
-                        self.weights,
-                        self.canonical_range.clone(),
-                    ))
-                    .unwrap();
-            }
-            DialogInput::UpdateAdvancedParams(weights, canonical_range) => {
-                self.weights = weights;
-                self.canonical_range = canonical_range;
-            }
-            DialogInput::IgnoreOrRefresh => {}
             DialogInput::SetSubjectRebuild(period, subject, value) => {
                 if let Some(data) = self
                     .periods_data
@@ -674,10 +551,37 @@ impl SimpleComponent for Dialog {
                 }
                 self.refresh_periods_list();
             }
+            DialogInput::SetPeriodRebuild(period, value) => {
+                if let Some(data) = self.periods_data.get_mut(period) {
+                    for subject in &mut data.subjects {
+                        subject.rebuild = value;
+                    }
+                }
+                self.refresh_periods_list();
+            }
+            DialogInput::SetAllRebuild(value) => {
+                for period in &mut self.periods_data {
+                    for subject in &mut period.subjects {
+                        subject.rebuild = value;
+                    }
+                }
+                self.refresh_periods_list();
+            }
             DialogInput::SetKeptList(index, value) => {
                 if let Some(data) = self.kept_lists_data.get_mut(index) {
                     data.keep = value;
                 }
+                self.refresh_kept_lists_list();
+            }
+            DialogInput::SetAllKept(value) => {
+                for list in &mut self.kept_lists_data {
+                    list.keep = value;
+                }
+                self.refresh_kept_lists_list();
+            }
+            DialogInput::ResetToDefaults => {
+                self.set_data_from_params();
+                self.refresh_periods_list();
                 self.refresh_kept_lists_list();
             }
             DialogInput::Cancel => {
@@ -694,15 +598,10 @@ impl SimpleComponent for Dialog {
                     sender
                         .output(DialogOutput::Accepted(
                             self.request_from_data(),
-                            self.strategy.clone(),
-                            self.weights,
                             self.params.clone(),
                         ))
                         .unwrap();
                 }
-            }
-            DialogInput::Present => {
-                self.move_front = true;
             }
         }
     }

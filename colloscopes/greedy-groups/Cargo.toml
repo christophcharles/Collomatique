@@ -1,0 +1,12 @@
+[package]
+name = "collomatique-greedy-groups"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+
+[dependencies]
+collomatique-state-colloscopes = { path = "../../colloscopes/state-colloscopes" }
+thiserror.workspace = true
+
+[dev-dependencies]
+collomatique-storage = { path = "../../colloscopes/storage" }

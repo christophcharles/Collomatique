@@ -41,6 +41,8 @@ pub enum PeriodEntryInput {
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
     CopyPreviousPeriod,
+    /// Drops every association this period holds, leaving the lists alone.
+    ClearAssociations,
 }
 
 #[derive(Debug)]
@@ -51,6 +53,7 @@ pub enum PeriodEntryOutput {
         Option<collomatique_state_colloscopes::GroupListId>,
     ),
     CopyPreviousPeriod(collomatique_state_colloscopes::PeriodId),
+    ClearAssociations(collomatique_state_colloscopes::PeriodId),
 }
 
 #[relm4::factory(pub)]
@@ -76,6 +79,20 @@ impl FactoryComponent for PeriodEntry {
                     #[watch]
                     set_label: &self.data.period_text,
                     set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold, scale 1.2").unwrap()),
+                },
+                gtk::Button {
+                    set_icon_name: "edit-delete-symbolic",
+                    add_css_class: "flat",
+                    #[watch]
+                    set_sensitive: !self.data.group_list_associations.is_empty(),
+                    set_tooltip_text: Some("Effacer les associations de la période"),
+                    connect_clicked => PeriodEntryInput::ClearAssociations,
+                },
+                // The copy button sits at the far right of the line: it is the one that
+                // comes and goes with the period's rank, and a button that appears next to
+                // the title would push the delete one sideways every time.
+                gtk::Box {
+                    set_hexpand: true,
                 },
                 gtk::Button {
                     set_icon_name: "edit-copy-symbolic",
@@ -146,6 +163,11 @@ impl FactoryComponent for PeriodEntry {
             PeriodEntryInput::CopyPreviousPeriod => {
                 sender
                     .output(PeriodEntryOutput::CopyPreviousPeriod(self.data.period_id))
+                    .unwrap();
+            }
+            PeriodEntryInput::ClearAssociations => {
+                sender
+                    .output(PeriodEntryOutput::ClearAssociations(self.data.period_id))
                     .unwrap();
             }
         }

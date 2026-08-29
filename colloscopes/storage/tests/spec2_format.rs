@@ -1085,9 +1085,9 @@ fn duplicate_id_across_blocks_is_rejected() {
 #[test]
 fn duplicate_slot_id_across_subjects_is_rejected() {
     // A slot id shared by two subjects must be rejected explicitly. Since
-    // the flat slot-table restructure (phase B commit 3) the slots are
-    // keyed by id, so collapsing two rows onto the same id would silently
-    // drop a slot; decode detects the duplicate instead.
+    // the flat slot-table restructure the slots are keyed by id, so
+    // collapsing two rows onto the same id would silently drop a slot;
+    // decode detects the duplicate instead.
     let subject = |id: u64, name: &str| {
         format!(
             r#"{{ "id": {id}, "name": "{name}", "interrogation_parameters": {{

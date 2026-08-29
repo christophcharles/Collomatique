@@ -6,7 +6,7 @@ use relm4::{ComponentParts, ComponentSender, Controller, RelmWidgetExt};
 use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
-use collomatique_ilp::{ConfigData, UsableData};
+use collomatique_ilp::{ConfigData, ObjectiveSense, UsableData};
 use collomatique_ilp_modeler::{InternalVar, Model};
 use collomatique_strategies::{
     ConductorPayload, ConductorProgress, ConductorStatus, ConductorStrategy, Solution, SolveStatus,
@@ -18,6 +18,7 @@ use collomatique_subprocesses::{EngineExe, StrategySubprocess};
 pub mod conductor_config;
 mod error_dialog;
 mod strategy_display;
+pub mod strategy_extension;
 mod warning_icon;
 mod warning_running;
 
@@ -67,12 +68,22 @@ pub struct Dialog<B: UsableData, E: UsableData, C: UsableData> {
     // Instant the best solution was last improved; its end point is the shared `run_end`, so the
     // "time since the best solution" clock freezes when the solve stops. `None` before any solution.
     best_solution_at: Option<Instant>,
+    obj_sense: ObjectiveSense,
     _phantom: PhantomData<fn() -> C>,
 }
 
 #[derive(Debug)]
 pub enum DialogInput<B: UsableData, E: UsableData, C: UsableData> {
-    Run(ConductorStrategy, Model<B, E, C>, ConductorPayload<B>),
+    /// Start a solve. The last field is an optional warm start: a complete
+    /// configuration of the model — base variables and extras — the caller
+    /// already has a solution for. The conductor checks it and, if it is
+    /// feasible, starts from it instead of from nothing.
+    Run(
+        ConductorStrategy,
+        Model<B, E, C>,
+        ConductorPayload<B>,
+        Option<ConfigData<InternalVar<B, E>>>,
+    ),
     CancelRequest,
     AcceptRequest,
     Accept,
@@ -296,7 +307,7 @@ where
                                         gtk::Box {
                                             set_orientation: gtk::Orientation::Horizontal,
                                             gtk::Label {
-                                                set_label: "Meilleur coût trouvé : ",
+                                                set_label: "Meilleur objectif trouvé : ",
                                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                                             },
                                             gtk::Label {
@@ -307,12 +318,23 @@ where
                                         gtk::Box {
                                             set_orientation: gtk::Orientation::Horizontal,
                                             gtk::Label {
-                                                set_label: "Meilleur coût possible : ",
+                                                set_label: "Meilleur objectif possible : ",
                                                 set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
                                             },
                                             gtk::Label {
                                                 #[watch]
                                                 set_label: &model.best_possible_cost(),
+                                            },
+                                        },
+                                        gtk::Box {
+                                            set_orientation: gtk::Orientation::Horizontal,
+                                            gtk::Label {
+                                                set_label: "Sens de l'objectif : ",
+                                                set_attributes: Some(&gtk::pango::AttrList::from_string("weight bold").unwrap()),
+                                            },
+                                            gtk::Label {
+                                                #[watch]
+                                                set_label: &model.objective_sense(),
                                             },
                                         },
                                         gtk::Box {
@@ -513,7 +535,7 @@ where
                 }
             });
 
-        let global_debug_view = DebugView::builder().launch(()).detach();
+        let global_debug_view = DebugView::builder().launch(None).detach();
 
         let model = Dialog {
             hidden: true,
@@ -542,6 +564,7 @@ where
             run_start: None,
             run_end: None,
             best_solution_at: None,
+            obj_sense: ObjectiveSense::Minimize,
             _phantom: PhantomData,
         };
 
@@ -555,7 +578,7 @@ where
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.move_front = false;
         match msg {
-            DialogInput::Run(strategy, model, payload) => {
+            DialogInput::Run(strategy, model, payload, warm_start) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.is_running = true;
@@ -564,6 +587,7 @@ where
                 self.verdict = None;
                 self.show_debug = false;
                 self.last_line = String::new();
+                self.obj_sense = model.problem().get_objective().get_sense();
 
                 // Start the elapsed-time clock and kick off the periodic refresh loop.
                 let epoch = Instant::now();
@@ -657,7 +681,7 @@ where
                         &EngineExe::Current,
                         &model,
                         &strategy,
-                        None,
+                        warm_start,
                         payload,
                         result_cb,
                         progress_cb,
@@ -904,6 +928,13 @@ impl<B: UsableData, E: UsableData, C: UsableData> Dialog<B, E, C> {
         match self.conductor_status.best_bound {
             Some(bound) => format!("{:.1}", bound),
             None => "-".to_string(),
+        }
+    }
+
+    fn objective_sense(&self) -> String {
+        match &self.obj_sense {
+            ObjectiveSense::Maximize => "maximisation".into(),
+            ObjectiveSense::Minimize => "minimisation".into(),
         }
     }
 

@@ -360,8 +360,8 @@ single_site! {
 single_site! {
     /// The subject a slot belongs to
     ///
-    /// Fixed at creation, per the design's write table — a slot can never
-    /// change subject, so this edge lives for the slot's whole life.
+    /// Fixed at creation: a slot can never change subject, so this edge lives
+    /// for the slot's whole life.
     SlotSubject, one slot: Slot;
 }
 

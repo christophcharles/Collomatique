@@ -128,9 +128,9 @@ impl Periods {
     }
 }
 
-/// Precondition errors of the forced period ops — the carve-out subset
-/// (step-3 survey Table 2). Kept: no-clobber and op-target existence (Remove
-/// target + `AddAfter` anchor both surface as [Self::InvalidPeriodId]). All
+/// Precondition errors of the forced period ops — the carve-out subset. Kept:
+/// no-clobber and op-target existence (Remove target + `AddAfter` anchor both
+/// surface as [Self::InvalidPeriodId]). All
 /// reference scans are stripped, including the empty-first `PeriodStillHasWeeks`
 /// guard: force-removing a period with weeks leaves dangling `Week::period_id`
 /// FKs for the cascade, exactly like every other stripped reference scan.
@@ -150,7 +150,7 @@ impl crate::Data {
     ///
     /// Force-applies a period op: carve-out guards kept (returned as
     /// [PeriodPrecheckError] — no-clobber, target existence, `AddAfter` anchor),
-    /// invariant guards stripped (step-3 survey Table 1), including the
+    /// invariant guards stripped, including the
     /// empty-first `PeriodStillHasWeeks` guard — force-removing a period with
     /// weeks leaves dangling `Week::period_id` FKs. May leave the state invalid;
     /// the caller owns checking and rollback.

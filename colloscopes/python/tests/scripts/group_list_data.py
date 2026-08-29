@@ -2,10 +2,10 @@ import dataclasses
 
 import collomatique
 
-# `source` is a throwaway copy of the document the read surface's commit 8
-# built for the two filling shapes: an automatic group list and a prefilled
-# one with named groups, side by side. The example has only prefilled lists
-# and only unnamed groups, so it cannot carry this test.
+# `source` is a throwaway copy of a document built for the two filling shapes:
+# an automatic group list and a prefilled one with named groups, side by side.
+# The example has only prefilled lists and only unnamed groups, so it cannot
+# carry this test.
 doc = collomatique.load(source)
 
 group_list_list = list(doc.group_lists)
@@ -112,9 +112,9 @@ assert isinstance(bare.filling, collomatique.AutomaticGroups)
 assert bare.filling.excluded_students == frozenset()
 
 # A field that names an entity takes a handle or an id, interchangeably. The
-# two fillings below extract to the same group list and — this is the wart
-# §2.3 of the design records — do not compare equal, because a leaf value
-# stores what it was given, and a handle and an id hash differently.
+# two fillings below extract to the same group list and — this is the wart —
+# do not compare equal, because a leaf value stores what it was given, and a
+# handle and an id hash differently.
 harry, hermione, ron, neville, _luna = list(doc.students)
 
 by_handle = collomatique.GroupListData(

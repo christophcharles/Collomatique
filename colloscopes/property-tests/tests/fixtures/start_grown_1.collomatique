@@ -1,0 +1,1901 @@
+{
+  "header": {
+    "file_type": "Collomatique",
+    "produced_with_version": "0.1.0-alpha.2.99",
+    "file_content": "Colloscope"
+  },
+  "entries": [
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GeneralPlanning": {
+          "first_week": null,
+          "periods": [
+            {
+              "id": 47,
+              "weeks": [
+                {
+                  "id": 84,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 59,
+                  "interrogations": true,
+                  "annotation": null
+                }
+              ]
+            },
+            {
+              "id": 0,
+              "weeks": [
+                {
+                  "id": 52,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 1,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 2,
+                  "interrogations": false,
+                  "annotation": null
+                },
+                {
+                  "id": 3,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 4,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 5,
+                  "interrogations": true,
+                  "annotation": "week note 4"
+                }
+              ]
+            },
+            {
+              "id": 72,
+              "weeks": []
+            },
+            {
+              "id": 6,
+              "weeks": [
+                {
+                  "id": 61,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 7,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 64,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 8,
+                  "interrogations": false,
+                  "annotation": null
+                },
+                {
+                  "id": 11,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 9,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 55,
+                  "interrogations": true,
+                  "annotation": "week note"
+                },
+                {
+                  "id": 10,
+                  "interrogations": true,
+                  "annotation": null
+                },
+                {
+                  "id": 12,
+                  "interrogations": true,
+                  "annotation": null
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Subjects": [
+          {
+            "id": 89,
+            "name": "Subject85660",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 68,
+            "name": "Subject41237",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 3,
+                "max": 4
+              },
+              "groups_per_interrogation": {
+                "min": 2,
+                "max": 3
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "OnceForEveryBlockOfWeeks": {
+                  "weeks_per_block": 2,
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 57,
+            "name": "Subject37808",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 3,
+                "max": 5
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 2
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountForEveryArbitraryBlock": {
+                  "blocks": [
+                    {
+                      "delay_in_weeks": 1,
+                      "size_in_weeks": 1,
+                      "interrogation_count_in_block": {
+                        "min": 1,
+                        "max": 3
+                      }
+                    },
+                    {
+                      "delay_in_weeks": 1,
+                      "size_in_weeks": 2,
+                      "interrogation_count_in_block": {
+                        "min": 0,
+                        "max": 1
+                      }
+                    },
+                    {
+                      "delay_in_weeks": 1,
+                      "size_in_weeks": 1,
+                      "interrogation_count_in_block": {
+                        "min": 1,
+                        "max": 1
+                      }
+                    }
+                  ],
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 82,
+            "name": "Subject74612",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 2
+              },
+              "groups_per_interrogation": {
+                "min": 2,
+                "max": 3
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountForEveryArbitraryBlock": {
+                  "blocks": [
+                    {
+                      "delay_in_weeks": 0,
+                      "size_in_weeks": 2,
+                      "interrogation_count_in_block": {
+                        "min": 1,
+                        "max": 3
+                      }
+                    }
+                  ],
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 54,
+            "name": "Subject99029",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 2
+              },
+              "groups_per_interrogation": {
+                "min": 2,
+                "max": 3
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountInYear": {
+                  "interrogation_count_in_year": {
+                    "min": 1,
+                    "max": 3
+                  },
+                  "minimum_week_separation": 0
+                }
+              }
+            },
+            "excluded_periods": [
+              47
+            ]
+          },
+          {
+            "id": 86,
+            "name": "Subject30752",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 3,
+                "max": 4
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "OnceForEveryBlockOfWeeks": {
+                  "weeks_per_block": 1,
+                  "minimum_week_separation": 1
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 60,
+            "name": "Subject97358",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 3
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": false,
+              "periodicity": {
+                "AmountForEveryArbitraryBlock": {
+                  "blocks": [],
+                  "minimum_week_separation": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 90,
+            "name": "Subject5862",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 42,
+            "name": "Subject60053",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 41,
+            "name": "Subject49727",
+            "interrogation_parameters": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 40,
+            "name": "Subject25482",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 4
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 1
+              },
+              "duration_minutes": 60,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountInYear": {
+                  "interrogation_count_in_year": {
+                    "min": 3,
+                    "max": 4
+                  },
+                  "minimum_week_separation": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 39,
+            "name": "Subject89600",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 1,
+                "max": 2
+              },
+              "groups_per_interrogation": {
+                "min": 2,
+                "max": 2
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "ExactlyPeriodic": {
+                  "periodicity_in_weeks": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          },
+          {
+            "id": 38,
+            "name": "Subject40697",
+            "interrogation_parameters": {
+              "students_per_group": {
+                "min": 2,
+                "max": 2
+              },
+              "groups_per_interrogation": {
+                "min": 1,
+                "max": 2
+              },
+              "duration_minutes": 30,
+              "take_duration_into_account": true,
+              "periodicity": {
+                "AmountForEveryArbitraryBlock": {
+                  "blocks": [
+                    {
+                      "delay_in_weeks": 1,
+                      "size_in_weeks": 3,
+                      "interrogation_count_in_block": {
+                        "min": 1,
+                        "max": 2
+                      }
+                    },
+                    {
+                      "delay_in_weeks": 1,
+                      "size_in_weeks": 1,
+                      "interrogation_count_in_block": {
+                        "min": 1,
+                        "max": 3
+                      }
+                    },
+                    {
+                      "delay_in_weeks": 2,
+                      "size_in_weeks": 1,
+                      "interrogation_count_in_block": {
+                        "min": 0,
+                        "max": 0
+                      }
+                    }
+                  ],
+                  "minimum_week_separation": 2
+                }
+              }
+            },
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Teachers": [
+          {
+            "id": 43,
+            "surname": "Surname77352",
+            "firstname": "Firstname77352",
+            "tel": "0600077352",
+            "email": null,
+            "subjects": [
+              38,
+              39,
+              40,
+              54,
+              57,
+              60,
+              68,
+              82
+            ]
+          },
+          {
+            "id": 44,
+            "surname": "Surname22304",
+            "firstname": "Firstname22304",
+            "tel": null,
+            "email": "person22304@example.com",
+            "subjects": []
+          },
+          {
+            "id": 45,
+            "surname": "Surname81721",
+            "firstname": "Firstname81721",
+            "tel": null,
+            "email": "person81721@example.com",
+            "subjects": [
+              38,
+              39,
+              54
+            ]
+          },
+          {
+            "id": 51,
+            "surname": "Surname73184",
+            "firstname": "Firstname73184",
+            "tel": null,
+            "email": "person73184@example.com",
+            "subjects": [
+              38,
+              40,
+              60
+            ]
+          },
+          {
+            "id": 58,
+            "surname": "Surname27477",
+            "firstname": "Firstname27477",
+            "tel": null,
+            "email": "person27477@example.com",
+            "subjects": [
+              39,
+              57
+            ]
+          },
+          {
+            "id": 70,
+            "surname": "Surname89721",
+            "firstname": "Firstname89721",
+            "tel": null,
+            "email": "person89721@example.com",
+            "subjects": [
+              39,
+              68
+            ]
+          },
+          {
+            "id": 73,
+            "surname": "Surname55468",
+            "firstname": "Firstname55468",
+            "tel": null,
+            "email": null,
+            "subjects": [
+              38,
+              40,
+              57,
+              60,
+              68
+            ]
+          },
+          {
+            "id": 81,
+            "surname": "Surname91125",
+            "firstname": "Firstname91125",
+            "tel": null,
+            "email": null,
+            "subjects": [
+              39,
+              40,
+              54,
+              60,
+              68
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Students": [
+          {
+            "id": 13,
+            "surname": "Surname63144",
+            "firstname": "Firstname63144",
+            "tel": null,
+            "email": "person63144@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 14,
+            "surname": "Surname66749",
+            "firstname": "Firstname66749",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 15,
+            "surname": "Surname15535",
+            "firstname": "Firstname15535",
+            "tel": null,
+            "email": "person15535@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 16,
+            "surname": "Surname24346",
+            "firstname": "Firstname24346",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 17,
+            "surname": "Surname72427",
+            "firstname": "Firstname72427",
+            "tel": null,
+            "email": "person72427@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 18,
+            "surname": "Surname3892",
+            "firstname": "Firstname3892",
+            "tel": "0600003892",
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 19,
+            "surname": "Surname83151",
+            "firstname": "Firstname83151",
+            "tel": null,
+            "email": "person83151@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 20,
+            "surname": "Surname10339",
+            "firstname": "Firstname10339",
+            "tel": null,
+            "email": "person10339@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 21,
+            "surname": "Surname59440",
+            "firstname": "Firstname59440",
+            "tel": null,
+            "email": "person59440@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 22,
+            "surname": "Surname93157",
+            "firstname": "Firstname93157",
+            "tel": null,
+            "email": "person93157@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 23,
+            "surname": "Surname30485",
+            "firstname": "Firstname30485",
+            "tel": "0600030485",
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 24,
+            "surname": "Surname93698",
+            "firstname": "Firstname93698",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 25,
+            "surname": "Surname98861",
+            "firstname": "Firstname98861",
+            "tel": "0600098861",
+            "email": "person98861@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 26,
+            "surname": "Surname76588",
+            "firstname": "Firstname76588",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 27,
+            "surname": "Surname70072",
+            "firstname": "Firstname70072",
+            "tel": "0600070072",
+            "email": null,
+            "excluded_periods": [
+              47
+            ]
+          },
+          {
+            "id": 28,
+            "surname": "Surname83795",
+            "firstname": "Firstname83795",
+            "tel": null,
+            "email": "person83795@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 29,
+            "surname": "Surname49570",
+            "firstname": "Firstname49570",
+            "tel": null,
+            "email": "person49570@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 30,
+            "surname": "Surname34149",
+            "firstname": "Firstname34149",
+            "tel": null,
+            "email": "person34149@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 31,
+            "surname": "Surname19754",
+            "firstname": "Firstname19754",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 32,
+            "surname": "Surname47135",
+            "firstname": "Firstname47135",
+            "tel": null,
+            "email": "person47135@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 33,
+            "surname": "Surname59088",
+            "firstname": "Firstname59088",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 34,
+            "surname": "Surname66010",
+            "firstname": "Firstname66010",
+            "tel": null,
+            "email": "person66010@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 35,
+            "surname": "Surname79079",
+            "firstname": "Firstname79079",
+            "tel": null,
+            "email": "person79079@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 36,
+            "surname": "Surname55506",
+            "firstname": "Firstname55506",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 37,
+            "surname": "Surname35859",
+            "firstname": "Firstname35859",
+            "tel": "0600035859",
+            "email": null,
+            "excluded_periods": []
+          },
+          {
+            "id": 62,
+            "surname": "Surname39117",
+            "firstname": "Firstname39117",
+            "tel": null,
+            "email": "person39117@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 77,
+            "surname": "Surname83593",
+            "firstname": "Firstname83593",
+            "tel": "0600083593",
+            "email": "person83593@example.com",
+            "excluded_periods": []
+          },
+          {
+            "id": 83,
+            "surname": "Surname24111",
+            "firstname": "Firstname24111",
+            "tel": null,
+            "email": null,
+            "excluded_periods": []
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Assignments": [
+          {
+            "period_id": 0,
+            "subject_id": 38,
+            "students": [
+              14,
+              16,
+              17,
+              19,
+              20,
+              22,
+              23,
+              25,
+              27,
+              28,
+              29,
+              31,
+              32,
+              33,
+              35,
+              36,
+              37
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 39,
+            "students": [
+              13,
+              14,
+              15,
+              16,
+              17,
+              19,
+              20,
+              21,
+              22,
+              23,
+              25,
+              26,
+              27,
+              28,
+              30,
+              31,
+              32,
+              33,
+              34,
+              37
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 40,
+            "students": [
+              14,
+              15,
+              17,
+              18,
+              19,
+              20,
+              21,
+              22,
+              24,
+              25,
+              27,
+              29,
+              32,
+              34,
+              35
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 41,
+            "students": [
+              13,
+              14,
+              17,
+              19,
+              20,
+              22,
+              23,
+              25,
+              26,
+              29,
+              31,
+              33,
+              34,
+              37
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 42,
+            "students": [
+              13,
+              15,
+              17,
+              18,
+              19,
+              20,
+              22,
+              23,
+              24,
+              25,
+              28,
+              31,
+              32,
+              33,
+              34,
+              36
+            ]
+          },
+          {
+            "period_id": 0,
+            "subject_id": 82,
+            "students": [
+              83
+            ]
+          },
+          {
+            "period_id": 6,
+            "subject_id": 38,
+            "students": [
+              13,
+              14,
+              15,
+              16,
+              17,
+              18,
+              19,
+              20,
+              21,
+              23,
+              24,
+              26,
+              27,
+              29,
+              31,
+              32,
+              33,
+              35,
+              36,
+              37,
+              83
+            ]
+          },
+          {
+            "period_id": 6,
+            "subject_id": 39,
+            "students": [
+              13,
+              14,
+              15,
+              17,
+              18,
+              19,
+              20,
+              21,
+              23,
+              24,
+              25,
+              27,
+              28,
+              29,
+              31,
+              32,
+              33,
+              34,
+              35
+            ]
+          },
+          {
+            "period_id": 6,
+            "subject_id": 40,
+            "students": [
+              13,
+              14,
+              15,
+              18,
+              22,
+              24,
+              25,
+              26,
+              27,
+              29,
+              31,
+              33,
+              34,
+              35,
+              37
+            ]
+          },
+          {
+            "period_id": 6,
+            "subject_id": 41,
+            "students": [
+              13,
+              14,
+              15,
+              19,
+              20,
+              21,
+              22,
+              23,
+              24,
+              26,
+              27,
+              28,
+              29,
+              30,
+              31,
+              32,
+              34,
+              36,
+              37
+            ]
+          },
+          {
+            "period_id": 6,
+            "subject_id": 42,
+            "students": [
+              13,
+              14,
+              15,
+              17,
+              18,
+              19,
+              21,
+              22,
+              23,
+              25,
+              26,
+              28,
+              29,
+              30,
+              32,
+              33,
+              34,
+              35,
+              37
+            ]
+          },
+          {
+            "period_id": 6,
+            "subject_id": 68,
+            "students": [
+              33
+            ]
+          },
+          {
+            "period_id": 47,
+            "subject_id": 38,
+            "students": [
+              18,
+              22,
+              30
+            ]
+          },
+          {
+            "period_id": 47,
+            "subject_id": 40,
+            "students": [
+              25,
+              31
+            ]
+          },
+          {
+            "period_id": 47,
+            "subject_id": 42,
+            "students": [
+              23
+            ]
+          },
+          {
+            "period_id": 72,
+            "subject_id": 38,
+            "students": [
+              18
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "WeekPatterns": [
+          {
+            "id": 46,
+            "name": "Pattern30850",
+            "excluded_weeks": [
+              1,
+              7,
+              55,
+              64
+            ]
+          },
+          {
+            "id": 74,
+            "name": "Pattern87581",
+            "excluded_weeks": [
+              1,
+              2,
+              5,
+              9,
+              12,
+              52,
+              55,
+              64
+            ]
+          },
+          {
+            "id": 88,
+            "name": "Pattern96446",
+            "excluded_weeks": [
+              8,
+              9,
+              11,
+              59,
+              61,
+              84
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Slots": [
+          {
+            "subject_id": 38,
+            "slots": [
+              {
+                "id": 79,
+                "teacher_id": 45,
+                "start": {
+                  "day": "tuesday",
+                  "time": "17:35"
+                },
+                "extra_info": "",
+                "week_pattern_id": 74,
+                "cost": 4
+              }
+            ]
+          },
+          {
+            "subject_id": 39,
+            "slots": [
+              {
+                "id": 66,
+                "teacher_id": 45,
+                "start": {
+                  "day": "thursday",
+                  "time": "11:25"
+                },
+                "extra_info": "Room 135",
+                "week_pattern_id": null,
+                "cost": 2
+              }
+            ]
+          },
+          {
+            "subject_id": 40,
+            "slots": [
+              {
+                "id": 71,
+                "teacher_id": 51,
+                "start": {
+                  "day": "sunday",
+                  "time": "11:20"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 4
+              }
+            ]
+          },
+          {
+            "subject_id": 54,
+            "slots": [
+              {
+                "id": 91,
+                "teacher_id": 45,
+                "start": {
+                  "day": "monday",
+                  "time": "08:40"
+                },
+                "extra_info": "",
+                "week_pattern_id": 88,
+                "cost": 1
+              }
+            ]
+          },
+          {
+            "subject_id": 57,
+            "slots": [
+              {
+                "id": 67,
+                "teacher_id": 58,
+                "start": {
+                  "day": "saturday",
+                  "time": "13:30"
+                },
+                "extra_info": "",
+                "week_pattern_id": null,
+                "cost": 4
+              }
+            ]
+          },
+          {
+            "subject_id": 60,
+            "slots": [
+              {
+                "id": 92,
+                "teacher_id": 51,
+                "start": {
+                  "day": "friday",
+                  "time": "16:30"
+                },
+                "extra_info": "Room 373",
+                "week_pattern_id": null,
+                "cost": 4
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Incompatibilities": [
+          {
+            "id": 48,
+            "subject_id": 38,
+            "name": "Incompat17716",
+            "slots": [
+              {
+                "day": "monday",
+                "time": "13:25",
+                "duration_minutes": 30
+              },
+              {
+                "day": "sunday",
+                "time": "13:50",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 2,
+            "week_pattern_id": 46
+          },
+          {
+            "id": 53,
+            "subject_id": 40,
+            "name": "Incompat15125",
+            "slots": [
+              {
+                "day": "wednesday",
+                "time": "10:30",
+                "duration_minutes": 60
+              },
+              {
+                "day": "wednesday",
+                "time": "11:40",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 76,
+            "subject_id": 68,
+            "name": "Incompat27415",
+            "slots": [
+              {
+                "day": "tuesday",
+                "time": "18:00",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 80,
+            "subject_id": 41,
+            "name": "Incompat82691",
+            "slots": [
+              {
+                "day": "sunday",
+                "time": "16:10",
+                "duration_minutes": 30
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 85,
+            "subject_id": 54,
+            "name": "Incompat52077",
+            "slots": [
+              {
+                "day": "saturday",
+                "time": "13:55",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 1,
+            "week_pattern_id": null
+          },
+          {
+            "id": 93,
+            "subject_id": 86,
+            "name": "Incompat29001",
+            "slots": [
+              {
+                "day": "saturday",
+                "time": "09:45",
+                "duration_minutes": 30
+              },
+              {
+                "day": "tuesday",
+                "time": "09:20",
+                "duration_minutes": 60
+              },
+              {
+                "day": "sunday",
+                "time": "11:30",
+                "duration_minutes": 60
+              }
+            ],
+            "minimum_free_slots": 2,
+            "week_pattern_id": 88
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GroupLists": [
+          {
+            "id": 49,
+            "name": "List25980",
+            "students_per_group": {
+              "min": 2,
+              "max": 2
+            },
+            "group_names": [
+              "Group 0",
+              null,
+              "Group 2",
+              null
+            ],
+            "filling": {
+              "Automatic": {
+                "excluded_students": []
+              }
+            }
+          },
+          {
+            "id": 50,
+            "name": "List21817",
+            "students_per_group": {
+              "min": 3,
+              "max": 3
+            },
+            "group_names": [
+              null,
+              "Group 1",
+              null,
+              "Group 3"
+            ],
+            "filling": {
+              "Automatic": {
+                "excluded_students": []
+              }
+            }
+          },
+          {
+            "id": 65,
+            "name": "List22100",
+            "students_per_group": {
+              "min": 1,
+              "max": 1
+            },
+            "group_names": [
+              null,
+              "Group 1",
+              "Group 2",
+              null,
+              null
+            ],
+            "filling": {
+              "Automatic": {
+                "excluded_students": []
+              }
+            }
+          },
+          {
+            "id": 69,
+            "name": "List19282",
+            "students_per_group": {
+              "min": 2,
+              "max": 4
+            },
+            "group_names": [
+              "Group 0",
+              null,
+              "Group 2",
+              null
+            ],
+            "filling": {
+              "Prefilled": {
+                "groups": [
+                  {
+                    "students": [
+                      33,
+                      37
+                    ]
+                  },
+                  {
+                    "students": [
+                      24
+                    ]
+                  },
+                  {
+                    "students": [
+                      18,
+                      22,
+                      26,
+                      27,
+                      30,
+                      34,
+                      62
+                    ]
+                  },
+                  {
+                    "students": [
+                      17,
+                      28
+                    ]
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "id": 78,
+            "name": "List83267",
+            "students_per_group": {
+              "min": 3,
+              "max": 5
+            },
+            "group_names": [
+              null,
+              "Group 1"
+            ],
+            "filling": {
+              "Automatic": {
+                "excluded_students": []
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "GroupListAssociations": [
+          {
+            "period_id": 0,
+            "subject_id": 39,
+            "group_list_id": 49
+          },
+          {
+            "period_id": 6,
+            "subject_id": 38,
+            "group_list_id": 49
+          },
+          {
+            "period_id": 47,
+            "subject_id": 40,
+            "group_list_id": 65
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Pairings": [
+          {
+            "id": 56,
+            "antecedent": {
+              "subject_id": 40,
+              "should_have": false
+            },
+            "consequent": {
+              "subject_id": 54,
+              "should_have": false
+            },
+            "excluded_periods": [],
+            "soft": true
+          },
+          {
+            "id": 63,
+            "antecedent": {
+              "subject_id": 68,
+              "should_have": true
+            },
+            "consequent": {
+              "subject_id": 38,
+              "should_have": false
+            },
+            "excluded_periods": [
+              72
+            ],
+            "soft": false
+          },
+          {
+            "id": 75,
+            "antecedent": {
+              "subject_id": 68,
+              "should_have": false
+            },
+            "consequent": {
+              "subject_id": 39,
+              "should_have": false
+            },
+            "excluded_periods": [
+              0,
+              72
+            ],
+            "soft": false
+          },
+          {
+            "id": 87,
+            "antecedent": {
+              "subject_id": 60,
+              "should_have": true
+            },
+            "consequent": {
+              "subject_id": 86,
+              "should_have": false
+            },
+            "excluded_periods": [],
+            "soft": true
+          }
+        ]
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Settings": {
+          "global": {
+            "interrogations_per_week_min": null,
+            "interrogations_per_week_max": null,
+            "max_interrogations_per_day": {
+              "soft": false,
+              "value": 3
+            }
+          },
+          "students": [
+            {
+              "student_id": 17,
+              "limits": {
+                "interrogations_per_week_min": null,
+                "interrogations_per_week_max": null,
+                "max_interrogations_per_day": {
+                  "soft": false,
+                  "value": 3
+                }
+              }
+            },
+            {
+              "student_id": 37,
+              "limits": {
+                "interrogations_per_week_min": null,
+                "interrogations_per_week_max": {
+                  "soft": false,
+                  "value": 6
+                },
+                "max_interrogations_per_day": null
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Balancing": {
+          "global": {
+            "teacher_rotation": null,
+            "slot_rotation": {
+              "soft": false
+            },
+            "avoid_twice_in_a_row": null,
+            "year_teacher_rotation": false,
+            "period_teacher_rotation": false
+          },
+          "subjects": [
+            {
+              "subject_id": 38,
+              "options": {
+                "teacher_rotation": null,
+                "slot_rotation": {
+                  "soft": true
+                },
+                "avoid_twice_in_a_row": {
+                  "soft": false
+                },
+                "year_teacher_rotation": false,
+                "period_teacher_rotation": false
+              }
+            },
+            {
+              "subject_id": 39,
+              "options": {
+                "teacher_rotation": {
+                  "soft": false
+                },
+                "slot_rotation": null,
+                "avoid_twice_in_a_row": {
+                  "soft": true
+                },
+                "year_teacher_rotation": true,
+                "period_teacher_rotation": false
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "Colloscope": {
+          "interrogations": [
+            {
+              "slot_id": 79,
+              "week_id": 7,
+              "assigned_groups": [
+                0,
+                1
+              ]
+            }
+          ],
+          "group_lists": [
+            {
+              "group_list_id": 49,
+              "students": [
+                {
+                  "student_id": 16,
+                  "group": 3
+                },
+                {
+                  "student_id": 18,
+                  "group": 0
+                },
+                {
+                  "student_id": 21,
+                  "group": 0
+                },
+                {
+                  "student_id": 22,
+                  "group": 0
+                },
+                {
+                  "student_id": 26,
+                  "group": 3
+                },
+                {
+                  "student_id": 29,
+                  "group": 3
+                },
+                {
+                  "student_id": 30,
+                  "group": 0
+                },
+                {
+                  "student_id": 32,
+                  "group": 2
+                },
+                {
+                  "student_id": 34,
+                  "group": 2
+                },
+                {
+                  "student_id": 35,
+                  "group": 0
+                },
+                {
+                  "student_id": 36,
+                  "group": 3
+                },
+                {
+                  "student_id": 37,
+                  "group": 3
+                },
+                {
+                  "student_id": 62,
+                  "group": 3
+                }
+              ]
+            },
+            {
+              "group_list_id": 50,
+              "students": [
+                {
+                  "student_id": 13,
+                  "group": 2
+                },
+                {
+                  "student_id": 14,
+                  "group": 3
+                },
+                {
+                  "student_id": 15,
+                  "group": 3
+                },
+                {
+                  "student_id": 17,
+                  "group": 2
+                },
+                {
+                  "student_id": 18,
+                  "group": 3
+                },
+                {
+                  "student_id": 23,
+                  "group": 2
+                },
+                {
+                  "student_id": 24,
+                  "group": 0
+                },
+                {
+                  "student_id": 26,
+                  "group": 2
+                },
+                {
+                  "student_id": 30,
+                  "group": 3
+                },
+                {
+                  "student_id": 32,
+                  "group": 0
+                },
+                {
+                  "student_id": 33,
+                  "group": 3
+                },
+                {
+                  "student_id": 34,
+                  "group": 3
+                },
+                {
+                  "student_id": 36,
+                  "group": 2
+                },
+                {
+                  "student_id": 37,
+                  "group": 0
+                }
+              ]
+            },
+            {
+              "group_list_id": 78,
+              "students": [
+                {
+                  "student_id": 13,
+                  "group": 0
+                },
+                {
+                  "student_id": 14,
+                  "group": 0
+                },
+                {
+                  "student_id": 17,
+                  "group": 0
+                },
+                {
+                  "student_id": 19,
+                  "group": 0
+                },
+                {
+                  "student_id": 20,
+                  "group": 1
+                },
+                {
+                  "student_id": 25,
+                  "group": 0
+                },
+                {
+                  "student_id": 28,
+                  "group": 0
+                },
+                {
+                  "student_id": 29,
+                  "group": 1
+                },
+                {
+                  "student_id": 32,
+                  "group": 1
+                },
+                {
+                  "student_id": 33,
+                  "group": 0
+                },
+                {
+                  "student_id": 34,
+                  "group": 0
+                },
+                {
+                  "student_id": 35,
+                  "group": 1
+                },
+                {
+                  "student_id": 36,
+                  "group": 0
+                },
+                {
+                  "student_id": 37,
+                  "group": 0
+                },
+                {
+                  "student_id": 62,
+                  "group": 0
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "minimum_spec_version": 2,
+      "needed_entry": true,
+      "content": {
+        "ExportConfig": {
+          "global": {
+            "background_color": {
+              "red": 57,
+              "green": 181,
+              "blue": 102
+            },
+            "stripes_color_enabled": false,
+            "stripes_color": {
+              "red": 152,
+              "green": 252,
+              "blue": 203
+            }
+          },
+          "colloscope_enabled": true,
+          "all_groups_enabled": true,
+          "automatic_groups_enabled": false,
+          "prefilled_groups_enabled": false,
+          "per_group_list_enabled": false,
+          "colloscope_config": {
+            "sheet_name": "Sheet632",
+            "extra_info_column_enabled": false,
+            "extra_info_column_name": "Info",
+            "teacher_email_enabled": false,
+            "teacher_email": "Contact",
+            "teacher_tel_enabled": false,
+            "teacher_tel": "",
+            "orientation": "Landscape",
+            "display_week_dates": false,
+            "display_annotations": true,
+            "no_interrogation_color": {
+              "red": 218,
+              "green": 244,
+              "blue": 109
+            },
+            "annotation_color_enabled": false,
+            "annotation_color": {
+              "red": 186,
+              "green": 62,
+              "blue": 13
+            },
+            "extra_colors": []
+          },
+          "all_groups_config": {
+            "sheet_name": "Groups968",
+            "orientation": null,
+            "show_emails": true,
+            "show_tel": true
+          },
+          "automatic_groups_config": {
+            "sheet_name": "Groups904",
+            "orientation": null,
+            "show_emails": false,
+            "show_tel": true
+          },
+          "prefilled_groups_config": {
+            "sheet_name": "Groups971",
+            "orientation": "Landscape",
+            "show_emails": false,
+            "show_tel": true
+          },
+          "per_group_list_config": {
+            "orientation": "Landscape",
+            "show_emails": true,
+            "show_tel": true,
+            "center_vertically": true
+          }
+        }
+      }
+    }
+  ]
+}

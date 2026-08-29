@@ -15,13 +15,17 @@ enum BufferOp {
 
 pub struct DebugView {
     buffer_op: Option<BufferOp>,
+    /// Maximum number of lines kept in the buffer; `None` means unbounded.
+    /// Oldest lines are dropped from the start when the cap is exceeded.
+    max_lines: Option<usize>,
 }
 
 #[relm4::component(pub)]
 impl Component for DebugView {
     type Input = DebugViewInput;
     type Output = ();
-    type Init = ();
+    /// Maximum number of lines to keep, or `None` for an unbounded buffer.
+    type Init = Option<usize>;
     type CommandOutput = ();
 
     view! {
@@ -49,11 +53,14 @@ impl Component for DebugView {
     }
 
     fn init(
-        _params: Self::Init,
+        max_lines: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = DebugView { buffer_op: None };
+        let model = DebugView {
+            buffer_op: None,
+            max_lines,
+        };
         let widgets = view_output!();
         ComponentParts { model, widgets }
     }
@@ -83,6 +90,20 @@ impl DebugView {
         if let Some(BufferOp::Append(content)) = self.buffer_op.take() {
             let mut end_iter = widgets.text_buffer.end_iter();
             widgets.text_buffer.insert(&mut end_iter, &content);
+            if let Some(max_lines) = self.max_lines {
+                // `line_count` counts the trailing (possibly empty) line too; the
+                // cap is a memory bound, not an exact count, so that is fine.
+                let count = widgets.text_buffer.line_count();
+                let excess = count - i32::try_from(max_lines).unwrap_or(i32::MAX);
+                if excess > 0 {
+                    let mut start = widgets.text_buffer.start_iter();
+                    let mut cut = widgets
+                        .text_buffer
+                        .iter_at_line(excess)
+                        .expect("excess < line_count, so the line exists");
+                    widgets.text_buffer.delete(&mut start, &mut cut);
+                }
+            }
             let cursor_mark = widgets.text_buffer.get_insert();
             widgets.text_view.scroll_mark_onscreen(&cursor_mark);
         }

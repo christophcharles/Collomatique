@@ -161,9 +161,9 @@ impl Settings {
     /// write itself always goes through.
     fn set_global_limits(&self, py: Python<'_>, data: &Bound<'_, PyAny>) -> PyResult<OpResult> {
         // Extracted before the mutable borrow, never inside it: a value naming
-        // an entity is resolved against this document, which borrows it to ask
-        // (`docs/python/new_api_design.md` §5). A `LimitsData` names none, but
-        // the order is the boundary's and not each value's.
+        // an entity is resolved against this document, which borrows it to ask.
+        // A `LimitsData` names none, but the order is the boundary's and not
+        // each value's.
         let limits = LimitsData::from_py(&self.doc, data)?;
 
         self.write(

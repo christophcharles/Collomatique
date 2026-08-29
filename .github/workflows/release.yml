@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+# Only the last job writes anything. The build jobs inherit this and cannot
+# exceed it.
+permissions:
+  contents: read
+
+jobs:
+  # Seconds, and before two hours of building: the tag and Cargo.toml must
+  # agree, because both artifacts are named from Cargo.toml and a release whose
+  # assets contradict its own name is only noticed afterwards.
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The tag must match the version
+        run: |
+          version=$(awk '/^\[workspace\.package\]/ { in_section = 1 }
+              in_section && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "tag $GITHUB_REF_NAME does not match Cargo.toml version $version"
+            echo "expected the tag v$version -- bump one or the other, then tag again"
+            exit 1
+          fi
+          echo "$GITHUB_REF_NAME matches Cargo.toml"
+
+  # The gate. Nothing is built until the suite is green.
+  tests:
+    needs: check
+    uses: ./.github/workflows/tests.yml
+
+  flatpak:
+    needs: tests
+    uses: ./.github/workflows/flatpak.yml
+
+  windows:
+    needs: tests
+    uses: ./.github/workflows/windows.yml
+
+  release:
+    needs: [flatpak, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      # Every artifact of this run, flattened into one directory: the flatpak
+      # bundle and the Windows installer. Named by their own workflows, so
+      # nothing here has to know the version.
+      - uses: actions/download-artifact@v7
+        with:
+          path: dist
+          merge-multiple: true
+
+      # Published, not a draft: the tag is the decision, and there is nothing
+      # left to check by hand once the suite and both builds are green.
+      #
+      # A hyphen is what makes a semver version a pre-release, so 0.2.0-alpha.1
+      # is filed as one and 0.1.0 is not. That is what keeps /releases/latest
+      # pointing at the newest finished version while alphas pile up after it.
+      #
+      # gh comes with the runner and authenticates with the built-in token;
+      # nothing is installed here.
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          args=("$GITHUB_REF_NAME" --generate-notes)
+          case "$GITHUB_REF_NAME" in
+            *-*) args+=(--prerelease) ;;
+          esac
+          gh release create "${args[@]}" dist/*

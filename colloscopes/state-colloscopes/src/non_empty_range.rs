@@ -28,7 +28,7 @@ impl<T: Ord + Clone> NonEmptyRangeInclusive<T> {
 
 /// The document order: a range is an atom — its content is the endpoint
 /// pair. Reading `[2..=3] ⊆ [1..=4]` as an order would compare the denoted
-/// sets, which is exactly the semantic reading D5.1 forbids.
+/// sets, which is exactly the semantic reading the document order forbids.
 ///
 /// Hand-written because the type is generic, which `#[derive(ContentOrd)]`
 /// deliberately does not support.

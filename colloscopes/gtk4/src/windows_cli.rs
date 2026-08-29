@@ -3,8 +3,7 @@
 //! There is no terminal there — see `windows_stdio` for why, and why that is
 //! settled rather than pending. Everything the program would have printed about
 //! its own arguments goes nowhere, which for `--help` and a mistyped option
-//! means the application appears to start normally and for `--debug` means it
-//! appears to do nothing at all.
+//! means the application appears to start normally.
 //!
 //! A message box is the only channel left before GTK is up, so that is what
 //! these arguments get. The text is clap's own wherever clap produced one: a
@@ -26,7 +25,7 @@ const NO_TERMINAL: &str = "Collomatique n'écrit pas dans un terminal sous Windo
 /// The exit codes are kept here too. Nothing on Windows is likely to read them,
 /// but a wrong one is a lie for free.
 pub fn parse() -> Args {
-    let args = match Args::try_parse() {
+    match Args::try_parse() {
         Ok(args) => args,
         Err(error) => {
             // Help, version and usage errors all arrive as an `Err`. They are
@@ -41,18 +40,7 @@ pub fn parse() -> Args {
             show(level, &error.to_string());
             std::process::exit(code);
         }
-    };
-
-    if args.debug.is_some() {
-        show(
-            MessageLevel::Info,
-            "L'option --debug n'est pas disponible sous Windows.\n\n\
-             Elle n'existe que pour écrire un rapport dans un terminal.",
-        );
-        std::process::exit(0);
     }
-
-    args
 }
 
 fn show(level: MessageLevel, text: &str) {

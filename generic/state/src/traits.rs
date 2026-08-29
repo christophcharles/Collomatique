@@ -89,8 +89,8 @@ use crate::history::AggregatedOp;
 /// anchor — or an op payload that would land logically impossible data). It is
 /// never resolvable. [ApplyError::BrokenInvariants] means the op is
 /// well-formed but the state does not satisfy what it needs: the payload is
-/// the exact set of broken invariants, in the canonical `Ord`. At step 6 this
-/// is what the cascade resolves; outside the cascade it is simply an error.
+/// the exact set of broken invariants, in the canonical `Ord`. This is what
+/// the cascade resolves; outside the cascade it is simply an error.
 ///
 /// Either way the failed `apply` left the data strictly unchanged.
 #[derive(Clone, Debug, PartialEq, Eq, Error)]
@@ -531,9 +531,9 @@ mod tests {
 
     #[test]
     // History written by `apply` must replay correctly through undo/redo,
-    // which go through `update_internal_state_with_aggregated` — itself now on
-    // `apply` (commit 3.0), so the ops it recorded replay through the same
-    // gate that accepted them.
+    // which go through `update_internal_state_with_aggregated` — itself on
+    // `apply`, so the ops it recorded replay through the same gate that
+    // accepted them.
     fn apply_history_replays_through_undo_redo() {
         let mut state = new_state(0);
         state
