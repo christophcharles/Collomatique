@@ -43,8 +43,38 @@ pub fn version() -> String {
     full.split_whitespace().next().unwrap_or(&full).to_string()
 }
 
+/// Pre-initialization runs once per process; a second call is CPython's no-op
+/// anyway, and this keeps the unsafe block to a single execution.
+static PREINIT: std::sync::Once = std::sync::Once::new();
+
 pub fn initialize() {
     use collomatique_python::collomatique;
+
+    // Everything that reads a hosted interpreter's output reads UTF-8: the
+    // parent decodes the child's stdout as UTF-8 and replaces whatever is not
+    // (`OutputData::into_lossy_string`). Left to itself CPython encodes
+    // `sys.stdout` -- and decodes a file opened without an `encoding=` -- in
+    // the locale's encoding, which on windows is the ANSI code page, so the
+    // console's own French banner would come back as replacement characters.
+    // UTF-8 mode is the switch that makes windows behave the way unix already
+    // does, and it has to be chosen before the interpreter exists.
+    PREINIT.call_once(|| {
+        // SAFETY: `PyPreConfig_InitPythonConfig` fills every field of the
+        // config it is given, so `Py_PreInitialize` reads no uninitialized
+        // memory. It needs no interpreter, and once one has been
+        // pre-initialized the call is a no-op rather than an error.
+        unsafe {
+            let mut preconfig: pyo3::ffi::PyPreConfig = std::mem::zeroed();
+            pyo3::ffi::PyPreConfig_InitPythonConfig(&mut preconfig);
+            preconfig.utf8_mode = 1;
+            let status = pyo3::ffi::Py_PreInitialize(&preconfig);
+            assert!(
+                pyo3::ffi::PyStatus_Exception(status) == 0,
+                "Python pre-initialization failed"
+            );
+        }
+    });
+
     pyo3::append_to_inittab!(collomatique);
     Python::initialize();
 }
