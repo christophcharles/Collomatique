@@ -1,0 +1,71 @@
+name: Flatpak
+
+on:
+  push:
+    branches: [staging]
+  workflow_dispatch:
+
+# The output directory pkgs/flatpak/build.sh reads. Outside the working tree,
+# which is what the script asks for.
+env:
+  COLLOMATIQUE_FLATPAK_OUT: /home/runner/flatpak-out
+
+jobs:
+  flatpak:
+    # The host's libraries do not matter here: the build happens inside the
+    # GNOME SDK sandbox. Only the flatpak tooling itself comes from the host.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install flatpak tooling
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y flatpak flatpak-builder appstream appstream-compose
+
+      # Ubuntu 24.04's AppArmor blocks unprivileged user namespaces, which is
+      # what bubblewrap -- flatpak-builder's sandbox -- is made of.
+      - name: Allow bubblewrap sandboxes
+        run: sudo sysctl kernel.apparmor_restrict_unprivileged_userns=0
+
+      - name: Add flathub
+        run: flatpak remote-add --user --if-not-exists flathub https://dl.flathub.org/repo/flathub.flatpakrepo
+
+      # flatpak-builder's downloads and per-module build cache. Restoring it is
+      # what spares rebuilding the CBC stack, tcl/tk and CPython on every run;
+      # restore-keys accepts a stale cache, since flatpak-builder checks module
+      # checksums itself and rebuilds only what changed.
+      - name: Restore flatpak-builder state
+        uses: actions/cache@v4
+        with:
+          path: /home/runner/flatpak-out/state
+          key: flatpak-state-${{ hashFiles('pkgs/flatpak/fr.collomatique.Collomatique.yml', 'pkgs/flatpak/cargo-sources.json') }}
+          restore-keys: flatpak-state-
+
+      # The manifest names the runtime, SDK and rust extension it needs, so let
+      # flatpak-builder read it rather than repeat versions here. A separate
+      # build directory keeps build.sh's own check on $out/build untouched.
+      - name: Install the GNOME SDK and rust extension
+        run: |
+          flatpak-builder --user --install-deps-from=flathub --install-deps-only \
+            --state-dir="$COLLOMATIQUE_FLATPAK_OUT/state" \
+            "$COLLOMATIQUE_FLATPAK_OUT/deps-build" \
+            pkgs/flatpak/fr.collomatique.Collomatique.yml
+
+      - name: Build the flatpak
+        run: pkgs/flatpak/build.sh
+
+      # For the artifact label below only. The bundle inside keeps the full
+      # collomatique-<version>.flatpak name build.sh gave it; this is the same
+      # awk line build.sh uses.
+      - name: Read the version
+        id: version
+        run: |
+          echo "version=$(awk '/^\[workspace\.package\]/ { in_section = 1 }
+              in_section && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: collomatique-${{ steps.version.outputs.version }}-flatpak
+          path: /home/runner/flatpak-out/collomatique-*.flatpak
+          retention-days: 14
