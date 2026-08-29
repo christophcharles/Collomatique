@@ -16,7 +16,7 @@ jobs:
     # GNOME SDK sandbox. Only the flatpak tooling itself comes from the host.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install flatpak tooling
         run: |
@@ -36,7 +36,7 @@ jobs:
       # restore-keys accepts a stale cache, since flatpak-builder checks module
       # checksums itself and rebuilds only what changed.
       - name: Restore flatpak-builder state
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: /home/runner/flatpak-out/state
           key: flatpak-state-${{ hashFiles('pkgs/flatpak/fr.collomatique.Collomatique.yml', 'pkgs/flatpak/cargo-sources.json') }}
@@ -64,7 +64,7 @@ jobs:
           echo "version=$(awk '/^\[workspace\.package\]/ { in_section = 1 }
               in_section && /^version = / { gsub(/"/, "", $3); print $3; exit }' Cargo.toml)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: collomatique-${{ steps.version.outputs.version }}-flatpak
           path: /home/runner/flatpak-out/collomatique-*.flatpak

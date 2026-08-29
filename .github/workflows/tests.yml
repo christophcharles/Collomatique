@@ -11,7 +11,7 @@ jobs:
     # Collomatique (see the build instructions in README.md).
     runs-on: ubuntu-26.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The package list from README.md, plus pkg-config, which nothing in that
       # list is guaranteed to pull in.
