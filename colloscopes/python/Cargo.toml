@@ -16,7 +16,7 @@ name = "collomatique-python"
 # both come from `collomatique_settings::current_version()`, which is the
 # workspace version, exact. The pre-commit hook derives this string from
 # Cargo.toml and refuses a commit where the two disagree.
-version = "0.1.0-alpha.2"
+version = "0.1.0-alpha.3"
 edition.workspace = true
 authors.workspace = true
 
