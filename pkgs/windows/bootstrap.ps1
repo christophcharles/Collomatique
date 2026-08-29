@@ -113,8 +113,9 @@ $BuildToolsOverride = @(
 
 $Packages = @(
     @{
-        Id     = 'Microsoft.VisualStudio.2022.BuildTools'
-        Name   = 'Visual Studio Build Tools 2022'
+        # The year left the id with Visual Studio 2026: this is the 18.x line.
+        Id     = 'Microsoft.VisualStudio.BuildTools'
+        Name   = 'Visual Studio Build Tools 2026'
         Extra  = @('--force', '--override', $BuildToolsOverride)
         Verify = { [bool](Get-MsvcPath) }
     }
@@ -263,7 +264,10 @@ function Get-MsvcPath {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path $vswhere)) { return $null }
 
-    $found = & $vswhere -products '*' `
+    # The version range names the Visual Studio major this build expects
+    # (VS2026 is 18), so a machine that only has an older one answers $null and
+    # gets the right Build Tools installed, instead of looking fine.
+    $found = & $vswhere -products '*' -version '[18.0,19.0)' `
         -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
         -property installationPath -latest 2>$null
 

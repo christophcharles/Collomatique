@@ -404,7 +404,7 @@ $UvArgs = @(
     '--build-dir', $GtkBuildRoot
     '--platform', 'x64'
     '--configuration', 'release'
-    '--vs-ver', 'vs2022'
+    '--vs-ver', 'vs2026'
     '--fast-build'
 ) + $GtkProjects
 
