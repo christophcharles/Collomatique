@@ -4,6 +4,9 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+  # Called by release.yml on a version tag. Same job, same steps: a release is
+  # built by the workflows that are proven on staging, not by a copy of them.
+  workflow_call:
 
 jobs:
   test:

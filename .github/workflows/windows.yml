@@ -4,6 +4,9 @@ on:
   push:
     branches: [staging]
   workflow_dispatch:
+  # Called by release.yml on a version tag. Same job, same steps: a release is
+  # built by the workflows that are proven on staging, not by a copy of them.
+  workflow_call:
 
 # vcpkg honors this instead of its default under LOCALAPPDATA, which gives the
 # binary cache a fixed path the cache steps below can name. CI-only: the VM just
