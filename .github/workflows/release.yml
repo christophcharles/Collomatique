@@ -64,10 +64,13 @@ jobs:
       # pointing at the newest finished version while alphas pile up after it.
       #
       # gh comes with the runner and authenticates with the built-in token;
-      # nothing is installed here.
+      # nothing is installed here. It works out which repository it is talking
+      # to from the git remote, and this job has no working tree -- it only
+      # downloads artifacts -- so it is named outright instead.
       - name: Create the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
         run: |
           args=("$GITHUB_REF_NAME" --generate-notes)
           case "$GITHUB_REF_NAME" in
