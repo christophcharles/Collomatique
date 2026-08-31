@@ -62,6 +62,21 @@ impl Entry {
             periods: self.periods.clone(),
         }
     }
+
+    /// Why the add button is insensitive, or `None` while it is usable
+    ///
+    /// A rule pairs two distinct slots of the subject, so one with fewer than
+    /// two has nothing to pair.
+    fn generate_tooltip_text(&self) -> Option<String> {
+        if self.slot_descriptions.len() >= 2 {
+            return None;
+        }
+
+        Some(format!(
+            "Ajouter au moins deux créneaux en \"{}\" pour créer un appariement",
+            self.subject_name,
+        ))
+    }
 }
 
 #[relm4::factory(pub)]
@@ -107,6 +122,8 @@ impl FactoryComponent for Entry {
                 },
                 #[watch]
                 set_sensitive: self.slot_descriptions.len() >= 2,
+                #[watch]
+                set_tooltip_text: self.generate_tooltip_text().as_deref(),
                 connect_clicked => EntryInput::AddSlotPairingClicked,
             }
         },
