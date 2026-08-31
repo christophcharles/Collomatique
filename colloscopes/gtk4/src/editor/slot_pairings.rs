@@ -151,6 +151,17 @@ pub struct SlotPairings {
 }
 
 impl SlotPairings {
+    /// Whether the panel has anything to show
+    ///
+    /// The same predicate the subject list is built on: a subject without
+    /// interrogations gets no section.
+    fn has_subjects_with_interrogations(&self) -> bool {
+        self.subjects
+            .ordered_subject_list
+            .iter()
+            .any(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
+    }
+
     /// This whole tab is grouped by subject, so a slot is named without its
     /// own — exactly [collomatique_ui_text::rendering::render_slot_in_subject].
     fn build_slot_description(&self, slot_id: collomatique_state_colloscopes::SlotId) -> String {
@@ -204,12 +215,22 @@ impl Component for SlotPairings {
                 set_orientation: gtk::Orientation::Vertical,
                 set_margin_all: 5,
                 set_spacing: 5,
+                gtk::Label {
+                    set_margin_top: 10,
+                    #[watch]
+                    set_visible: !model.has_subjects_with_interrogations(),
+                    set_halign: gtk::Align::Start,
+                    set_label: "<big><b>Aucune matière à afficher</b></big>",
+                    set_use_markup: true,
+                },
                 #[local_ref]
                 subjects_box -> gtk::Box {
                     set_hexpand: true,
                     set_orientation: gtk::Orientation::Vertical,
                     set_margin_top: 20,
                     set_spacing: 30,
+                    #[watch]
+                    set_visible: model.has_subjects_with_interrogations(),
                 },
             }
         }
