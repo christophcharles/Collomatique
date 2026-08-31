@@ -76,7 +76,7 @@ impl Component for Slots {
                 gtk::Label {
                     set_margin_top: 10,
                     #[watch]
-                    set_visible: model.slots.is_empty(),
+                    set_visible: !model.has_subjects_with_interrogations(),
                     set_halign: gtk::Align::Start,
                     set_label: "<big><b>Aucune matière à afficher</b></big>",
                     set_use_markup: true,
@@ -88,7 +88,7 @@ impl Component for Slots {
                     set_margin_top: 20,
                     set_spacing: 30,
                     #[watch]
-                    set_visible: !model.slots.is_empty(),
+                    set_visible: model.has_subjects_with_interrogations(),
                 },
             }
         }
@@ -290,6 +290,18 @@ impl Component for Slots {
 }
 
 impl Slots {
+    /// Whether the panel has anything to show
+    ///
+    /// The same predicate the subject list is built on: a subject without
+    /// interrogations gets no row, and one with interrogations gets one even
+    /// before it has a single slot.
+    fn has_subjects_with_interrogations(&self) -> bool {
+        self.subjects
+            .ordered_subject_list
+            .iter()
+            .any(|(_, subject)| subject.parameters.interrogation_parameters.is_some())
+    }
+
     fn filter_teachers(
         &self,
         subject_id: collomatique_state_colloscopes::SubjectId,

@@ -248,6 +248,10 @@ fn interpreter_beside_executable() -> Result<PathBuf, InstallCommandError> {
 /// `None` is rejected rather than passed on. That is what the module prints
 /// when `%APPDATA%` is unset, and `--prefix None` would quietly install into a
 /// folder of that name.
+///
+/// `PYTHONUTF8` because the answer is a path under `%APPDATA%` and so carries
+/// the user's profile name: read back as UTF-8 below, an accented name encoded
+/// in the code page would be rejected outright.
 #[cfg(windows)]
 fn ask_install_prefix(interpreter: &Path) -> Result<String, InstallCommandError> {
     use std::os::windows::process::CommandExt;
@@ -257,6 +261,7 @@ fn ask_install_prefix(interpreter: &Path) -> Result<String, InstallCommandError>
     let output = std::process::Command::new(interpreter)
         .arg("-c")
         .arg("import collomatique_site; print(collomatique_site.prefix())")
+        .env("PYTHONUTF8", "1")
         .creation_flags(CREATE_NO_WINDOW)
         .output()
         .map_err(|e| InstallCommandError::Prefix(e.to_string()))?;

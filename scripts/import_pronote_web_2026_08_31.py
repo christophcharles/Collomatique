@@ -5,7 +5,9 @@ import csv
 import sys
 
 def open_csv(file_path):
-    csvfile = open(file_path, newline='')
+    # `utf-8-sig` eats the byte order mark the Pronote export starts with, and
+    # reads like plain utf-8 when there is none.
+    csvfile = open(file_path, newline='', encoding='utf-8-sig')
     reader = csv.reader(csvfile, delimiter=';')
 
     output = []
@@ -70,7 +72,7 @@ def split_student_name(student_full_name):
     return firstname, surname
 
 def add_student_from_csv_line(doc, csv_line, subjects):
-    student_full_name = csv_line['\ufeff'][0]
+    student_full_name = csv_line['Élèves'][0]
     if not student_full_name:
         print("Bad line: {}".format(csv_line))
         return

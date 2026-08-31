@@ -204,7 +204,13 @@ impl SimpleComponent for Dialog {
                 let args: Vec<&str> = command.args().iter().map(String::as_str).collect();
                 // Python block-buffers whenever its output is not a terminal,
                 // which behind a pipe means pip says nothing until it is done.
-                let envs = [("PYTHONUNBUFFERED", OsStr::new("1"))];
+                // `PYTHONUTF8` is what `initialize` sets on the interpreters we
+                // start ourselves; this one is pip's, and its output is read
+                // back as UTF-8 all the same.
+                let envs = [
+                    ("PYTHONUNBUFFERED", OsStr::new("1")),
+                    ("PYTHONUTF8", OsStr::new("1")),
+                ];
 
                 // The same split, for the same reasons, as `Worker::spawn` in
                 // generic/subprocesses/src/worker.rs: a pty on unix, plain pipes on
