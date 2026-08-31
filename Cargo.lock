@@ -332,7 +332,7 @@ dependencies = [
 
 [[package]]
 name = "collo-cbc"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "cc",
  "pkg-config",
@@ -340,7 +340,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-constraints-colloscopes"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
@@ -353,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-constraints-rooms"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler",
@@ -364,7 +364,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-greedy-groups"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-state-colloscopes",
  "collomatique-storage",
@@ -373,7 +373,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-gtk4"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -412,7 +412,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ilp"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "coin_cbc",
  "collo-cbc",
@@ -429,7 +429,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ilp-modeler"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-ilp",
  "collomatique-ilp-modeler-derive",
@@ -440,7 +440,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ilp-modeler-derive"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -449,14 +449,14 @@ dependencies = [
 
 [[package]]
 name = "collomatique-mps"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-ilp",
 ]
 
 [[package]]
 name = "collomatique-ops"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-state",
@@ -471,7 +471,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-property-tests"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-constraints-colloscopes",
  "collomatique-greedy-groups",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python"
-version = "0.1.0-alpha.3"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-constraints-colloscopes",
@@ -511,7 +511,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-python-runner"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "anyhow",
  "collomatique-python",
@@ -521,7 +521,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rooms"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "anyhow",
  "chrono",
@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rooms-model"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-time",
  "non-empty-string",
@@ -547,7 +547,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rpc"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-ilp",
  "collomatique-time",
@@ -560,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rpc-colloscopes"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-rpc",
  "collomatique-state-colloscopes",
@@ -570,7 +570,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rpc-engine"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "anyhow",
  "collomatique-ilp",
@@ -585,7 +585,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-rpc-engine-colloscopes"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "anyhow",
  "collomatique-python-runner",
@@ -597,7 +597,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-settings"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "directories",
  "fs4",
@@ -609,7 +609,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-state"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "collomatique-state-derive",
  "thiserror 1.0.69",
@@ -617,7 +617,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-state-colloscopes"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-state",
@@ -630,7 +630,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-state-derive"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -639,7 +639,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-storage"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-settings",
@@ -657,7 +657,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-strategies"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "async-trait",
  "collomatique-ilp",
@@ -674,7 +674,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-subprocesses"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "async-trait",
  "collomatique-ilp",
@@ -692,7 +692,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-testgen-colloscopes"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-state",
@@ -705,7 +705,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-time"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "serde",
@@ -715,7 +715,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-ui-text"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-constraints-colloscopes",
@@ -730,7 +730,7 @@ dependencies = [
 
 [[package]]
 name = "collomatique-xlsx"
-version = "0.1.0-alpha.3.99"
+version = "0.1.0-alpha.4"
 dependencies = [
  "chrono",
  "collomatique-state-colloscopes",
