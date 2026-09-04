@@ -6,7 +6,7 @@ use collomatique_ilp_modeler::bundle::ReifyError;
 use collomatique_ilp_modeler::{IntConstraintBundle, Var as ModelerVar};
 use collomatique_state_colloscopes::group_lists::GroupList;
 use collomatique_state_colloscopes::ids::WeekPatternId;
-use collomatique_state_colloscopes::ids::{GroupListId, PeriodId, StudentId, SubjectId};
+use collomatique_state_colloscopes::ids::{GroupListId, PeriodId, SlotId, StudentId, SubjectId};
 use collomatique_state_colloscopes::slots::Slot;
 use collomatique_state_colloscopes::subjects::Subject;
 use collomatique_time::SlotWithDuration;
@@ -215,6 +215,72 @@ pub(crate) fn weeks_for_week_pattern(
         }
     }
     output
+}
+
+/// One interrogated slot, with everything the incompat scans need in order to
+/// decide whether a student could be sitting at it.
+pub(crate) type InterrogSlot<'a> = (SlotId, SubjectId, &'a Slot, &'a Subject, SlotWithDuration);
+
+/// Every slot of every subject that runs interrogations, with its time window.
+pub(crate) fn all_interrog_slots(env: &VarEnv) -> Vec<InterrogSlot<'_>> {
+    let mut result = Vec::new();
+    for subject_id in env.slots.subjects_with_slots() {
+        let Some(subject) = env.subjects.find_subject(subject_id) else {
+            continue;
+        };
+        let Some(params) = subject.parameters.interrogation_parameters.as_ref() else {
+            continue;
+        };
+        for (slot_id, slot_data) in env
+            .slots
+            .slots_for_subject(subject_id)
+            .into_iter()
+            .flatten()
+        {
+            let Some(swd) = SlotWithDuration::new(slot_data.start_time.clone(), params.duration)
+            else {
+                continue;
+            };
+            result.push((*slot_id, subject_id, slot_data, subject, swd));
+        }
+    }
+    result
+}
+
+/// The slots a student could be sitting at while `incompat_swd` runs, on `week`.
+///
+/// A slot makes the list only if it can carry an interrogation on that week at
+/// all — the three conditions `weeks_for_slot` enumerates over — because both
+/// callers name that slot's `StudentAtInterrogation` extra and the choke point
+/// decides whether it exists.
+pub(crate) fn overlapping_interrog_slots(
+    env: &VarEnv,
+    all_interrog_slots: &[InterrogSlot<'_>],
+    incompat_swd: &SlotWithDuration,
+    student: StudentId,
+    week: GlobalWeek,
+    period_id: PeriodId,
+) -> Vec<SlotId> {
+    all_interrog_slots
+        .iter()
+        .filter(|(_, subj_id, slot_data, subject, swd)| {
+            swd.overlaps_with(incompat_swd)
+                && !subject.excluded_periods.contains(&period_id)
+                && is_student_enrolled(env, student, *subj_id, week)
+                && {
+                    // Both patterns, exactly as `weeks_for_slot` ANDs them: a
+                    // slot with no variable on this week must not be referenced
+                    // here either.
+                    let slot_pattern =
+                        crate::tools::extract_week_pattern(env, slot_data.week_pattern);
+                    let subject_pattern =
+                        crate::tools::extract_week_pattern(env, subject.week_pattern);
+                    slot_pattern.get(week.0).copied().unwrap_or(false)
+                        && subject_pattern.get(week.0).copied().unwrap_or(false)
+                }
+        })
+        .map(|(slot_id, ..)| *slot_id)
+        .collect()
 }
 
 // ---- Reified variable builders (lazy registration) ----
@@ -537,31 +603,7 @@ fn build_student_has_interrogation_in(env: &VarEnv) -> MyBundle {
 fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
     let mut bundle = MyBundle::new();
 
-    let all_interrog_slots: Vec<_> = {
-        let mut result = Vec::new();
-        for subject_id in env.slots.subjects_with_slots() {
-            let Some(subject) = env.subjects.find_subject(subject_id) else {
-                continue;
-            };
-            let Some(params) = subject.parameters.interrogation_parameters.as_ref() else {
-                continue;
-            };
-            for (slot_id, slot_data) in env
-                .slots
-                .slots_for_subject(subject_id)
-                .into_iter()
-                .flatten()
-            {
-                let Some(swd) =
-                    SlotWithDuration::new(slot_data.start_time.clone(), params.duration)
-                else {
-                    continue;
-                };
-                result.push((*slot_id, subject_id, slot_data, subject, swd));
-            }
-        }
-        result
-    };
+    let all_interrog_slots = all_interrog_slots(env);
 
     for (incompat_id, incompat) in env.incompats.incompat_map.iter() {
         let Some(subject) = env.subjects.find_subject(incompat.subject_id) else {
@@ -585,30 +627,14 @@ fn build_student_not_at_incompat_slot(env: &VarEnv) -> MyBundle {
                 };
 
                 for &student in enrolled_students {
-                    let overlapping: Vec<_> = all_interrog_slots
-                        .iter()
-                        .filter(|(_, subj_id, slot_data, slot_subject, swd)| {
-                            swd.overlaps_with(incompat_swd)
-                                && !slot_subject.excluded_periods.contains(&period_id)
-                                && is_student_enrolled(env, student, *subj_id, week)
-                                && {
-                                    // Both patterns, exactly as `weeks_for_slot` ANDs them:
-                                    // a slot with no variable on this week must not be
-                                    // referenced here either.
-                                    let slot_pattern = crate::tools::extract_week_pattern(
-                                        env,
-                                        slot_data.week_pattern,
-                                    );
-                                    let subject_pattern = crate::tools::extract_week_pattern(
-                                        env,
-                                        slot_subject.week_pattern,
-                                    );
-                                    slot_pattern.get(week.0).copied().unwrap_or(false)
-                                        && subject_pattern.get(week.0).copied().unwrap_or(false)
-                                }
-                        })
-                        .map(|(slot_id, ..)| *slot_id)
-                        .collect();
+                    let overlapping = overlapping_interrog_slots(
+                        env,
+                        &all_interrog_slots,
+                        incompat_swd,
+                        student,
+                        week,
+                        period_id,
+                    );
 
                     let var = ExtraVarName::StudentNotAtIncompatSlot {
                         student,
