@@ -1443,14 +1443,7 @@ impl Colloscope {
         self.colloscope_display
             .sender()
             .send(colloscope_display::DisplayInput::Update(
-                self.params.periods.clone(),
-                self.params.weeks.clone(),
-                self.params.subjects.clone(),
-                self.params.slots.clone(),
-                self.params.teachers.clone(),
-                self.params.students.clone(),
-                self.params.group_lists.clone(),
-                self.params.week_patterns.clone(),
+                self.params.clone(),
                 self.colloscope.clone(),
             ))
             .unwrap();
