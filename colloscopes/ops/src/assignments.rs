@@ -259,6 +259,14 @@ impl AssignmentsUpdateOp {
                     .map(|(subject_id, students)| (subject_id, students.clone()))
                     .collect();
 
+                let subjects = session
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .subjects
+                    .ordered_subject_list
+                    .clone();
+
                 let student_map = session
                     .get_data()
                     .get_inner_data()
@@ -267,20 +275,32 @@ impl AssignmentsUpdateOp {
                     .student_map
                     .clone();
 
-                // One SetRow per current-period subject that also has a
-                // previous-period row: non-excluded students copy the previous
-                // period's membership; students excluded from either period keep
-                // their current status. Same observable result as the old
-                // per-(student, subject) loop, one history entry per subject.
+                // One SetRow per subject running on both periods: non-excluded
+                // students copy the previous period's membership; students
+                // excluded from either period keep their current status. The
+                // rows themselves decide nothing — the table is sparse, so a
+                // period with no enrolments yet has no rows at all; whether a
+                // subject runs on a period is `excluded_periods`' business.
                 //
                 // The reads above are snapshots taken once, and stay right:
                 // every iteration writes a different subject's row, so none of
                 // them reads what an earlier one wrote.
-                for (subject_id, current_students) in &current_period_assignments {
-                    let Some(previous_students) = previous_period_assignments.get(subject_id)
-                    else {
+                for (subject_id, subject) in subjects.iter() {
+                    let subject_id = &subject_id;
+                    if subject.excluded_periods.contains(period_id)
+                        || subject.excluded_periods.contains(&previous_period_id)
+                    {
                         continue;
-                    };
+                    }
+
+                    let current_students = current_period_assignments
+                        .get(subject_id)
+                        .cloned()
+                        .unwrap_or_default();
+                    let previous_students = previous_period_assignments
+                        .get(subject_id)
+                        .cloned()
+                        .unwrap_or_default();
 
                     let mut new_row = std::collections::BTreeSet::new();
                     for (student_id, student) in student_map.iter() {
@@ -297,10 +317,10 @@ impl AssignmentsUpdateOp {
                     }
 
                     // Nothing here can be rejected and nothing can cascade: the
-                    // row is keyed on a subject that already has a row on this
-                    // period — so it is live and it runs here — and every
-                    // student it names is live and, by the exclusion test
-                    // above, present for the period.
+                    // row is keyed on a subject the exclusion check above just
+                    // proved runs on this period, and every student it names is
+                    // live and, by the exclusion test above, present for the
+                    // period.
                     session
                         .apply(
                             collomatique_state_colloscopes::Op::Assignment(
@@ -1013,6 +1033,95 @@ mod tests {
         );
     }
 
+    /// The reported bug: duplicating into a period with no enrolments yet —
+    /// the state a fresh period or a newly added subject is in — copied
+    /// nothing. The table is sparse, a row with nobody in it is absent, and
+    /// the composite iterated the *target* period's rows to decide what to
+    /// copy; an absent row was skipped, so the one situation the button
+    /// exists for was the one it did nothing in.
+    #[test]
+    fn duplicate_previous_period_fills_a_row_the_target_period_does_not_have_yet() {
+        let mut base = hogwarts();
+        let arithmancie = subject_by_name(base.get_data(), "Arithmancie");
+        let first_period = period_at(base.get_data(), 0);
+        let second_period = period_at(base.get_data(), 1);
+
+        // Nobody is enrolled in Arithmancie on the second period: no row.
+        seed(
+            &mut base,
+            Op::Assignment(AssignmentOp::SetRow(
+                second_period,
+                arithmancie,
+                BTreeSet::new(),
+            )),
+        );
+        assert_eq!(
+            row(base.get_data(), second_period, arithmancie),
+            None,
+            "an emptied row is stored as no row at all"
+        );
+
+        let op = AssignmentsUpdateOp::DuplicatePreviousPeriod(second_period);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        let expected_row = live_row(base.get_data(), first_period, arithmancie);
+        assert_eq!(
+            state.get_data(),
+            expected_document(
+                &base,
+                vec![Op::Assignment(AssignmentOp::SetRow(
+                    second_period,
+                    arithmancie,
+                    expected_row
+                ))],
+            )
+            .get_data(),
+        );
+    }
+
+    /// The mirror image: duplication makes the target period match the
+    /// previous one, so a subject with nobody enrolled on the previous period
+    /// gets its target row cleared, not left as it was.
+    #[test]
+    fn duplicate_previous_period_clears_a_row_the_previous_period_does_not_have() {
+        let mut base = hogwarts();
+        let arithmancie = subject_by_name(base.get_data(), "Arithmancie");
+        let first_period = period_at(base.get_data(), 0);
+        let second_period = period_at(base.get_data(), 1);
+
+        // Nobody is enrolled in Arithmancie on the first period: no row.
+        seed(
+            &mut base,
+            Op::Assignment(AssignmentOp::SetRow(
+                first_period,
+                arithmancie,
+                BTreeSet::new(),
+            )),
+        );
+        assert!(
+            row(base.get_data(), second_period, arithmancie).is_some(),
+            "the target period should still have a row to clear"
+        );
+
+        let op = AssignmentsUpdateOp::DuplicatePreviousPeriod(second_period);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        assert_eq!(
+            state.get_data(),
+            expected_document(
+                &base,
+                vec![Op::Assignment(AssignmentOp::SetRow(
+                    second_period,
+                    arithmancie,
+                    BTreeSet::new()
+                ))],
+            )
+            .get_data(),
+        );
+    }
+
     /// The exclusion rule: a student either period excludes keeps whatever
     /// status they have instead of copying the previous period's. Copying
     /// blindly would put Ginny — who is not there for the second period — back
@@ -1069,9 +1178,8 @@ mod tests {
         );
     }
 
-    /// The other half of the loop: a subject with a previous row but *no* row
-    /// on the target period is skipped. It has to be — a subject has no row
-    /// there precisely when it does not run there, and writing one would break
+    /// The other half of the loop: a subject excluded from the target period
+    /// is skipped. It has to be — writing a row there would break
     /// `AssignmentForSubjectNotRunningOnPeriod`. Here too the cascade is no
     /// safety net: the offending row is the one the op just wrote, so the map
     /// answers `None` and the composite dies on its `.expect` instead.
@@ -1093,6 +1201,29 @@ mod tests {
 
         assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
         assert_eq!(row(state.get_data(), second_period, quidditch), None);
+        assert_eq!(state.get_data(), base.get_data());
+    }
+
+    /// The other skip: a subject excluded from the *previous* period has
+    /// nothing to copy from, so its target row stays as it is instead of
+    /// being cleared.
+    #[test]
+    fn duplicate_previous_period_leaves_alone_a_subject_excluded_from_the_previous_period() {
+        let mut base = hogwarts();
+        let quidditch = subject_by_name(base.get_data(), "Entrainement de Quidditch");
+        let first_period = period_at(base.get_data(), 0);
+        let second_period = period_at(base.get_data(), 1);
+        exclude_subject(&mut base, quidditch, first_period);
+
+        assert!(
+            row(base.get_data(), second_period, quidditch).is_some(),
+            "the target period should still run Quidditch, row intact"
+        );
+
+        let op = AssignmentsUpdateOp::DuplicatePreviousPeriod(second_period);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
         assert_eq!(state.get_data(), base.get_data());
     }
 
