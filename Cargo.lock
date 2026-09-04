@@ -467,6 +467,7 @@ dependencies = [
  "collomatique-time",
  "collomatique-ui-text",
  "non-empty-string",
+ "rand 0.9.5",
  "serde",
  "thiserror 1.0.69",
 ]
