@@ -21,7 +21,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             .flatten()
         {
             let slot = *slot_id;
-            for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
+            for week in weeks_for_slot(env, slot_data, subject) {
                 let Some(group_list) = group_list_for_interrogation(env, subject_id, week) else {
                     continue;
                 };

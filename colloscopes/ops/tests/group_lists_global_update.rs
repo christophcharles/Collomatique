@@ -402,6 +402,7 @@ fn shrinking_trims_out_of_range_interrogation_groups() {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),

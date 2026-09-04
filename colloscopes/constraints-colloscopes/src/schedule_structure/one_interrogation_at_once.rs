@@ -28,13 +28,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 else {
                     continue;
                 };
-                result.push((
-                    *slot_id,
-                    subject_id,
-                    slot_data,
-                    &subject.excluded_periods,
-                    swd,
-                ));
+                result.push((*slot_id, subject_id, slot_data, subject, swd));
             }
         }
         result
@@ -42,17 +36,17 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
 
     for i in 0..slots_with_duration.len() {
         for j in (i + 1)..slots_with_duration.len() {
-            let (slot_a, subject_a, slot_data_a, excluded_a, swd_a) = &slots_with_duration[i];
-            let (slot_b, subject_b, slot_data_b, excluded_b, swd_b) = &slots_with_duration[j];
+            let (slot_a, subject_a, slot_data_a, subject_desc_a, swd_a) = &slots_with_duration[i];
+            let (slot_b, subject_b, slot_data_b, subject_desc_b, swd_b) = &slots_with_duration[j];
 
             if !swd_a.overlaps_with(swd_b) {
                 continue;
             }
 
-            let weeks_a: BTreeSet<_> = weeks_for_slot(env, slot_data_a, excluded_a)
+            let weeks_a: BTreeSet<_> = weeks_for_slot(env, slot_data_a, subject_desc_a)
                 .into_iter()
                 .collect();
-            let weeks_b: BTreeSet<_> = weeks_for_slot(env, slot_data_b, excluded_b)
+            let weeks_b: BTreeSet<_> = weeks_for_slot(env, slot_data_b, subject_desc_b)
                 .into_iter()
                 .collect();
 

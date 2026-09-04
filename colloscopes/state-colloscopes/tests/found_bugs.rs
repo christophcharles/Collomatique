@@ -219,6 +219,7 @@ fn update_shrinking_group_names_below_assigned_group_is_rejected() {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         "Add subject".into(),
@@ -449,6 +450,7 @@ fn assign_to_subject_with_dangling_group_list_id_errors() {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         "Add subject".into(),
@@ -519,6 +521,7 @@ fn slot_update_changing_subject_is_rejected() {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
 
     let Ok(Some(NewId::SubjectId(subject_a))) = app_state.apply(

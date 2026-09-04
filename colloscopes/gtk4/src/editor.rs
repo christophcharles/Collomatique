@@ -173,9 +173,9 @@ enum ToastInfo {
 #[repr(usize)]
 enum PanelNumbers {
     GeneralPlanning = 0,
-    Subjects = 1,
-    Teachers = 2,
-    WeekPatterns = 3,
+    WeekPatterns = 1,
+    Subjects = 2,
+    Teachers = 3,
     Slots = 4,
     SlotPairings = 5,
     Pairings = 6,
@@ -191,12 +191,17 @@ enum PanelNumbers {
 }
 
 impl PanelNumbers {
+    /// The panels in display order.
+    ///
+    /// A variant's discriminant is its index here: [`Self::panel_name`] is read
+    /// back through `pages_names[panel as usize]`, so the two orders must move
+    /// together.
     fn iter() -> impl Iterator<Item = PanelNumbers> {
         [
             PanelNumbers::GeneralPlanning,
+            PanelNumbers::WeekPatterns,
             PanelNumbers::Subjects,
             PanelNumbers::Teachers,
-            PanelNumbers::WeekPatterns,
             PanelNumbers::Slots,
             PanelNumbers::SlotPairings,
             PanelNumbers::Pairings,
@@ -383,6 +388,12 @@ impl EditorPanel {
             .send(subjects::SubjectsInput::Update(
                 self.data.get_data().get_inner_data().params.periods.clone(),
                 self.data.get_data().get_inner_data().params.weeks.clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
+                    .week_patterns
+                    .clone(),
                 self.data
                     .get_data()
                     .get_inner_data()

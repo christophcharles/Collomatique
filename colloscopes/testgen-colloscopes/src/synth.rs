@@ -159,7 +159,12 @@ pub fn interrogation_parameters(rng: &mut ChaCha8Rng) -> SubjectInterrogationPar
     }
 }
 
-pub fn subject(rng: &mut ChaCha8Rng, period_ids: &[PeriodId], with_interrogation: bool) -> Subject {
+pub fn subject(
+    rng: &mut ChaCha8Rng,
+    period_ids: &[PeriodId],
+    week_pattern_ids: &[WeekPatternId],
+    with_interrogation: bool,
+) -> Subject {
     let excluded_periods = if period_ids.len() >= 2 && rng.random_bool(0.15) {
         BTreeSet::from([pick(rng, period_ids)])
     } else {
@@ -175,6 +180,11 @@ pub fn subject(rng: &mut ChaCha8Rng, period_ids: &[PeriodId], with_interrogation
             },
         },
         excluded_periods,
+        week_pattern: if !week_pattern_ids.is_empty() && rng.random_bool(0.2) {
+            Some(pick(rng, week_pattern_ids))
+        } else {
+            None
+        },
     }
 }
 

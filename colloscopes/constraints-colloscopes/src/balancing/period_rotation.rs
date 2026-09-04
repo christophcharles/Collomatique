@@ -80,8 +80,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let slot_week_pairs =
-            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let slot_week_pairs = slot_week_pairs_for_subject(env, *subject_id, subject);
 
         let windows = period_interrogation_windows(env, *subject_id);
         if windows.is_empty() {

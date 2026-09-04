@@ -86,6 +86,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),
@@ -249,6 +250,7 @@ fn removing_interrogations_from_zero_slot_subject_does_not_panic() {
             Subject {
                 parameters: lone_interrogation_parameters("Math"),
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),
@@ -262,9 +264,11 @@ fn removing_interrogations_from_zero_slot_subject_does_not_panic() {
     let mut new_params = lone_interrogation_parameters("Math");
     new_params.interrogation_parameters = None;
 
-    UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(subject_id, new_params))
-        .dry_apply(&app_state)
-        .expect("removing interrogations from a zero-slot subject must succeed, not panic");
+    UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(
+        subject_id, new_params, None,
+    ))
+    .dry_apply(&app_state)
+    .expect("removing interrogations from a zero-slot subject must succeed, not panic");
 }
 
 /// Excluding a zero-slot interrogation subject from a period must not panic.
@@ -284,6 +288,7 @@ fn excluding_zero_slot_subject_from_period_does_not_panic() {
             Subject {
                 parameters: lone_interrogation_parameters("Math"),
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),

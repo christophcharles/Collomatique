@@ -32,8 +32,8 @@ use collomatique_state::{FixOp, Fixable, InMemoryData};
 
 use super::Fix;
 use super::innocent_tests::{
-    automatic_group_list, build_valid_document, make_slot, pairing_rule, plain_student,
-    plain_subject, prefilled_group_list, slot_pairing_rule,
+    automatic_group_list, build_valid_document, dress_subject_in_pattern, make_slot, pairing_rule,
+    plain_student, plain_subject, prefilled_group_list, slot_pairing_rule,
 };
 use crate::Data;
 use crate::incompats::Incompatibility;
@@ -646,6 +646,29 @@ fn an_incompatibility_wearing_a_dying_pattern_answers_clear_incompat_week_patter
             rebuilt: rebuilt.clone(),
         },
         AnnotatedIncompatOp::Update(doc.incompat, rebuilt).into(),
+    );
+}
+
+#[test]
+fn a_subject_wearing_a_dying_pattern_answers_clear_subject_week_pattern() {
+    let (mut data, doc) = build_valid_document();
+    // No fixture subject wears a pattern, so `Sport` is dressed in the live one
+    // first; the repair is exactly that field going back to `None`, its excluded
+    // period untouched.
+    dress_subject_in_pattern(&mut data, doc.excluded_subject, doc.week_pattern);
+    let rebuilt = plain_subject("Sport", BTreeSet::from([doc.other_period]));
+
+    assert_fix(
+        &data,
+        dangling(Reference::WeekPattern {
+            target: doc.week_pattern,
+            site: WeekPatternRefSite::SubjectWeekPattern(doc.excluded_subject),
+        }),
+        Fix::ClearSubjectWeekPattern {
+            subject: doc.excluded_subject,
+            rebuilt: rebuilt.clone(),
+        },
+        AnnotatedSubjectOp::Update(doc.excluded_subject, rebuilt).into(),
     );
 }
 

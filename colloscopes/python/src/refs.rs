@@ -376,6 +376,11 @@ single_site! {
 }
 
 single_site! {
+    /// The week pattern a subject follows
+    SubjectWeekPattern, one subject: Subject;
+}
+
+single_site! {
     /// The subject an incompatibility blocks
     IncompatSubject, one incompat: Incompat;
 }
@@ -746,6 +751,14 @@ pub(crate) fn week_pattern_sites(
                 }
                 .init(),
             ),
+            WeekPatternRefSite::SubjectWeekPattern(subject) => build(
+                py,
+                SubjectWeekPattern {
+                    doc: doc.clone_ref(py),
+                    subject: *subject,
+                }
+                .init(),
+            ),
         })
         .collect()
 }
@@ -915,6 +928,7 @@ pub fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<SlotSubject>()?;
     m.add_class::<SlotTeacher>()?;
     m.add_class::<SlotWeekPattern>()?;
+    m.add_class::<SubjectWeekPattern>()?;
     m.add_class::<IncompatSubject>()?;
     m.add_class::<IncompatWeekPattern>()?;
     m.add_class::<PairingRuleAntecedent>()?;

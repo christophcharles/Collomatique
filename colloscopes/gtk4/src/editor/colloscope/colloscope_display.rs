@@ -9,14 +9,7 @@ use std::collections::BTreeMap;
 #[derive(Debug)]
 pub enum DisplayInput {
     Update(
-        collomatique_state_colloscopes::periods::Periods,
-        collomatique_state_colloscopes::weeks::Weeks,
-        collomatique_state_colloscopes::subjects::Subjects,
-        collomatique_state_colloscopes::slots::Slots,
-        collomatique_state_colloscopes::teachers::Teachers,
-        collomatique_state_colloscopes::students::Students,
-        collomatique_state_colloscopes::group_lists::GroupLists,
-        collomatique_state_colloscopes::week_patterns::WeekPatterns,
+        collomatique_state_colloscopes::colloscope_params::Parameters,
         collomatique_state_colloscopes::colloscopes::Colloscope,
     ),
 
@@ -43,14 +36,7 @@ enum DisplayIssue {
 }
 
 pub struct Display {
-    periods: collomatique_state_colloscopes::periods::Periods,
-    weeks: collomatique_state_colloscopes::weeks::Weeks,
-    subjects: collomatique_state_colloscopes::subjects::Subjects,
-    slots: collomatique_state_colloscopes::slots::Slots,
-    teachers: collomatique_state_colloscopes::teachers::Teachers,
-    students: collomatique_state_colloscopes::students::Students,
-    group_lists: collomatique_state_colloscopes::group_lists::GroupLists,
-    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    params: collomatique_state_colloscopes::colloscope_params::Parameters,
     colloscope: collomatique_state_colloscopes::colloscopes::Colloscope,
 
     issue: Option<DisplayIssue>,
@@ -130,14 +116,7 @@ impl Component for Display {
         let column_view = DynamicColumnView::new();
 
         let model = Display {
-            periods: collomatique_state_colloscopes::periods::Periods::default(),
-            weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
-            subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
-            slots: collomatique_state_colloscopes::slots::Slots::default(),
-            teachers: collomatique_state_colloscopes::teachers::Teachers::default(),
-            students: collomatique_state_colloscopes::students::Students::default(),
-            group_lists: collomatique_state_colloscopes::group_lists::GroupLists::default(),
-            week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
+            params: collomatique_state_colloscopes::colloscope_params::Parameters::default(),
             colloscope: collomatique_state_colloscopes::colloscopes::Colloscope::default(),
             issue: None,
             column_view,
@@ -152,25 +131,8 @@ impl Component for Display {
 
     fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match message {
-            DisplayInput::Update(
-                periods,
-                weeks,
-                subjects,
-                slots,
-                teachers,
-                students,
-                group_lists,
-                week_patterns,
-                colloscope,
-            ) => {
-                self.periods = periods;
-                self.weeks = weeks;
-                self.subjects = subjects;
-                self.slots = slots;
-                self.teachers = teachers;
-                self.students = students;
-                self.group_lists = group_lists;
-                self.week_patterns = week_patterns;
+            DisplayInput::Update(params, colloscope) => {
+                self.params = params;
                 self.colloscope = colloscope;
 
                 self.update_display_issue();
@@ -189,13 +151,13 @@ impl Component for Display {
 
 impl Display {
     fn update_display_issue(&mut self) {
-        self.issue = if self.periods.is_empty() {
+        self.issue = if self.params.periods.is_empty() {
             Some(DisplayIssue::NoPeriods)
-        } else if self.weeks.count_weeks() == 0 {
+        } else if self.params.count_weeks() == 0 {
             Some(DisplayIssue::NoWeeks)
-        } else if self.subjects.ordered_subject_list.is_empty() {
+        } else if self.params.subjects.ordered_subject_list.is_empty() {
             Some(DisplayIssue::NoSubjects)
-        } else if self.slots.all_slots().next().is_none() {
+        } else if self.params.slots.all_slots().next().is_none() {
             Some(DisplayIssue::NoSlots)
         } else {
             None
@@ -213,18 +175,23 @@ impl Display {
 
         let mut period_first_week = 0usize;
         let period_specs: Vec<_> = self
+            .params
             .periods
             .period_ids()
             .map(|period_id| {
                 (
                     period_id,
-                    self.weeks.week_count_for_period(period_id).unwrap_or(0),
+                    self.params
+                        .weeks
+                        .week_count_for_period(period_id)
+                        .unwrap_or(0),
                 )
             })
             .collect();
         for (period_id, period_len) in period_specs {
             for week_in_period in 0..period_len {
                 let week_id = self
+                    .params
                     .weeks
                     .week_id_at(period_id, week_in_period)
                     .expect("position within the period is valid");
@@ -242,57 +209,44 @@ impl Display {
     fn update_view_wrapper(&mut self, sender: ComponentSender<Self>) {
         let mut new_items = vec![];
 
-        for (subject_id, subject) in self.subjects.ordered_subject_list.iter() {
+        for (subject_id, subject) in self.params.subjects.ordered_subject_list.iter() {
             let subject_id = &subject_id;
-            let Some(subject_slots) = self.slots.slots_for_subject(*subject_id) else {
+            let Some(subject_slots) = self.params.slots.slots_for_subject(*subject_id) else {
                 continue;
             };
 
             for (slot_id, slot) in subject_slots {
                 let mut period_map = BTreeMap::new();
 
-                for period_id in self.periods.period_ids() {
-                    let period_len = self.weeks.week_count_for_period(period_id).unwrap_or(0);
-
-                    // The slot runs in this period iff its subject does — not
-                    // excluded and has interrogations. Otherwise every cell is
-                    // impossible (the old dense skeleton had no slot entry here).
-                    let subject_runs = !subject.excluded_periods.contains(&period_id)
-                        && subject.parameters.interrogation_parameters.is_some();
-                    if !subject_runs {
-                        period_map.insert(
-                            period_id,
-                            SlotPeriodData {
-                                has_group_list: false,
-                                slots: vec![None; period_len],
-                            },
-                        );
-                        continue;
-                    }
+                for period_id in self.params.periods.period_ids() {
+                    let period_len = self
+                        .params
+                        .weeks
+                        .week_count_for_period(period_id)
+                        .unwrap_or(0);
 
                     let group_list_id = self
+                        .params
                         .group_lists
                         .subjects_associations
                         .get(&(period_id, *subject_id));
 
                     let group_list = match group_list_id {
-                        Some(id) => self.group_lists.group_list_map.get(id),
+                        Some(id) => self.params.group_lists.group_list_map.get(id),
                         None => None,
                     };
 
                     let slots = (0..period_len)
                         .map(|week_in_period| {
                             let week_id = self
+                                .params
                                 .weeks
                                 .week_id_at(period_id, week_in_period)
                                 .expect("position within the period is valid");
-                            // Impossible week (pattern-excluded or no interrogations)
-                            // → no cell, matching the old dense `None`.
-                            if !self.week_patterns.is_week_active(
-                                &self.weeks,
-                                week_id,
-                                slot.week_pattern,
-                            ) {
+                            // An impossible cell carries no button, matching the
+                            // old dense `None`. The rule is the state layer's, so
+                            // the grid cannot drift from the parent's click guard.
+                            if !self.params.is_interrogation_possible(*slot_id, week_id) {
                                 return None;
                             }
                             let assigned = self
@@ -305,7 +259,7 @@ impl Display {
                                     .iter()
                                     .map(|num| match group_list_id {
                                         Some(list_id) => collomatique_ui_text::rendering::render_group(
-                                            &self.group_lists,
+                                            &self.params.group_lists,
                                             *list_id,
                                             *num,
                                         )
@@ -333,6 +287,7 @@ impl Display {
                 }
 
                 let teacher_desc = &self
+                    .params
                     .teachers
                     .teacher_map
                     .get(&slot.teacher_id)

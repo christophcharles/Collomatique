@@ -32,8 +32,7 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
         let count_max = *interrogation_count_in_year.end();
         let min_sep = *minimum_week_separation as usize;
 
-        let slot_week_pairs =
-            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let slot_week_pairs = slot_week_pairs_for_subject(env, *subject_id, subject);
         let enrolled = enrolled_students_for_subject(env, *subject_id);
 
         for &student in &enrolled {

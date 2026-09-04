@@ -111,11 +111,8 @@ pub(super) fn year_interrogation_count(env: &VarEnv, subject_id: SubjectId) -> O
             periodicity_in_weeks,
         } => {
             let subject = env.subjects.find_subject(subject_id)?;
-            let slot_week_pairs = crate::helpers::slot_week_pairs_for_subject(
-                env,
-                subject_id,
-                &subject.excluded_periods,
-            );
+            let slot_week_pairs =
+                crate::helpers::slot_week_pairs_for_subject(env, subject_id, subject);
             let active_weeks = subject_active_weeks(&slot_week_pairs);
             let n = active_weeks.len() as u32;
             let p = periodicity_in_weeks.get();
@@ -125,11 +122,8 @@ pub(super) fn year_interrogation_count(env: &VarEnv, subject_id: SubjectId) -> O
             weeks_per_block, ..
         } => {
             let subject = env.subjects.find_subject(subject_id)?;
-            let slot_week_pairs = crate::helpers::slot_week_pairs_for_subject(
-                env,
-                subject_id,
-                &subject.excluded_periods,
-            );
+            let slot_week_pairs =
+                crate::helpers::slot_week_pairs_for_subject(env, subject_id, subject);
             let active_weeks = subject_active_weeks(&slot_week_pairs);
             let n = active_weeks.len() as u32;
             let b = weeks_per_block.get();

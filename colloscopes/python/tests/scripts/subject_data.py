@@ -43,6 +43,18 @@ assert all(
     for period in d.excluded_periods
 )
 assert all(isinstance(d.excluded_periods, set) for d in subject_values)
+assert all(
+    d.week_pattern is None or isinstance(d.week_pattern, collomatique.WeekPatternId)
+    for d in subject_values
+)
+
+# The week pattern each value carries is the one its handle reads, as the id a
+# detached value holds. The example gives none of its subjects one, so this is a
+# column of `None` — a subject really following a pattern is the write script's.
+assert [d.week_pattern for d in subject_values] == [
+    None if subject.week_pattern is None else subject.week_pattern.id
+    for subject in subject_list
+]
 
 # A fresh object every call. Two of them are equal and share nothing, so writing
 # to one is invisible to the other and to the document.
@@ -80,6 +92,7 @@ assert [f.name for f in dataclasses.fields(collomatique.SubjectData)] == [
     "name",
     "interrogation",
     "excluded_periods",
+    "week_pattern",
 ]
 assert [f.name for f in dataclasses.fields(collomatique.InterrogationData)] == [
     "students_per_group",
@@ -104,6 +117,7 @@ assert collomatique.InterrogationData.__module__ == "collomatique"
 plain = collomatique.SubjectData("Maths")
 assert plain.interrogation == collomatique.InterrogationData()
 assert plain.excluded_periods == set()
+assert plain.week_pattern is None
 assert collomatique.SubjectData("Quidditch", interrogation=None).interrogation is None
 
 # The default periodicity is a leaf value, built afresh for each value and equal
@@ -116,9 +130,16 @@ assert collomatique.InterrogationData() == collomatique.InterrogationData()
 # subject and — this is the wart — do not compare equal, because a dataclass
 # stores what it was given.
 period = list(doc.periods)[0]
-by_handle = collomatique.SubjectData("Spé maths", excluded_periods={period})
-by_id = collomatique.SubjectData("Spé maths", excluded_periods={period.id})
-by_list = collomatique.SubjectData("Spé maths", excluded_periods=[period])
+pattern = list(doc.week_patterns)[0]
+by_handle = collomatique.SubjectData(
+    "Spé maths", excluded_periods={period}, week_pattern=pattern
+)
+by_id = collomatique.SubjectData(
+    "Spé maths", excluded_periods={period.id}, week_pattern=pattern.id
+)
+by_list = collomatique.SubjectData(
+    "Spé maths", excluded_periods=[period], week_pattern=pattern
+)
 assert by_handle != by_id
 
 # One written out from end to end, none of its fields left at its default.
@@ -132,6 +153,7 @@ written_out = collomatique.SubjectData(
         periodicity=collomatique.CountInYear((0, 4), 3),
     ),
     excluded_periods={period},
+    week_pattern=pattern,
 )
 no_colles = collomatique.SubjectData("Quidditch", interrogation=None)
 
@@ -161,8 +183,12 @@ not_an_interrogation = collomatique.SubjectData("Maths", interrogation=3)
 # names it rather than the subject it usually sits in.
 bare_zero_duration = collomatique.InterrogationData(duration=0)
 
-# A handle of another document names nothing here, whatever its id says.
+# A handle of another document names nothing here, whatever its id says — the
+# same refusal on both fields that name an entity.
 other = collomatique.load(source)
 foreign_period = collomatique.SubjectData(
     "Maths", excluded_periods={list(other.periods)[0]}
+)
+foreign_pattern = collomatique.SubjectData(
+    "Maths", week_pattern=list(other.week_patterns)[0]
 )

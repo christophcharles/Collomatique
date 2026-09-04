@@ -29,8 +29,7 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
         let wpb = weeks_per_block.get() as usize;
         let min_sep = minimum_week_separation.get() as usize;
 
-        let slot_week_pairs =
-            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let slot_week_pairs = slot_week_pairs_for_subject(env, *subject_id, subject);
         let enrolled = enrolled_students_for_subject(env, *subject_id);
 
         // Per-period block constraints
@@ -47,7 +46,7 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                 .into_iter()
                 .flatten()
                 .enumerate()
-                .filter(|(_, (_, wd))| wd.interrogations)
+                .filter(|(_, (week_id, _))| env.is_week_active(**week_id, subject.week_pattern))
                 .map(|(i, _)| GlobalWeek(global_week_offset + i))
                 .collect();
 

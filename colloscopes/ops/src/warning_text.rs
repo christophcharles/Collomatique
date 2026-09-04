@@ -220,6 +220,12 @@ pub(crate) fn render(params: &Parameters, fix: &Fix) -> Result<String, MissingId
                 render_incompat(&params.incompats, *incompat)?
             )
         }
+        Fix::ClearSubjectWeekPattern { subject, .. } => {
+            format!(
+                "La matière {} ne suivra plus de motif : elle aura lieu toutes les semaines",
+                render_subject(&params.subjects, *subject)?
+            )
+        }
         Fix::DeleteSlotPairingRule { rule } => {
             format!(
                 "La règle de créneaux « {} » sera supprimée",

@@ -26,6 +26,7 @@ COORDS = {
     collomatique.SlotSubject: ("slot",),
     collomatique.SlotTeacher: ("slot",),
     collomatique.SlotWeekPattern: ("slot",),
+    collomatique.SubjectWeekPattern: ("subject",),
     collomatique.IncompatSubject: ("incompat",),
     collomatique.IncompatWeekPattern: ("incompat",),
     collomatique.PairingRuleAntecedent: ("rule",),

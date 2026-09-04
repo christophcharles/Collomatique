@@ -96,6 +96,7 @@ fn interrogation_subject(name: &str, excluded_periods: BTreeSet<PeriodId>) -> Su
             }),
         },
         excluded_periods,
+        week_pattern: None,
     }
 }
 

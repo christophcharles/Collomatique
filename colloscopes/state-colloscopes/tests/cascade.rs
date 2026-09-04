@@ -97,6 +97,7 @@ fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
             interrogation_parameters: None,
         },
         excluded_periods: excluded,
+        week_pattern: None,
     }
 }
 
@@ -135,6 +136,7 @@ fn interrogation_subject_lasting(
             }),
         },
         excluded_periods: excluded,
+        week_pattern: None,
     }
 }
 
@@ -1815,13 +1817,19 @@ struct WeekPatternDocument {
     incompat: IncompatId,
     /// Wears `other_pattern`.
     other_incompat: IncompatId,
+    /// Wears `pattern`. Holds no colles, so the pattern reference is the only
+    /// thing it owns.
+    patterned_subject: SubjectId,
+    /// Wears `other_pattern`.
+    other_patterned_subject: SubjectId,
 }
 
 /// Builds the document both `5a` and `5b` use.
 ///
-/// A pattern `WP` excluding one week, worn by one slot and one
-/// incompatibility; the slot carries a colloscope cell on a week `WP` allows;
-/// and a second pattern `WP2` with its own slot and its own incompatibility.
+/// A pattern `WP` excluding one week, worn by one slot, one incompatibility and
+/// one subject; the slot carries a colloscope cell on a week `WP` allows; and a
+/// second pattern `WP2` with its own slot, its own incompatibility and its own
+/// subject.
 ///
 /// The slot and the incompatibility are given **non-default field values**
 /// (`extra_info`, `cost`, a name, a `minimum_free_slots` of 2). Both arms
@@ -1904,6 +1912,29 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
         "adding the innocent slot"
     );
 
+    // Two subjects wearing a pattern each. They run no interrogations, so they
+    // hold no slot and no cell: what dies with the pattern is the reference and
+    // nothing else.
+    let mut patterned_value = plain_subject("Dessin", BTreeSet::new());
+    patterned_value.week_pattern = Some(pattern);
+    let patterned_subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(Some(subject), patterned_value)),
+        NewId::SubjectId,
+        "adding the subject wearing the target pattern"
+    );
+    let mut other_patterned_value = plain_subject("Théâtre", BTreeSet::new());
+    other_patterned_value.week_pattern = Some(other_pattern);
+    let other_patterned_subject: SubjectId = apply_new!(
+        app,
+        Op::Subject(SubjectOp::AddAfter(
+            Some(patterned_subject),
+            other_patterned_value
+        )),
+        NewId::SubjectId,
+        "adding the innocent subject"
+    );
+
     let incompat: IncompatId = apply_new!(
         app,
         Op::Incompat(IncompatOp::Add(Incompatibility {
@@ -1969,25 +2000,29 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
         other_slot,
         incompat,
         other_incompat,
+        patterned_subject,
+        other_patterned_subject,
     }
 }
 
 /// Fixture `5a` — **the deliberate divergence from the legacy cleaning**.
 ///
-/// Target: `WeekPatternOp::Remove(WP)`. Both sites hold the pattern in an
+/// Target: `WeekPatternOp::Remove(WP)`. All three sites hold the pattern in an
 /// `Option` whose `None` is a legal, documented value, so the reference can go
-/// alone and the row stays. The legacy cleaning deleted both rows
-/// (`colloscopes/ops/src/week_patterns.rs:229-256`); the map clears the field instead.
+/// alone and the row stays. The legacy cleaning deleted the slot and the
+/// incompatibility (`colloscopes/ops/src/week_patterns.rs:229-256`); the map
+/// clears the field instead.
 ///
-/// One round, two breaks — `SlotWeekPattern(slot)` and
-/// `IncompatWeekPattern(incompat)` — whose fixes are independent. Content, not
+/// One round, three breaks — `SlotWeekPattern(slot)`,
+/// `IncompatWeekPattern(incompat)` and `SubjectWeekPattern(patterned_subject)`
+/// — whose fixes are independent. Content, not
 /// sequence: the order here would teach nothing `1a` does not already pin.
-/// Two fixes, and that length is the concrete form of the argument that
+/// Three fixes, and that length is the concrete form of the argument that
 /// clearing to `None` can only ever *remove* instances of
 /// `InterrogationOnInactiveWeek`, never create one. If a future change made
 /// widening break something, the length is where it would surface.
 ///
-/// The two fixes are compared **whole**. Each carries an entire rebuilt row, so
+/// The three fixes are compared **whole**. Each carries an entire rebuilt row, so
 /// the exact fix pins that *only* `week_pattern` moved — an arm that rebuilt the
 /// row from something else, or reset another field on the way, is caught here.
 /// "The row survives intact" is the whole claim of the divergence, so the test
@@ -2008,8 +2043,9 @@ fn build_week_pattern_document(app: &mut AppState<Data, String>) -> WeekPatternD
 /// conjunct still gates is `colloscope_params`' business, not the cascade's, so
 /// this fixture does not test it.)
 ///
-/// `WP2`, its slot and its incompatibility are the innocent bystanders. Both
-/// arms test `slot.week_pattern == Some(WP)` (resp. `incompat.week_pattern_id`)
+/// `WP2`, its slot, its incompatibility and its subject are the innocent
+/// bystanders. Each arm tests `slot.week_pattern == Some(WP)` (resp.
+/// `incompat.week_pattern_id`, `subject.week_pattern`)
 /// before clearing. If every pattern-bearing row in the document pointed at
 /// `WP`, that comparison would pass trivially and a map that cleared *every*
 /// row's pattern would pass the fixture. This is the same move as scenario 2's
@@ -2053,6 +2089,18 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
         .get(&doc.other_incompat)
         .expect("the innocent incompatibility is there")
         .clone();
+    let subject_before = before
+        .params
+        .subjects
+        .find_subject(doc.patterned_subject)
+        .expect("the patterned subject is there")
+        .clone();
+    let other_subject_before = before
+        .params
+        .subjects
+        .find_subject(doc.other_patterned_subject)
+        .expect("the innocent subject is there")
+        .clone();
     // The first half of the flip: while `WP` lives, it blocks the slot here.
     assert!(
         !before
@@ -2070,6 +2118,8 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
     widened_slot.week_pattern = None;
     let mut widened_incompat = incompat_before.clone();
     widened_incompat.week_pattern_id = None;
+    let mut widened_subject = subject_before.clone();
+    widened_subject.week_pattern = None;
     let expected = vec![
         Fix::ClearSlotWeekPattern {
             slot: doc.slot,
@@ -2078,6 +2128,10 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
         Fix::ClearIncompatWeekPattern {
             incompat: doc.incompat,
             rebuilt: widened_incompat.clone(),
+        },
+        Fix::ClearSubjectWeekPattern {
+            subject: doc.patterned_subject,
+            rebuilt: widened_subject.clone(),
         },
     ];
     assert_same_fixes(&landed_fixes(&receipt), &expected);
@@ -2103,6 +2157,11 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
         inner.params.incompats.incompat_map.get(&doc.incompat),
         Some(&widened_incompat),
         "and so does the incompatibility"
+    );
+    assert_eq!(
+        inner.params.subjects.find_subject(doc.patterned_subject),
+        Some(&widened_subject),
+        "and so does the subject"
     );
     // The second half of the flip: the week the dead pattern used to block is
     // available again.
@@ -2137,6 +2196,14 @@ fn fixture_5a_week_pattern_removal_widens_its_rows_instead_of_deleting_them() {
         inner.params.incompats.incompat_map.get(&doc.other_incompat),
         Some(&other_incompat_before),
         "and so is its incompatibility"
+    );
+    assert_eq!(
+        inner
+            .params
+            .subjects
+            .find_subject(doc.other_patterned_subject),
+        Some(&other_subject_before),
+        "and so is its subject"
     );
 }
 

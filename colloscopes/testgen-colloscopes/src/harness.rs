@@ -325,7 +325,7 @@ pub fn bootstrap_with(
             &mut state,
             &mut snapshots,
             Op::Subject(SubjectOp::AddAfter(None, {
-                let mut subject = synth::subject(rng, &[], with_interrogation);
+                let mut subject = synth::subject(rng, &[], &[], with_interrogation);
                 subject.excluded_periods.clear();
                 subject
             })),

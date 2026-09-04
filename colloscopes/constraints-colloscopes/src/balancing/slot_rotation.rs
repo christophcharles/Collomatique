@@ -44,8 +44,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
         };
         let is_soft = param.soft;
 
-        let slot_week_pairs =
-            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let slot_week_pairs = slot_week_pairs_for_subject(env, *subject_id, subject);
         let active_weeks = subject_active_weeks(&slot_week_pairs);
         if active_weeks.is_empty() {
             continue;

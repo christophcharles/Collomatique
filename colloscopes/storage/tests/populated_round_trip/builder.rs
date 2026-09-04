@@ -234,6 +234,7 @@ pub fn build_rich_data() -> Data {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         "subject maths",
@@ -257,6 +258,7 @@ pub fn build_rich_data() -> Data {
                     }),
                 },
                 excluded_periods: BTreeSet::from([period2]),
+                week_pattern: None,
             },
         )),
         "subject physics",
@@ -281,6 +283,7 @@ pub fn build_rich_data() -> Data {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         "subject english",
@@ -309,6 +312,7 @@ pub fn build_rich_data() -> Data {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         "subject philosophy",
@@ -324,6 +328,7 @@ pub fn build_rich_data() -> Data {
                     interrogation_parameters: None,
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         "subject sport",
@@ -422,6 +427,28 @@ pub fn build_rich_data() -> Data {
         })),
         "week pattern all",
         WeekPatternId
+    );
+
+    // One subject restricted by a week pattern. Philosophy has no slots,
+    // so no colloscope cell can end up on a week the pattern kills.
+    let philosophy = state
+        .get_data()
+        .get_inner_data()
+        .params
+        .subjects
+        .find_subject(subject_philosophy)
+        .expect("philosophy was added above")
+        .clone();
+    apply(
+        &mut state,
+        Op::Subject(SubjectOp::Update(
+            subject_philosophy,
+            Subject {
+                week_pattern: Some(pattern_fortnight),
+                ..philosophy
+            },
+        )),
+        "subject philosophy week pattern",
     );
 
     // Slots on three subjects, with and without week pattern, with
@@ -881,6 +908,13 @@ fn check_all_sections_populated(data: &Data) {
             .ordered_subject_list
             .iter()
             .any(|(_id, subject)| !subject.excluded_periods.is_empty())
+    );
+    assert!(
+        params
+            .subjects
+            .ordered_subject_list
+            .iter()
+            .any(|(_id, subject)| subject.week_pattern.is_some())
     );
 
     assert!(

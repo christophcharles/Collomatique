@@ -138,6 +138,12 @@ pub fn visit_ids(blocks: &Blocks, f: &mut impl FnMut(u64)) {
         }
     }
     // ExportConfig holds no ids at all.
+    if let Some(block) = &blocks.subject_week_patterns {
+        for row in block.iter() {
+            f(row.subject_id);
+            f(row.week_pattern_id);
+        }
+    }
 }
 
 /// Visits the elements of an id set

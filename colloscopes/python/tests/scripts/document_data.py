@@ -107,6 +107,14 @@ assert len(tree.subject_balancing) >= 1
 assert len(tree.colloscope.interrogations) >= 3
 assert len(tree.colloscope.group_lists) >= 1
 
+# And both shapes of the optional fields that name another entity: a subject
+# following a week pattern and one following none, the same check the slots
+# already get through their own value.
+assert any(d.week_pattern is not None for d in tree.subjects.values())
+assert any(d.week_pattern is None for d in tree.subjects.values())
+assert any(d.week_pattern is not None for d in tree.slots.values())
+assert any(d.week_pattern is None for d in tree.slots.values())
+
 # A fresh tree every call. Two of them are equal and share nothing, and
 # editing one is invisible to the document.
 again = doc.snapshot()

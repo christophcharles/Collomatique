@@ -3,20 +3,21 @@ use crate::ids::GlobalWeek;
 use crate::types::{ConstraintDesc, ExtraVarName};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_state_colloscopes::ids::{PeriodId, SlotId, StudentId, SubjectId};
+use collomatique_state_colloscopes::ids::{SlotId, StudentId, SubjectId};
+use collomatique_state_colloscopes::subjects::Subject;
 use std::collections::BTreeSet;
 
 pub(crate) fn slot_week_pairs_for_subject(
     env: &VarEnv,
     subject_id: SubjectId,
-    excluded_periods: &BTreeSet<PeriodId>,
+    subject: &Subject,
 ) -> Vec<(SlotId, GlobalWeek)> {
     let Some(subject_slots) = env.slots.slots_for_subject(subject_id) else {
         return vec![];
     };
     subject_slots
         .flat_map(|(slot_id, slot_data)| {
-            weeks_for_slot(env, slot_data, excluded_periods)
+            weeks_for_slot(env, slot_data, subject)
                 .into_iter()
                 .map(move |week| (*slot_id, week))
         })

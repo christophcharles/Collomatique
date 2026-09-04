@@ -23,7 +23,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             .flatten()
         {
             let slot = *slot_id;
-            for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
+            for week in weeks_for_slot(env, slot_data, subject) {
                 let groups = groups_for_interrogation(env, subject_id, week);
                 if groups.is_empty() {
                     continue;

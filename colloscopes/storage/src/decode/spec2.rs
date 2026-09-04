@@ -1,6 +1,10 @@
 //! Spec-2 decode submodule
 //!
-//! This module builds an [InnerData] from the raw entries of a spec-2
+//! The name is historical: the pipeline reads spec-2 files and every
+//! later revision, each of which is a superset — a block introduced by
+//! spec 3 simply carries its own `minimum_spec_version`.
+//!
+//! This module builds an [InnerData] from the raw entries of such a
 //! document, in two layers:
 //!
 //! 1. [collect_blocks]: sort the entries into typed blocks. Unknown
@@ -32,9 +36,10 @@ use mem::{
     SubjectId, TeacherId, WeekId, WeekPatternId,
 };
 
-/// Every spec-2 block name declares these canonical envelope values
-/// (spec §2); they are frozen with the block names themselves.
-const CANONICAL_MINIMUM_SPEC_VERSION: u32 = 2;
+/// Every block name declares canonical envelope values (spec §2), frozen
+/// with the block name itself. `needed_entry` is `true` for all of them;
+/// the spec level is per block — see
+/// [BlockName::canonical_spec_version].
 const CANONICAL_NEEDED_ENTRY: bool = true;
 
 pub fn decode(
@@ -83,6 +88,7 @@ impl format::Blocks {
             Block::Balancing(b) => store_block(&mut self.balancing, b, name),
             Block::Colloscope(b) => store_block(&mut self.colloscope, b, name),
             Block::ExportConfig(b) => store_block(&mut self.export_config, b, name),
+            Block::SubjectWeekPatterns(b) => store_block(&mut self.subject_week_patterns, b, name),
         }
     }
 }
@@ -124,7 +130,7 @@ fn collect_blocks(
             continue;
         };
 
-        if entry.minimum_spec_version != CANONICAL_MINIMUM_SPEC_VERSION
+        if entry.minimum_spec_version != block_name.canonical_spec_version()
             || entry.needed_entry != CANONICAL_NEEDED_ENTRY
         {
             return Err(DecodeError::MismatchedSpecRequirementInEntry(
@@ -303,7 +309,7 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
         return Err(error);
     }
     let (periods, weeks) = reconstruct_periods(blocks.general_planning.unwrap_or_default())?;
-    let subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default(), &periods)?;
+    let mut subjects = reconstruct_subjects(blocks.subjects.unwrap_or_default(), &periods)?;
     let teachers = reconstruct_teachers(blocks.teachers.unwrap_or_default(), &subjects)?;
     let students = reconstruct_students(blocks.students.unwrap_or_default(), &periods)?;
     let assignments = reconstruct_assignments(
@@ -314,6 +320,14 @@ fn reconstruct(blocks: Blocks) -> Result<InnerData, DecodeError> {
     )?;
     let week_patterns =
         reconstruct_week_patterns(blocks.week_patterns.unwrap_or_default(), &weeks)?;
+    // The subject rows are complete only once the week patterns exist, so
+    // the `SubjectWeekPatterns` block is applied on top of them here rather
+    // than inside `reconstruct_subjects`.
+    reconstruct_subject_week_patterns(
+        blocks.subject_week_patterns.unwrap_or_default(),
+        &mut subjects,
+        &week_patterns,
+    )?;
     let slots = reconstruct_slots(
         blocks.slots.unwrap_or_default(),
         &subjects,
@@ -444,6 +458,7 @@ fn reconstruct_subjects(
                         .map(interrogation_parameters),
                 },
                 excluded_periods: id_set(subject.excluded_periods),
+                week_pattern: None,
             },
         ));
     }
@@ -679,6 +694,41 @@ fn reconstruct_week_patterns(
         .collect::<Result<_, _>>()?;
 
     Ok(mem::week_patterns::WeekPatterns { week_pattern_map })
+}
+
+fn reconstruct_subject_week_patterns(
+    block: format::subject_week_patterns::SubjectWeekPatterns,
+    subjects: &mut mem::subjects::Subjects,
+    week_patterns: &mem::week_patterns::WeekPatterns,
+) -> Result<(), DecodeError> {
+    for row in block.into_inner() {
+        if week_patterns
+            .week_pattern_map
+            .get(&id::<WeekPatternId>(row.week_pattern_id))
+            .is_none()
+        {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::SubjectWeekPatterns.as_str(),
+                row: RowKey::Id(row.subject_id),
+                referenced: IdKind::WeekPattern,
+                id: row.week_pattern_id,
+            });
+        }
+        let Some(subject) = subjects
+            .ordered_subject_list
+            .get_mut(&id::<SubjectId>(row.subject_id))
+        else {
+            return Err(DecodeError::DanglingReference {
+                block: BlockName::SubjectWeekPatterns.as_str(),
+                row: RowKey::Id(row.subject_id),
+                referenced: IdKind::Subject,
+                id: row.subject_id,
+            });
+        };
+        subject.week_pattern = Some(id(row.week_pattern_id));
+    }
+
+    Ok(())
 }
 
 fn reconstruct_slots(

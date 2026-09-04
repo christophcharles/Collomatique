@@ -1,8 +1,9 @@
 //! The subjects of a document, and how their interrogations are laid out
 //!
 //! Reached as `doc.subjects`. A subject carries a name, the periods it does not
-//! run in, and — when it holds interrogations at all — a whole set of parameters
-//! for them, which is the [Interrogation] sub-view.
+//! run in, the week pattern its colles pause on — if any — and, when it holds
+//! interrogations at all, a whole set of parameters for them, which is the
+//! [Interrogation] sub-view.
 //!
 //! The slots those colles happen in belong to the subject too, but the model
 //! keeps them in a table of their own, so they live in
@@ -15,21 +16,22 @@
 //! with them; its incompatibilities, the pairing rules relating it to another
 //! subject, its balancing options, its enrolment rows and its group-list
 //! associations all go too. Every one of those repairs comes back on the
-//! `OpResult`. The `update` cascades in its own two ways — switching the
-//! interrogations off dismantles everything that needed them, and lengthening
-//! one over a slot too late in the day takes that slot — and
+//! `OpResult`. The `update` cascades in its own three ways — switching the
+//! interrogations off dismantles everything that needed them, lengthening one
+//! over a slot too late in the day takes that slot, and a week pattern that
+//! switches a week off takes the colles standing there — and
 //! `set_period_status(…, False)` drops what the subject held on the period it
 //! leaves: the enrolments, the colles already written on that period's weeks,
 //! and the group list it used there.
 //!
 //! The value is larger than what the ops carry, the second family where that
-//! happens: a `SubjectData` holds the excluded periods, and no subject op
-//! does — the model keeps them beside the parameters and the ops carry the
-//! parameters alone. So rather than dropping the field on the floor, `add`
-//! refuses a value that excludes anything and `update` refuses one whose
-//! exclusions differ from the document's, both naming `set_period_status`,
-//! which is the op that moves them. A read-modify-write never meets the second
-//! refusal: `to_data()` fills the field with the subject's own exclusions.
+//! happens: a `SubjectData` holds the excluded periods, and no subject op does
+//! — the model keeps them beside the parameters and the week pattern, which the
+//! ops do carry. So rather than dropping the field on the floor, `add` refuses
+//! a value that excludes anything and `update` refuses one whose exclusions
+//! differ from the document's, both naming `set_period_status`, which is the op
+//! that moves them. A read-modify-write never meets the second refusal:
+//! `to_data()` fills the field with the subject's own exclusions.
 //!
 //! The family keeps two refusals for the model, and both reach a script as
 //! `SubjectsError`: a subject at either end of the list has nowhere left to
@@ -52,6 +54,7 @@ use collomatique_state_colloscopes::{InnerData, NewId, SubjectInterrogationParam
 use crate::Document;
 use crate::collections::periods::Period;
 use crate::collections::slots::Slot;
+use crate::collections::week_patterns::WeekPattern;
 use crate::data::{SubjectData, Value as _};
 use crate::errors::StaleHandleError;
 use crate::handles::{Handle, argument, handle_iterator, named, no_such, quoted};
@@ -139,7 +142,9 @@ impl Subjects {
     /// says so rather than discarding them: a value that excludes a period is a
     /// `ValueError`. A new subject runs on every period the document holds, and
     /// taking it off one is `set_period_status` — so a subject that skips a
-    /// period is two calls, which a transaction makes one undo step.
+    /// period is two calls, which a transaction makes one undo step. The week
+    /// pattern the op does carry, so a subject is born with the one its value
+    /// names.
     ///
     /// Nothing in the document can name a subject that does not exist yet, so
     /// there is nothing for the cascade to repair: the answer's `warnings` is
@@ -161,7 +166,10 @@ impl Subjects {
         crate::results::created::<Subject>(
             py,
             &self.doc,
-            UpdateOp::Subjects(SubjectsUpdateOp::AddNewSubject(subject.parameters)),
+            UpdateOp::Subjects(SubjectsUpdateOp::AddNewSubject(
+                subject.parameters,
+                subject.week_pattern,
+            )),
             |new_id| match new_id {
                 NewId::SubjectId(id) => Some(id),
                 _ => None,
@@ -173,7 +181,8 @@ impl Subjects {
     ///
     /// The op carries the whole of the rest, so this replaces every other field
     /// at once: what the `SubjectData` says is what the subject becomes, the
-    /// name and the interrogation parameters together. The id stays, the
+    /// name, the interrogation parameters and the week pattern together — a
+    /// value naming no pattern is a subject left with none. The id stays, the
     /// position stays, and so does every handle naming it.
     ///
     /// The exclusions are the one field the op cannot carry, and the mirror
@@ -183,14 +192,16 @@ impl Subjects {
     /// read-modify-write never meets that refusal, since `to_data()` fills the
     /// field with the subject's own exclusions.
     ///
-    /// Both of the family's cascades live here. Setting `interrogation` to
+    /// The family's cascades live here. Setting `interrogation` to
     /// `None` is a write like any other, and the repairs dismantle what needed
     /// those colles: the teachers who held them lose the subject, their slots
     /// in it go, its group-list associations go and so do its own balancing
     /// options and the pairing rules naming it. Lengthening an interrogation
-    /// over a slot that would then run past midnight takes that slot. The
-    /// enrolments deliberately survive both: being registered in a subject says
-    /// nothing about having colles in it.
+    /// over a slot that would then run past midnight takes that slot. And a
+    /// week pattern that switches a week off takes the colles standing there,
+    /// the same repair a slot's own pattern makes. The enrolments deliberately
+    /// survive all of it: being registered in a subject says nothing about
+    /// having colles in it.
     ///
     /// The subject is resolved before the value is read, so a call that is wrong
     /// about both says which subject it could not find rather than what was
@@ -230,7 +241,11 @@ impl Subjects {
 
         self.write(
             py,
-            UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(id, subject.parameters)),
+            UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(
+                id,
+                subject.parameters,
+                subject.week_pattern,
+            )),
         )
     }
 
@@ -452,6 +467,25 @@ impl Subject {
         PyFrozenSet::new(py, periods)
     }
 
+    /// The pattern saying which weeks this subject runs colles on, or `None`
+    ///
+    /// `None` means every week — the subject carries no pattern of its own, so
+    /// only the weeks' own flags switch it off. A pattern here applies to every
+    /// slot of the subject at once, on top of whatever pattern each slot
+    /// carries: whether a colle can really happen somewhere is
+    /// `doc.is_interrogation_possible`.
+    #[getter]
+    fn week_pattern(&self, py: Python<'_>) -> PyResult<Option<WeekPattern>> {
+        let pattern_id = self.read(py, |data| {
+            data.params
+                .subjects
+                .find_subject(self.id)
+                .map(|subject| subject.week_pattern)
+        })?;
+
+        Ok(pattern_id.map(|pattern_id| WeekPattern::mint(self.doc.clone_ref(py), pattern_id)))
+    }
+
     /// This subject's slots, as a tuple of [Slot], in their order
     ///
     /// The order is the subject's own, which is the only one the model keeps for
@@ -497,9 +531,9 @@ impl Subject {
     ///
     /// A fresh object every call, and a whole one: the interrogation parameters
     /// come out as an `InterrogationData` of their own — or as `None` for a
-    /// subject that holds no colles — and the excluded periods as `PeriodId`s,
-    /// because a value holding handles would carry this document around with
-    /// it.
+    /// subject that holds no colles — and the excluded periods and the week
+    /// pattern as ids, because a value holding handles would carry this
+    /// document around with it.
     ///
     /// The exclusions are in the value although no subject op carries them:
     /// what `to_data()` hands back is the subject, whole, which is what makes
