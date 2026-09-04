@@ -31,7 +31,7 @@ rustPlatform.buildRustPackage rec {
             !(baseName == "target" && type == "directory");
     };
 
-    cargoHash = "sha256-RDmnsbniIEXccsrg7gc0H8eikS862RbEdXN1cTQA+GU=";
+    cargoHash = "sha256-IOtR15lmwPkcBtmI6jAj8AvxQ0U4UoV6PHcaIPHd6F8=";
 
     # The test suite is run from the dev shell, not from the package build.
     doCheck = false;

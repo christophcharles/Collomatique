@@ -404,6 +404,7 @@ dependencies = [
  "gtk4",
  "libadwaita",
  "non-empty-string",
+ "rand 0.9.5",
  "raw-window-handle",
  "relm4",
  "rfd",
