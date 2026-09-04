@@ -387,6 +387,12 @@ impl EditorPanel {
                     .get_data()
                     .get_inner_data()
                     .params
+                    .week_patterns
+                    .clone(),
+                self.data
+                    .get_data()
+                    .get_inner_data()
+                    .params
                     .subjects
                     .clone(),
             ))
