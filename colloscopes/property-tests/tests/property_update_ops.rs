@@ -1,4 +1,4 @@
-//! Property fuzz over the fifteen user-facing [`UpdateOp`] families, driven
+//! Property fuzz over the sixteen user-facing [`UpdateOp`] families, driven
 //! through the new cascade path.
 //!
 //! `colloscopes/ops/` had no fuzz at all until this file: every user-facing op was pinned
@@ -33,7 +33,7 @@
 //! guard asserts every entry of `generator::CATEGORIES` — the seventeen
 //! *elementary* op categories — was attempted, and its `OpLog::push` is typed to
 //! the elementary [`collomatique_state_colloscopes::Op`]. Both are the wrong
-//! vocabulary here; the fifteen families get their own coverage guard below.
+//! vocabulary here; the sixteen families get their own coverage guard below.
 //! Second, `start_points::open` builds an `AppState<Data, String>`, so the
 //! document it opens is re-homed onto this crate's `Desc`.
 //!
@@ -62,10 +62,11 @@ use std::cell::{Cell, RefCell};
 use std::collections::{BTreeMap, BTreeSet};
 
 use collomatique_ops::{
-    AssignmentsUpdateOp, BalancingUpdateOp, ColloscopeContents, ColloscopeUpdateOp, Desc,
-    ExportConfigUpdateOp, GeneralPlanningUpdateOp, GroupListsUpdateOp, IncompatibilitiesUpdateOp,
-    PairingsUpdateOp, SettingsUpdateOp, SlotPairingsUpdateOp, SlotsUpdateOp, StudentsUpdateOp,
-    SubjectsUpdateOp, TeachersUpdateOp, UpdateOp, WeekPatternsUpdateOp,
+    AnonymizeUpdateOp, AssignmentsUpdateOp, BalancingUpdateOp, ColloscopeContents,
+    ColloscopeUpdateOp, Desc, ExportConfigUpdateOp, GeneralPlanningUpdateOp, GroupListsUpdateOp,
+    IncompatibilitiesUpdateOp, PairingsUpdateOp, SettingsUpdateOp, SlotPairingsUpdateOp,
+    SlotsUpdateOp, StudentsUpdateOp, SubjectsUpdateOp, TeachersUpdateOp, UpdateOp,
+    WeekPatternsUpdateOp,
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
@@ -103,9 +104,9 @@ const CONFIG: RunConfig = RunConfig {
     invalid_fraction: 0.15,
 };
 
-/// The fifteen families, for the coverage guard. Same names, same order as
+/// The sixteen families, for the coverage guard. Same names, same order as
 /// [`UpdateOp`]'s own variants.
-const FAMILIES: [&str; 15] = [
+const FAMILIES: [&str; 16] = [
     "general_planning",
     "subjects",
     "teachers",
@@ -121,6 +122,7 @@ const FAMILIES: [&str; 15] = [
     "balancing",
     "colloscope",
     "export_config",
+    "anonymize",
 ];
 
 /// The [`Fix`] variants a user-facing op can reach, for the rendering coverage
@@ -355,7 +357,7 @@ fn gen_update_op(
     let pools = Pools::extract(inner);
     let invalid = rng.random_bool(invalid_fraction);
 
-    let weights: [u32; 15] = [
+    let weights: [u32; 16] = [
         6, // general_planning
         7, // subjects
         6, // teachers
@@ -371,6 +373,11 @@ fn gen_update_op(
         3, // balancing
         6, // colloscope
         2, // export_config
+        // One op that rewrites every student and every teacher: it is the most
+        // expensive draw in the table and the one with the least to say, so it
+        // is drawn rarely — often enough for the coverage guard, not often
+        // enough to crowd out the families that make the cascade work.
+        1, // anonymize
     ];
     let family = FAMILIES[weighted(rng, &weights)];
 
@@ -394,6 +401,7 @@ fn gen_update_op(
         "balancing" => UpdateOp::Balancing(gen_balancing(rng, &pools, invalid)),
         "colloscope" => UpdateOp::Colloscope(gen_colloscope(rng, inner, &pools, invalid)),
         "export_config" => UpdateOp::ExportConfig(gen_export_config(rng)),
+        "anonymize" => UpdateOp::Anonymize(gen_anonymize(rng)),
         _ => unreachable!(),
     };
 
@@ -1264,6 +1272,15 @@ fn gen_export_config(rng: &mut ChaCha8Rng) -> ExportConfigUpdateOp {
             ExportConfigUpdateOp::UpdateAutomaticGroupsConfig(synth::per_student_groups_config(rng))
         }
         _ => ExportConfigUpdateOp::UpdatePerGroupListConfig(synth::per_group_list_config(rng)),
+    }
+}
+
+/// The family's one op, and its whole payload is a seed — there is no address
+/// to point at nothing and no payload the state layer can refuse, so `invalid`
+/// has nothing to act on here, the same as [`gen_export_config`].
+fn gen_anonymize(rng: &mut ChaCha8Rng) -> AnonymizeUpdateOp {
+    AnonymizeUpdateOp::AnonymizeNames {
+        seed: rng.random::<u64>(),
     }
 }
 

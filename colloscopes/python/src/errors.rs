@@ -155,7 +155,7 @@ create_exception!(
     "The application would not replace the document it holds with this one."
 );
 
-/// Declares the fifteen per-family write errors, and the table that finds one
+/// Declares the sixteen per-family write errors, and the table that finds one
 ///
 /// The names on the left are `collomatique_ops::UpdateError`'s own variants,
 /// spelled as serde writes them — the walk reads one off the error and this is
@@ -209,9 +209,12 @@ family_errors! {
     Balancing => BalancingError, "the balancing options";
     Colloscope => ColloscopeError, "the colloscope";
     // Declared although `ExportConfigUpdateError` has no variants at all today:
-    // the family is one of the fifteen the write surface mirrors, and an empty
+    // the family is one of the sixteen the write surface mirrors, and an empty
     // enum now is not a promise about later.
     ExportConfig => ExportConfigError, "the export configuration";
+    // Same: `AnonymizeUpdateError` is empty too -- a rename is invisible to
+    // every invariant, so nothing can refuse one.
+    Anonymize => AnonymizeError, "the anonymization";
 }
 
 /// The exception one refused write raises
@@ -234,7 +237,7 @@ pub(crate) fn refused(py: Python<'_>, error: &collomatique_ops::UpdateError) -> 
 /// The exception one walked-over error becomes
 ///
 /// Three levels, and each one may be the last: the walk keeps whatever it
-/// reached rather than insisting on the shape the fifteen families have today.
+/// reached rather than insisting on the shape the sixteen families have today.
 fn from_data(py: Python<'_>, message: String, data: &Bound<'_, PyAny>) -> PyErr {
     let mut class = None;
     let mut op = None;
