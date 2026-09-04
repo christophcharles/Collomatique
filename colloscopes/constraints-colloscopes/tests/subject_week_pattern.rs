@@ -23,16 +23,17 @@ use std::num::NonZeroU32;
 
 use collomatique_constraints_colloscopes::{
     ColloscopeModel, ConstraintDesc, ConstraintSource, ExtraVarName, InfeasibleConstraint,
-    InternalVar, ProgressiveConstraint, Var, build_model,
+    InternalVar, ProgressiveConstraint, StructuralConstraint, Var, build_model,
 };
 use collomatique_state::{AppState, traits::Manager};
 use collomatique_state_colloscopes::{
-    AssignmentOp, Data, GroupListOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp, SlotOp,
-    StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
+    AssignmentOp, Data, GroupListOp, IncompatOp, NewId, NonEmptyRangeInclusive, Op, PeriodOp,
+    SlotOp, StudentOp, Subject, SubjectInterrogationParameters, SubjectOp, SubjectParameters,
     SubjectPeriodicity, TeacherOp, WeekOp, WeekPatternOp,
     colloscope_params::Parameters,
     group_lists::{GroupList, GroupListFilling, GroupListParameters},
     ids::{SlotId, SubjectId, WeekPatternId},
+    incompats::Incompatibility,
     slots::Slot,
     students::Student,
     teachers::Teacher,
@@ -71,6 +72,17 @@ fn subject(name: &str, periodicity: SubjectPeriodicity, pattern: Option<WeekPatt
     }
 }
 
+/// 08:00 on `weekday`. Every slot of the document starts there.
+fn slot_start(weekday: chrono::Weekday) -> collomatique_time::SlotStart {
+    collomatique_time::SlotStart {
+        weekday: collomatique_time::Weekday(weekday),
+        start_time: collomatique_time::WholeMinuteTime::new(
+            chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
+        )
+        .unwrap(),
+    }
+}
+
 fn slot(
     subject_id: SubjectId,
     teacher_id: collomatique_state_colloscopes::ids::TeacherId,
@@ -79,13 +91,7 @@ fn slot(
     Slot {
         subject_id,
         teacher_id,
-        start_time: collomatique_time::SlotStart {
-            weekday: collomatique_time::Weekday(weekday),
-            start_time: collomatique_time::WholeMinuteTime::new(
-                chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap(),
-            )
-            .unwrap(),
-        },
+        start_time: slot_start(weekday),
         extra_info: String::new(),
         week_pattern: None,
         cost: 0,
@@ -101,14 +107,24 @@ struct Built {
     physics_slot: SlotId,
 }
 
+/// Which knobs of the document the test wants turned on.
+#[derive(Default, Clone, Copy)]
+struct Scenario {
+    /// Whether maths wears the « Pause colles Noël » pattern.
+    maths_paused: bool,
+    /// Whether physics wears it.
+    physics_paused: bool,
+    /// An « Indisponibilité » on maths, every week, over the maths slot's own
+    /// time window, that must be left entirely free.
+    maths_incompat: bool,
+}
+
 /// One nine-week period, two interrogated subjects sharing a teacher and a
 /// group list, two students enrolled in both.
 ///
-/// `maths_paused` and `physics_paused` say which subjects wear the
-/// « Pause colles Noël » pattern that switches [`PAUSED_WEEK`] off. The pattern
-/// itself always exists, so the two documents differ in exactly the one field
-/// under test.
-fn build_document(maths_paused: bool, physics_paused: bool) -> Built {
+/// The « Pause colles Noël » pattern that switches [`PAUSED_WEEK`] off always
+/// exists, so two documents differ in exactly the fields [`Scenario`] names.
+fn build_document(scenario: Scenario) -> Built {
     let mut app = AppState::<_, String>::new(Data::new());
 
     macro_rules! apply_new {
@@ -165,7 +181,7 @@ fn build_document(maths_paused: bool, physics_paused: bool) -> Built {
                     weeks_per_block: nz(2),
                     minimum_week_separation: nz(1),
                 },
-                maths_paused.then_some(pause),
+                scenario.maths_paused.then_some(pause),
             )
         )),
         NewId::SubjectId,
@@ -179,7 +195,7 @@ fn build_document(maths_paused: bool, physics_paused: bool) -> Built {
                 SubjectPeriodicity::ExactlyPeriodic {
                     periodicity_in_weeks: nz(4),
                 },
-                physics_paused.then_some(pause),
+                scenario.physics_paused.then_some(pause),
             )
         )),
         NewId::SubjectId,
@@ -251,6 +267,28 @@ fn build_document(maths_paused: bool, physics_paused: bool) -> Built {
         );
     }
 
+    if scenario.maths_incompat {
+        // One slot and `minimum_free_slots == 1` is what selects the saturated
+        // branch of the incompat builder; the window is the maths slot's own
+        // Monday 08:00–09:00, so it overlaps it; `None` covers every week.
+        apply_ok!(
+            Op::Incompat(IncompatOp::Add(Incompatibility {
+                subject_id: maths,
+                name: "Indisponibilité".into(),
+                slots: vec![
+                    collomatique_time::SlotWithDuration::new(
+                        slot_start(chrono::Weekday::Mon),
+                        collomatique_time::NonZeroMinutes::new(60).unwrap(),
+                    )
+                    .expect("the window should not cross midnight"),
+                ],
+                minimum_free_slots: nz(1),
+                week_pattern_id: None,
+            })),
+            "add the incompat"
+        );
+    }
+
     Built {
         params: app.get_data().get_inner_data().params.clone(),
         maths,
@@ -318,11 +356,26 @@ fn weeks_with_variables(model: &ColloscopeModel, slot: SlotId) -> BTreeSet<usize
         .collect()
 }
 
+/// Every global week carrying an `IncompatSaturated` row.
+fn incompat_saturated_weeks(model: &ColloscopeModel) -> BTreeSet<usize> {
+    model
+        .problem()
+        .get_constraints()
+        .iter()
+        .filter_map(|(_constraint, source)| match source {
+            ConstraintSource::User(ConstraintDesc::Level1(
+                StructuralConstraint::IncompatSaturated { week, .. },
+            )) => Some(week.0),
+            _ => None,
+        })
+        .collect()
+}
+
 #[test]
 fn nine_weeks_do_not_tile_into_blocks_of_two() {
     // The state layer accepts this document — the multiple rule is solver-side
     // blame, not a gate invariant — so the builder is where it surfaces.
-    let built = build_document(false, false);
+    let built = build_document(Scenario::default());
     let model = build_model(&built.params);
 
     let infeasible = block_infeasibilities(&model);
@@ -353,7 +406,10 @@ fn nine_weeks_do_not_tile_into_blocks_of_two() {
 fn a_subject_week_pattern_makes_the_blocks_tile() {
     // The same nine weeks, with the eighth switched off for maths only: eight
     // active weeks, four clean blocks, no infeasible row.
-    let built = build_document(true, false);
+    let built = build_document(Scenario {
+        maths_paused: true,
+        ..Default::default()
+    });
     let model = build_model(&built.params);
 
     assert!(
@@ -374,7 +430,10 @@ fn a_subject_week_pattern_makes_the_blocks_tile() {
 
 #[test]
 fn a_paused_week_carries_no_interrogation_variable() {
-    let built = build_document(true, false);
+    let built = build_document(Scenario {
+        maths_paused: true,
+        ..Default::default()
+    });
     let model = build_model(&built.params);
 
     let maths_weeks = weeks_with_variables(&model, built.maths_slot);
@@ -403,7 +462,10 @@ fn an_exactly_periodic_subject_keeps_one_run_across_the_pause() {
     // Physics runs every four weeks. With the pause, its eight active weeks are
     // 0..=6 and 8 — one uninterrupted run, because a subject pattern does not
     // cut the period the way an excluded period does.
-    let built = build_document(false, true);
+    let built = build_document(Scenario {
+        physics_paused: true,
+        ..Default::default()
+    });
     let model = build_model(&built.params);
 
     let windows = exact_count_windows(&model, built.physics);
@@ -430,5 +492,36 @@ fn an_exactly_periodic_subject_keeps_one_run_across_the_pause() {
     assert!(
         !cut,
         "the run is eight weeks long, longer than the periodicity of four"
+    );
+}
+
+#[test]
+fn an_incompat_stops_at_a_paused_week() {
+    // The incompat overlap scan looks at the slot's own pattern alone, so on
+    // the paused week it forbids an interrogation the model has no variable
+    // for: the build panics with `UndeclaredExtra`.
+    let paused = build_document(Scenario {
+        maths_paused: true,
+        maths_incompat: true,
+        ..Default::default()
+    });
+    let model = build_model(&paused.params);
+    assert_eq!(
+        incompat_saturated_weeks(&model),
+        (0..WEEK_COUNT)
+            .filter(|w| *w != PAUSED_WEEK)
+            .collect::<BTreeSet<_>>(),
+        "the paused week carries no interrogation to forbid",
+    );
+
+    // Without the pattern the same incompat covers all nine weeks, so the
+    // filter is the pause and nothing else.
+    let running = build_document(Scenario {
+        maths_incompat: true,
+        ..Default::default()
+    });
+    assert_eq!(
+        incompat_saturated_weeks(&build_model(&running.params)),
+        (0..WEEK_COUNT).collect::<BTreeSet<_>>(),
     );
 }
