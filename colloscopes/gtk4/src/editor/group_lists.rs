@@ -28,6 +28,7 @@ pub enum GroupListsInput {
     Update(collomatique_state_colloscopes::colloscope_params::Parameters),
 
     EditGroupList(collomatique_state_colloscopes::GroupListId),
+    DuplicateGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
     /// Removes every group list the document holds, in one operation.
     DeleteAllGroupLists,
@@ -178,6 +179,9 @@ impl Component for GroupLists {
             .forward(sender.input_sender(), |msg| match msg {
                 group_lists_display::EntryOutput::EditGroupList(id) => {
                     GroupListsInput::EditGroupList(id)
+                }
+                group_lists_display::EntryOutput::DuplicateGroupList(id) => {
+                    GroupListsInput::DuplicateGroupList(id)
                 }
                 group_lists_display::EntryOutput::DeleteGroupList(id) => {
                     GroupListsInput::DeleteGroupList(id)
@@ -337,6 +341,30 @@ impl Component for GroupLists {
                     .expect("Group list ID should be valid")
                     .clone();
                 self.selection_reason = GroupListSelectionReason::Edit(group_list_id);
+
+                self.show_edit_dialog(group_list);
+            }
+            GroupListsInput::DuplicateGroupList(group_list_id) => {
+                let group_list = self
+                    .params
+                    .group_lists
+                    .group_list_map
+                    .get(&group_list_id)
+                    .expect("Group list ID should be valid")
+                    .clone();
+
+                // The copy is a brand new list: it inherits the parameters and the
+                // filling, but neither the subject associations nor any colloscope
+                // placement.
+                let (mut group_list_params, group_list_filling) = group_list.into_parts();
+                group_list_params.name = format!("{} (copie)", group_list_params.name);
+                let group_list = collomatique_state_colloscopes::group_lists::GroupList::new(
+                    group_list_params,
+                    group_list_filling,
+                )
+                .expect("renaming a valid group list keeps it valid");
+
+                self.selection_reason = GroupListSelectionReason::New;
 
                 self.show_edit_dialog(group_list);
             }

@@ -20,12 +20,14 @@ pub enum EntryInput {
     UpdateData(EntryData),
 
     EditClicked,
+    DuplicateClicked,
     DeleteClicked,
 }
 
 #[derive(Debug)]
 pub enum EntryOutput {
     EditGroupList(collomatique_state_colloscopes::GroupListId),
+    DuplicateGroupList(collomatique_state_colloscopes::GroupListId),
     DeleteGroupList(collomatique_state_colloscopes::GroupListId),
 }
 
@@ -133,6 +135,12 @@ impl FactoryComponent for Entry {
                 set_orientation: gtk::Orientation::Vertical,
             },
             gtk::Button {
+                set_icon_name: "edit-copy-symbolic",
+                add_css_class: "flat",
+                connect_clicked => EntryInput::DuplicateClicked,
+                set_tooltip_text: Some("Dupliquer la liste"),
+            },
+            gtk::Button {
                 set_icon_name: "edit-delete-symbolic",
                 add_css_class: "flat",
                 connect_clicked => EntryInput::DeleteClicked,
@@ -165,6 +173,11 @@ impl FactoryComponent for Entry {
             EntryInput::EditClicked => {
                 sender
                     .output(EntryOutput::EditGroupList(self.data.id))
+                    .unwrap();
+            }
+            EntryInput::DuplicateClicked => {
+                sender
+                    .output(EntryOutput::DuplicateGroupList(self.data.id))
                     .unwrap();
             }
             EntryInput::DeleteClicked => {
