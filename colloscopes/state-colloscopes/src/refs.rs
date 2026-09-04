@@ -26,7 +26,8 @@
 //! walks below):
 //!
 //! 1. weeks (`week_map` id order) — `period_id`
-//! 2. subjects (`OrderedTable` order) — `excluded_periods` (set order)
+//! 2. subjects (`OrderedTable` order) — `excluded_periods` (set order), then
+//!    `week_pattern`
 //! 3. teachers (id order) — `subjects`
 //! 4. students (id order) — `excluded_periods`
 //! 5. slots (`slot_map` id order) — `subject_id`, `teacher_id`, `week_pattern`
@@ -175,6 +176,8 @@ pub enum WeekPatternRefSite {
     SlotWeekPattern(SlotId),
     /// `Incompatibility::week_pattern_id` → a week pattern
     IncompatWeekPattern(IncompatId),
+    /// `Subject::week_pattern` → a week pattern
+    SubjectWeekPattern(SubjectId),
 }
 
 /// One place a reference to a *slot* lives.
@@ -324,7 +327,10 @@ fn walk_subjects(params: &Parameters, v: &mut impl RefVisitor) {
             NewId::PeriodId(p) => {
                 v.period_ref(p, PeriodRefSite::SubjectExcludedPeriods(subject_id))
             }
-            _ => unreachable!("Subject only references periods"),
+            NewId::WeekPatternId(w) => {
+                v.week_pattern_ref(w, WeekPatternRefSite::SubjectWeekPattern(subject_id))
+            }
+            _ => unreachable!("Subject only references periods and its week pattern"),
         });
     }
 }

@@ -355,6 +355,22 @@ fn excluded_period_drop_is_strictly_below() {
 }
 
 #[test]
+fn subject_week_pattern_drop_is_strictly_below() {
+    // Same reading as the exclusion set above, through the `Option` blanket: a
+    // subject that follows no pattern runs on more weeks, but the document holds
+    // one reference less.
+    let mut dressed = Subject::default();
+    dressed.week_pattern = Some(week_pattern(1));
+    let bare = Subject::default();
+
+    assert_eq!(bare.content_cmp(&dressed), Some(Ordering::Less));
+    // Another pattern is not a smaller one.
+    let mut other = Subject::default();
+    other.week_pattern = Some(week_pattern(2));
+    assert_eq!(other.content_cmp(&dressed), None);
+}
+
+#[test]
 fn week_pattern_exclusion_drop_is_strictly_below() {
     let pattern = |excluded: &[u64]| WeekPattern {
         name: "Semaines A".into(),

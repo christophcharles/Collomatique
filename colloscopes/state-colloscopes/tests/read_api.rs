@@ -53,6 +53,7 @@ fn interrogation_subject(name: &str) -> Subject {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     }
 }
 

@@ -444,6 +444,7 @@ fn reconstruct_subjects(
                         .map(interrogation_parameters),
                 },
                 excluded_periods: id_set(subject.excluded_periods),
+                week_pattern: None,
             },
         ));
     }

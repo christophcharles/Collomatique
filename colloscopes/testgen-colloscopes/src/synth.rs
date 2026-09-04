@@ -175,6 +175,7 @@ pub fn subject(rng: &mut ChaCha8Rng, period_ids: &[PeriodId], with_interrogation
             },
         },
         excluded_periods,
+        week_pattern: None,
     }
 }
 

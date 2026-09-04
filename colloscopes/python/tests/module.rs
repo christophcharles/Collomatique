@@ -3863,6 +3863,7 @@ fn periodicity_subject(
             }),
         },
         excluded_periods,
+        week_pattern: None,
     }
 }
 
@@ -4178,6 +4179,7 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
             ..Default::default()
         },
         excluded_periods: BTreeSet::from([first_period]),
+        week_pattern: None,
     };
     for name in ["by_handle", "by_id", "by_list"] {
         assert_eq!(extracted::<SubjectData>(&globals, name), spe_maths);
@@ -4211,6 +4213,7 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
                 interrogation_parameters: None,
             },
             excluded_periods: BTreeSet::new(),
+            week_pattern: None,
         }
     );
 
@@ -4716,6 +4719,7 @@ fn contact_document(path: &Path) {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     let subjects = vec![
         (subject(11), named_subject("Sortilèges")),
@@ -6478,6 +6482,7 @@ fn assignments_document(path: &Path) {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     let subjects = vec![
         (subject(11), named_subject("Sortilèges")),
@@ -7222,6 +7227,7 @@ fn group_lists_document(path: &Path) {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     let subjects = vec![
         (subject(11), named_subject("Sortilèges")),
@@ -7415,6 +7421,7 @@ fn generation_document(path: &Path) {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     // The one subject that runs no colles, and so needs no group list.
     let lectures = |name: &str| Subject {
@@ -7423,6 +7430,7 @@ fn generation_document(path: &Path) {
             interrogation_parameters: None,
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     // Display order, which is the order a coverage label enumerates.
     let subjects = vec![
@@ -9243,6 +9251,7 @@ fn subjects_are_added_rewritten_moved_and_removed() {
                 }),
             },
             excluded_periods: BTreeSet::from([first_period]),
+            week_pattern: None,
         },
         Subject {
             parameters: SubjectParameters {
@@ -9250,6 +9259,7 @@ fn subjects_are_added_rewritten_moved_and_removed() {
                 interrogation_parameters: None,
             },
             excluded_periods: BTreeSet::new(),
+            week_pattern: None,
         },
     ];
 
@@ -9338,6 +9348,7 @@ fn pairings_document(path: &Path) {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     let subjects = vec![
         (subject(11), named_subject("Sortilèges")),
@@ -11350,6 +11361,7 @@ fn colloscope_document(path: &Path) {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     };
     let subjects = vec![
         (subject(11), named_subject("Sortilèges")),
@@ -12733,6 +12745,7 @@ fn refs_document(path: &Path) {
             }),
         },
         excluded_periods,
+        week_pattern: None,
     };
     let subjects = vec![
         (
@@ -13361,6 +13374,9 @@ fn what_points_at_an_entity() {
                         "IncompatWeekPattern",
                         vec![position(&incompat_ids, incompat)],
                     ),
+                    WeekPatternRefSite::SubjectWeekPattern(subject) => {
+                        ("SubjectWeekPattern", vec![position(&subject_ids, subject)])
+                    }
                 })
                 .map(|(class, coords)| (class.to_owned(), coords))
                 .collect()
@@ -13646,6 +13662,7 @@ fn snapshot_document(path: &Path) {
             }),
         },
         excluded_periods,
+        week_pattern: None,
     };
     let subjects = vec![
         (

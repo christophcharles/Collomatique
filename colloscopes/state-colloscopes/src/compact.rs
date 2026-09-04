@@ -224,6 +224,7 @@ mod tests {
                             interrogation_parameters: Some(interrogation_parameters()),
                         },
                         excluded_periods: BTreeSet::new(),
+                        week_pattern: None,
                     },
                 ),
                 (
@@ -234,6 +235,7 @@ mod tests {
                             interrogation_parameters: Some(interrogation_parameters()),
                         },
                         excluded_periods: BTreeSet::from([period_b]),
+                        week_pattern: None,
                     },
                 ),
             ]

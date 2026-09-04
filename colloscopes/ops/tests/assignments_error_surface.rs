@@ -47,6 +47,7 @@ fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject {
             interrogation_parameters: None,
         },
         excluded_periods: excluded,
+        week_pattern: None,
     }
 }
 

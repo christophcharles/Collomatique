@@ -121,6 +121,7 @@ fn build_document() -> (AppState<Data, Desc>, Document) {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),

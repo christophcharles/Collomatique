@@ -86,6 +86,7 @@ fn shrinking_a_period_cleans_colloscope_on_removed_weeks() {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),
@@ -249,6 +250,7 @@ fn removing_interrogations_from_zero_slot_subject_does_not_panic() {
             Subject {
                 parameters: lone_interrogation_parameters("Math"),
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),
@@ -284,6 +286,7 @@ fn excluding_zero_slot_subject_from_period_does_not_panic() {
             Subject {
                 parameters: lone_interrogation_parameters("Math"),
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         desc("Add subject"),

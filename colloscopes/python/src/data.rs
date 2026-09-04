@@ -1285,6 +1285,7 @@ impl Value for SubjectData {
                 interrogation_parameters,
             },
             excluded_periods: entity_set::<Period>(doc, site, "excluded_periods", obj)?,
+            week_pattern: None,
         })
     }
 

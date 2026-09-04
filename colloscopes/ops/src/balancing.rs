@@ -225,6 +225,7 @@ mod tests {
                             interrogation_parameters,
                         },
                         excluded_periods: std::collections::BTreeSet::new(),
+                        week_pattern: None,
                     },
                 )),
                 (OpCategory::Subjects, "Ajouter une matière".into()),

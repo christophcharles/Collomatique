@@ -49,7 +49,8 @@ impl Parameters {
 
     /// The single definition of "slot `slot` can carry an interrogation on week
     /// `week`": the slot's subject runs interrogations, is not excluded on that
-    /// week's period, and the week is active for the slot's pattern.
+    /// week's period, and the week is active both for the subject's pattern and
+    /// for the slot's own pattern.
     ///
     /// This mirrors exactly the dense skeleton's Some-cell rule
     /// (`ColloscopePeriod::new_empty_from_params` +
@@ -72,7 +73,8 @@ impl Parameters {
         if subject.excluded_periods.contains(&period_id) {
             return false;
         }
-        self.is_week_active(week, slot_desc.week_pattern)
+        self.is_week_active(week, subject.week_pattern)
+            && self.is_week_active(week, slot_desc.week_pattern)
     }
 }
 

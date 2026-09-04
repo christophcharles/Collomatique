@@ -366,6 +366,7 @@ pub(crate) mod tests {
                 }),
             },
             excluded_periods: BTreeSet::new(),
+            week_pattern: None,
         }
     }
 
@@ -376,6 +377,7 @@ pub(crate) mod tests {
                 interrogation_parameters: None,
             },
             excluded_periods: BTreeSet::new(),
+            week_pattern: None,
         }
     }
 

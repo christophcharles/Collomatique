@@ -125,6 +125,7 @@ pub(super) fn interrogation_subject(name: &str, excluded: BTreeSet<PeriodId>) ->
             }),
         },
         excluded_periods: excluded,
+        week_pattern: None,
     }
 }
 
@@ -138,6 +139,7 @@ pub(super) fn plain_subject(name: &str, excluded: BTreeSet<PeriodId>) -> Subject
             interrogation_parameters: None,
         },
         excluded_periods: excluded,
+        week_pattern: None,
     }
 }
 
@@ -945,6 +947,35 @@ pub(super) fn build_valid_document() -> (Data, ValidDocument) {
         dead_group_list,
     };
     (data, doc)
+}
+
+/// Dresses one of the fixture's subjects in a live week pattern, and hands the
+/// dressed value back.
+///
+/// No subject of the fixture wears one — a pattern on a subject is an ordinary
+/// but optional field — and the two arms that read it only say something when
+/// they meet a subject that *does*: the innocent test needs a live pattern to
+/// compare against, and the attribution test needs one to clear.
+pub(super) fn dress_subject_in_pattern(
+    data: &mut Data,
+    subject_id: SubjectId,
+    week_pattern: WeekPatternId,
+) -> Subject {
+    let mut dressed = data
+        .get_inner_data()
+        .params
+        .subjects
+        .find_subject(subject_id)
+        .expect("the fixture's subject is there")
+        .clone();
+    dressed.week_pattern = Some(week_pattern);
+    apply(
+        data,
+        Op::Subject(SubjectOp::Update(subject_id, dressed.clone())),
+        "dressing the subject in the pattern",
+    );
+
+    dressed
 }
 
 /// Steps 3 and 4, shared by every one-break test here.
@@ -2014,6 +2045,39 @@ fn incompat_week_pattern_arm_spares_an_incompat_wearing_a_live_pattern() {
             site: WeekPatternRefSite::IncompatWeekPattern(doc.incompat),
         }),
         "the live incompatibility wears a live pattern, so the arm has no field to clear",
+    );
+}
+
+/// `WeekPatternRefSite::SubjectWeekPattern` — the subject twin of the two arms
+/// above. The fixture dresses `excluded_subject` in the live pattern first, so
+/// that the arm meets a real pattern rather than an empty field and its identity
+/// test is the one a user could really defeat.
+///
+/// **Exactly one break**: `excluded_subject` runs no interrogations, so it holds
+/// no slot and no colloscope cell, and a dangling pattern excludes nothing
+/// anyway (`is_week_active`) — nothing in layer C can react to the swap.
+#[test]
+fn subject_week_pattern_arm_spares_a_subject_wearing_a_live_pattern() {
+    let (mut valid, doc) = build_valid_document();
+    dress_subject_in_pattern(&mut valid, doc.excluded_subject, doc.week_pattern);
+
+    let mut corrupt = valid.get_inner_data().clone();
+    corrupt
+        .params
+        .subjects
+        .ordered_subject_list
+        .get_mut(&doc.excluded_subject)
+        .expect("the fixture's dressed subject is there")
+        .week_pattern = Some(doc.dead_week_pattern);
+
+    assert_arm_finds_nothing(
+        &valid,
+        &corrupt,
+        FixableInvariant::DanglingFk(Reference::WeekPattern {
+            target: doc.dead_week_pattern,
+            site: WeekPatternRefSite::SubjectWeekPattern(doc.excluded_subject),
+        }),
+        "the live subject wears a live pattern, so the arm has no field to clear",
     );
 }
 

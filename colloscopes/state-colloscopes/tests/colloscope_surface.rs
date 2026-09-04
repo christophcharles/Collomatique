@@ -45,6 +45,7 @@ fn interrogation_subject(name: &str) -> Subject {
             }),
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     }
 }
 
@@ -55,6 +56,7 @@ fn plain_subject(name: &str) -> Subject {
             interrogation_parameters: None,
         },
         excluded_periods: BTreeSet::new(),
+        week_pattern: None,
     }
 }
 
@@ -102,6 +104,7 @@ struct Built {
     w2a: WeekId,
     w2b: WeekId,
     w_excluded: WeekId,
+    math: SubjectId,
     math_slot: SlotId,
     art_slot: SlotId,
     student: StudentId,
@@ -248,6 +251,7 @@ fn build_document(app: &mut AppState<Data, String>) -> Built {
         w2a,
         w2b,
         w_excluded,
+        math,
         math_slot,
         art_slot,
         student,
@@ -344,6 +348,39 @@ fn is_interrogation_possible_truth_table() {
     // A dangling week id → impossible.
     let dangling_week = unsafe { WeekId::new(1u64 << 40) };
     assert!(!params.is_interrogation_possible(ids.math_slot, dangling_week));
+
+    // The subject's own pattern is the last conjunct: the slot wears none, so a
+    // week the *subject's* pattern switches off can only be closed by it.
+    let Ok(Some(NewId::WeekPatternId(pause))) = app.apply(
+        Op::WeekPattern(WeekPatternOp::Add(WeekPattern {
+            name: "pause".into(),
+            excluded_weeks: BTreeSet::from([ids.w1a]),
+        })),
+        "add the subject's pattern".into(),
+    ) else {
+        panic!("unexpected result: add the subject's pattern");
+    };
+    let mut math = params
+        .subjects
+        .find_subject(ids.math)
+        .expect("the fixture's math subject is live")
+        .clone();
+    math.week_pattern = Some(pause);
+    app.apply(
+        Op::Subject(SubjectOp::Update(ids.math, math)),
+        "dress math in the pattern".into(),
+    )
+    .expect("a subject may follow a live pattern");
+    let params = app.get_data().get_inner_data().params.clone();
+
+    assert!(
+        !params.is_interrogation_possible(ids.math_slot, ids.w1a),
+        "the subject's pattern switches that week off for every slot it holds",
+    );
+    assert!(
+        params.is_interrogation_possible(ids.math_slot, ids.w2a),
+        "the week the pattern leaves alone is still possible",
+    );
 }
 
 #[test]

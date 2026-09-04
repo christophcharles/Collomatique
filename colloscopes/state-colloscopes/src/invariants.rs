@@ -671,12 +671,21 @@ impl crate::InnerData {
             }
 
             // A dangling week pattern counts as "no exclusion"
-            // (`is_week_active`); layer B reports the dangle itself.
+            // (`is_week_active`); layer B reports the dangle itself. The
+            // subject's own pattern disables a week as strongly as the slot's,
+            // so both are tested here.
             if period.is_some()
-                && let Some((_, slot_desc)) = slot
-                && !params.is_week_active(week_id, slot_desc.week_pattern)
+                && let Some((subject_id, slot_desc)) = slot
             {
-                out.insert(Convergence::InterrogationOnInactiveWeek(slot_id, week_id));
+                let subject_pattern = params
+                    .subjects
+                    .find_subject(subject_id)
+                    .and_then(|subject| subject.week_pattern);
+                if !params.is_week_active(week_id, slot_desc.week_pattern)
+                    || !params.is_week_active(week_id, subject_pattern)
+                {
+                    out.insert(Convergence::InterrogationOnInactiveWeek(slot_id, week_id));
+                }
             }
 
             // Group-number bound. A missing association means bound 0; an
@@ -2062,6 +2071,7 @@ pub(crate) mod tests {
                         ..Default::default()
                     },
                     excluded_periods: BTreeSet::from([period]),
+                    week_pattern: None,
                 },
             )
             .unwrap();
@@ -2305,6 +2315,37 @@ pub(crate) mod tests {
         slot_desc.week_pattern = Some(pattern);
         fx.data.params.slots =
             Slots::from_subject_rows([(fx.subject, vec![(fx.slot, slot_desc)])]).unwrap();
+        fx.data
+            .colloscope
+            .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
+        assert_eq!(
+            broken_invariants(&fx.data),
+            Ok(BTreeSet::from([FixableInvariant::Convergence(
+                Convergence::InterrogationOnInactiveWeek(fx.slot, fx.week)
+            )]))
+        );
+    }
+
+    /// The subject's own pattern switches the week off, and the slot wears no
+    /// pattern at all: the cell is as dead as if the slot had excluded the week.
+    #[test]
+    fn interrogation_on_subject_pattern_excluded_week() {
+        let mut fx = colloscope_fixture();
+        let pattern = unsafe { WeekPatternId::new(8) };
+        fx.data.params.week_patterns.week_pattern_map.insert(
+            pattern,
+            WeekPattern {
+                name: "P".into(),
+                excluded_weeks: BTreeSet::from([fx.week]),
+            },
+        );
+        fx.data
+            .params
+            .subjects
+            .ordered_subject_list
+            .get_mut(&fx.subject)
+            .unwrap()
+            .week_pattern = Some(pattern);
         fx.data
             .colloscope
             .set_interrogation(fx.slot, fx.week, BTreeSet::from([0]));
@@ -3164,6 +3205,32 @@ pub(crate) mod tests {
             Reference::WeekPattern {
                 target: pattern,
                 site: WeekPatternRefSite::IncompatWeekPattern(incompat),
+            },
+        );
+    }
+
+    #[test]
+    fn dangling_week_pattern_in_subject_is_reported() {
+        let mut data = InnerData::default();
+        let subject = unsafe { SubjectId::new(1) };
+        let pattern = unsafe { WeekPatternId::new(2) };
+        data.params
+            .subjects
+            .ordered_subject_list
+            .insert_at(
+                0,
+                subject,
+                Subject {
+                    week_pattern: Some(pattern),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_single_dangling_fk(
+            &data,
+            Reference::WeekPattern {
+                target: pattern,
+                site: WeekPatternRefSite::SubjectWeekPattern(subject),
             },
         );
     }

@@ -81,6 +81,7 @@ fn document() -> Built {
                     }),
                 },
                 excluded_periods: BTreeSet::new(),
+                week_pattern: None,
             },
         )),
         NewId::SubjectId,

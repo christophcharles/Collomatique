@@ -9,7 +9,7 @@ use thiserror::Error;
 use collomatique_state::{ContentOrd, Join, References};
 
 use crate::OrderedTable;
-use crate::ids::{NewId, PeriodId, SubjectId};
+use crate::ids::{NewId, PeriodId, SubjectId, WeekPatternId};
 use crate::non_empty_range::NonEmptyRangeInclusive;
 use crate::ops::AnnotatedSubjectOp;
 
@@ -39,6 +39,12 @@ pub struct Subject {
     /// By default a subject is present for every period.
     #[fk]
     pub excluded_periods: BTreeSet<PeriodId>,
+    /// Week pattern restricting the subject's active weeks
+    ///
+    /// If `None`, the subject follows the weeks' interrogation flags alone.
+    /// The pattern can only disable weeks, never enable one.
+    #[fk]
+    pub week_pattern: Option<WeekPatternId>,
 }
 
 /// Description of one subject
@@ -277,6 +283,9 @@ impl Subjects {
             for period_id in &subject.excluded_periods {
                 ids.insert(period_id.inner());
             }
+            if let Some(week_pattern_id) = &subject.week_pattern {
+                ids.insert(week_pattern_id.inner());
+            }
         }
     }
 
@@ -289,6 +298,7 @@ impl Subjects {
                 let Subject {
                     parameters,
                     excluded_periods,
+                    week_pattern,
                 } = subject;
                 (
                     remap(map, subject_id),
@@ -298,6 +308,8 @@ impl Subjects {
                             .into_iter()
                             .map(|period_id| remap(map, period_id))
                             .collect(),
+                        week_pattern: week_pattern
+                            .map(|week_pattern_id| remap(map, week_pattern_id)),
                     },
                 )
             })

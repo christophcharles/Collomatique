@@ -265,6 +265,12 @@ pub enum Fix {
         incompat: IncompatId,
         rebuilt: Incompatibility,
     },
+    /// A subject stops following a week pattern — meaning it now runs on every
+    /// week its periods enable.
+    ClearSubjectWeekPattern {
+        subject: SubjectId,
+        rebuilt: Subject,
+    },
     /// A slot pairing rule goes with one of the two slots it relates.
     DeleteSlotPairingRule { rule: SlotPairingRuleId },
     /// A group list's whole colloscope placements row goes.
@@ -353,6 +359,9 @@ impl FixOp for Fix {
             }
             Fix::ClearIncompatWeekPattern { incompat, rebuilt } => {
                 AnnotatedIncompatOp::Update(*incompat, rebuilt.clone()).into()
+            }
+            Fix::ClearSubjectWeekPattern { subject, rebuilt } => {
+                AnnotatedSubjectOp::Update(*subject, rebuilt.clone()).into()
             }
             Fix::DeleteSlotPairingRule { rule } => AnnotatedSlotPairingOp::Remove(*rule).into(),
             Fix::ClearColloscopeGroupListRow { group_list } => {
@@ -713,7 +722,7 @@ impl Data {
         }
     }
 
-    /// Both sites hold the pattern in an `Option` whose `None` is a legal,
+    /// All three sites hold the pattern in an `Option` whose `None` is a legal,
     /// documented value meaning "every week", so the reference can go alone and
     /// the row stays. This is the map's one deliberate divergence from the
     /// legacy cleaning, which deleted the slot and the incompatibility. No
@@ -748,6 +757,18 @@ impl Data {
                 rebuilt.week_pattern_id = None;
                 Some(Fix::ClearIncompatWeekPattern {
                     incompat: incompat_id,
+                    rebuilt,
+                })
+            }
+            WeekPatternRefSite::SubjectWeekPattern(subject_id) => {
+                let subject = params.subjects.find_subject(subject_id)?;
+                if subject.week_pattern != Some(week_pattern) {
+                    return None;
+                }
+                let mut rebuilt = subject.clone();
+                rebuilt.week_pattern = None;
+                Some(Fix::ClearSubjectWeekPattern {
+                    subject: subject_id,
                     rebuilt,
                 })
             }
