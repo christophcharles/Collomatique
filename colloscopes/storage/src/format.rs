@@ -1,7 +1,7 @@
-//! Spec-2 format structs
+//! Format structs
 //!
-//! This module mirrors, field for field, the JSON shapes specified in
-//! `docs/file_format/file_format.md` (spec version 2). It is layer 1 of the decoding
+//! This module mirrors, field for field, the JSON shapes of the spec. It
+//! is layer 1 of the decoding
 //! pipeline: serde derives (plus a few custom scalar parsers) enforce the
 //! purely *local* validity rules — shapes, scalar encodings, key uniqueness
 //! within a collection. Referential rules (dangling ids, derived key sets,
@@ -32,6 +32,7 @@ pub mod settings;
 pub mod slot_pairings;
 pub mod slots;
 pub mod students;
+pub mod subject_week_patterns;
 pub mod subjects;
 pub mod teachers;
 pub mod week_patterns;
@@ -64,6 +65,7 @@ pub enum Block {
     Balancing(balancing::Balancing),
     Colloscope(colloscope::Colloscope),
     ExportConfig(export_config::ExportConfig),
+    SubjectWeekPatterns(subject_week_patterns::SubjectWeekPatterns),
 }
 
 /// The name of a spec-2 block, without its payload
@@ -88,11 +90,12 @@ pub enum BlockName {
     Balancing,
     Colloscope,
     ExportConfig,
+    SubjectWeekPatterns,
 }
 
 impl BlockName {
     /// All block names in canonical order
-    pub const ALL: [BlockName; 16] = [
+    pub const ALL: [BlockName; 17] = [
         BlockName::GeneralPlanning,
         BlockName::Subjects,
         BlockName::Teachers,
@@ -109,7 +112,20 @@ impl BlockName {
         BlockName::Balancing,
         BlockName::Colloscope,
         BlockName::ExportConfig,
+        BlockName::SubjectWeekPatterns,
     ];
+
+    /// The spec level at which this block was introduced — the canonical
+    /// `minimum_spec_version` of its entries (spec §2)
+    ///
+    /// Frozen with the block name itself: the reader rejects an entry
+    /// declaring anything else, and the writer stamps exactly this.
+    pub(crate) fn canonical_spec_version(self) -> u32 {
+        match self {
+            BlockName::SubjectWeekPatterns => 3,
+            _ => 2,
+        }
+    }
 
     /// The block name as it appears in the file
     pub fn as_str(self) -> &'static str {
@@ -130,6 +146,7 @@ impl BlockName {
             BlockName::Balancing => "Balancing",
             BlockName::Colloscope => "Colloscope",
             BlockName::ExportConfig => "ExportConfig",
+            BlockName::SubjectWeekPatterns => "SubjectWeekPatterns",
         }
     }
 
@@ -162,6 +179,7 @@ impl Block {
             Block::Balancing(_) => BlockName::Balancing,
             Block::Colloscope(_) => BlockName::Colloscope,
             Block::ExportConfig(_) => BlockName::ExportConfig,
+            Block::SubjectWeekPatterns(_) => BlockName::SubjectWeekPatterns,
         }
     }
 }
@@ -193,6 +211,7 @@ pub struct Blocks {
     pub balancing: Option<balancing::Balancing>,
     pub colloscope: Option<colloscope::Colloscope>,
     pub export_config: Option<export_config::ExportConfig>,
+    pub subject_week_patterns: Option<subject_week_patterns::SubjectWeekPatterns>,
 }
 
 #[cfg(test)]

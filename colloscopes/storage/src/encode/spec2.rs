@@ -1,7 +1,11 @@
 //! Spec-2 encode submodule
 //!
+//! The name is historical: the pipeline writes every block, each stamped
+//! with the spec revision that introduced it, so the file demands the
+//! spec level of its content rather than of the writer.
+//!
 //! This module builds a [Spec2Document] from an [InnerData], in the
-//! spec's canonical form (`docs/file_format/file_format.md` §3): blocks in default
+//! spec's canonical form (§3): blocks in default
 //! state and neutral entries of derived-key-set collections are
 //! omitted, blocks appear in canonical order, and unordered collections
 //! are sorted.
@@ -16,7 +20,7 @@ use mem::ids::Id;
 
 use std::collections::BTreeSet;
 
-/// Builds the sixteen format blocks of the document — the exact values
+/// Builds the seventeen format blocks of the document — the exact values
 /// [encode] writes, which is what makes a check on them faithful
 fn build_blocks(inner: &InnerData) -> format::Blocks {
     let params = &inner.params;
@@ -37,6 +41,7 @@ fn build_blocks(inner: &InnerData) -> format::Blocks {
         balancing: Some(build_balancing(params)),
         colloscope: Some(build_colloscope(inner)),
         export_config: Some(build_export_config(&inner.export_config)),
+        subject_week_patterns: Some(build_subject_week_patterns(params)),
     }
 }
 
@@ -87,6 +92,11 @@ pub fn encode(inner: &InnerData) -> Result<Spec2Document, EncodeError> {
     push(&mut entries, blocks.balancing, Block::Balancing);
     push(&mut entries, blocks.colloscope, Block::Colloscope);
     push(&mut entries, blocks.export_config, Block::ExportConfig);
+    push(
+        &mut entries,
+        blocks.subject_week_patterns,
+        Block::SubjectWeekPatterns,
+    );
 
     Ok(Spec2Document {
         header: super::generate_header(),
@@ -128,10 +138,11 @@ fn push<B: Default + PartialEq>(
     if block == B::default() {
         return;
     }
+    let content = wrap(block);
     entries.push(Spec2Entry {
-        minimum_spec_version: 2,
+        minimum_spec_version: content.name().canonical_spec_version(),
         needed_entry: true,
-        content: wrap(block),
+        content,
     });
 }
 
@@ -492,6 +503,29 @@ fn build_group_list_associations(
             group_list_id: group_list_id.inner(),
         });
     }
+    keyed(rows)
+}
+
+fn build_subject_week_patterns(
+    params: &mem::colloscope_params::Parameters,
+) -> format::subject_week_patterns::SubjectWeekPatterns {
+    // Sparse: a subject without a pattern has no row. Sorted by subject id,
+    // like every unordered collection in canonical form — the subject list
+    // is in user order, which is not it.
+    let mut rows: Vec<_> = params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .filter_map(|(subject_id, subject)| {
+            subject.week_pattern.map(|week_pattern_id| {
+                format::subject_week_patterns::SubjectWeekPattern {
+                    subject_id: subject_id.inner(),
+                    week_pattern_id: week_pattern_id.inner(),
+                }
+            })
+        })
+        .collect();
+    rows.sort_by_key(|row| row.subject_id);
     keyed(rows)
 }
 

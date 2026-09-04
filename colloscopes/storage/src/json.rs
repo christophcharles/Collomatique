@@ -105,4 +105,4 @@ pub enum ValidFileContent {
     Colloscope,
 }
 
-pub const CURRENT_SPEC_VERSION: u32 = 2;
+pub const CURRENT_SPEC_VERSION: u32 = 3;

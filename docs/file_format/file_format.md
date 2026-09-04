@@ -1,6 +1,6 @@
 # The Collomatique file format
 
-This document specifies the Collomatique colloscope file format, **spec version 2**.
+This document specifies the Collomatique colloscope file format, **spec version 3**.
 It is self-contained: it describes the format in the abstract, so that anyone can
 write an independent loader, exporter or tool from this document alone.
 
@@ -28,10 +28,16 @@ Two version numbers coexist, with different roles:
   document is meaningful without it. These two fields are what actually gate
   readability (§2, §5).
 
-The spec version described by this document is **2**. The value **1 is permanently
+The spec version described by this document is **3**. The value **1 is permanently
 retired**: it belonged to a pre-release format, and no valid file contains a block
 declaring `minimum_spec_version: 1`. Spec numbering for this format effectively
 starts at 2.
+
+Spec 3 adds one block, `SubjectWeekPatterns` (§4.17), and changes nothing else.
+Spec-2 files stay valid spec-3 files: the block is simply absent, which means its
+default state — no subject is restricted by a week pattern. A file only carries the
+block when the feature is used (§3, *Canonical form*), so a document produced by a
+spec-3 writer that never uses it is a plain spec-2 document.
 
 ## 2. Envelope
 
@@ -73,15 +79,18 @@ Each element of `entries` is `{minimum_spec_version, needed_entry, content}`, wh
 `content` is an object with **exactly one key** — the block name — whose value is
 the block's payload.
 
-Spec 2 defines sixteen block names (§4):
+Spec 3 defines seventeen block names (§4):
 
 `GeneralPlanning`, `Subjects`, `Teachers`, `Students`, `Assignments`,
 `WeekPatterns`, `Slots`, `Incompatibilities`, `GroupLists`,
 `GroupListAssociations`, `Pairings`, `SlotPairings`, `Settings`, `Balancing`,
-`Colloscope`, `ExportConfig`.
+`Colloscope`, `ExportConfig`, `SubjectWeekPatterns`.
 
-For each of them the canonical envelope values are `minimum_spec_version: 2` and
-`needed_entry: true`; a spec-2 block declaring different values is invalid.
+Each block name has canonical envelope values, frozen with the name itself: a
+block declaring anything else is invalid. `needed_entry` is `true` for all of
+them. `minimum_spec_version` is the spec revision that introduced the block, so
+it is **2** for every block above except `SubjectWeekPatterns`, which declares
+**3**.
 
 Rules for the block list:
 
@@ -313,6 +322,9 @@ Payload: array, **order-significant** (user order).
 
 Constraints: every id in `excluded_periods` is an existing period; all ranges
 satisfy `min <= max`.
+
+A subject may additionally be restricted to a subset of weeks by a week pattern;
+that link lives in its own block, `SubjectWeekPatterns` (§4.17).
 
 ### 4.3 `Teachers`
 
@@ -847,6 +859,41 @@ The shape is exactly the default above; notes:
 - All strings are plain strings and may be empty. Every `..._enabled` field is a
   bool.
 
+### 4.17 `SubjectWeekPatterns`
+
+*Introduced by spec 3; its entries declare `minimum_spec_version: 3`.*
+
+Which week pattern restricts a subject's active weeks. Payload: keyed collection
+of association rows, keyed by `subject_id`.
+
+**Default:** `[]` — no subject is restricted by a week pattern.
+
+```json
+[
+  { "subject_id": 3, "week_pattern_id": 12 }
+]
+```
+
+An absent row means the subject follows the weeks' `interrogations` flags alone.
+The key set is free: every present row carries real state (`week_pattern_id`), so
+there is no neutral-content rule here.
+
+Like every week pattern (§4.6), a subject's pattern can only **disable** weeks,
+never enable one the schedule has off. A week is available for interrogations in
+a subject only if the week's `interrogations` flag is set, the week's period is
+not in the subject's `excluded_periods` (§4.2), the subject's pattern (if any)
+does not exclude it, and the slot's own pattern (§4.7) does not exclude it. A week
+the subject's pattern excludes is as unavailable for that subject as a week of an
+excluded period.
+
+The same pattern may be referenced by any number of subjects, and by slots and
+incompatibilities as well: a single "interrogation pause" pattern is meant to be
+shared.
+
+Constraints: both ids exist; at most one row per subject (the keyed-collection
+rule). A row may name a pattern that excludes weeks already unavailable to the
+subject for another reason; that is redundant but valid.
+
 ## 5. Forward compatibility
 
 The format evolves by these rules, which a robust reader or writer can rely on:
@@ -881,13 +928,19 @@ demands the spec level of its *content*, not of the application that wrote it. A
 newer application that never uses a newer feature keeps producing files that older
 readers open cleanly.
 
+The one spec-3 block, `SubjectWeekPatterns` (§4.17), declares
+`needed_entry: true`. A spec-2 reader must therefore **refuse** a file carrying it
+rather than skip it: the block changes which weeks a subject can be interrogated
+on, so dropping it would silently misread the document.
+
 ## 6. Complete example
 
 A small, internally consistent document in canonical form: one period of two weeks,
 one subject, one teacher, two students, one week pattern, one slot, one automatic
 group list, and a partially filled colloscope. `Incompatibilities`, `Pairings`,
-`SlotPairings`, `Balancing` and `ExportConfig` are in their default state and
-therefore omitted.
+`SlotPairings`, `Balancing`, `ExportConfig` and `SubjectWeekPatterns` are in their
+default state and therefore omitted — the document uses no spec-3 feature, so a
+spec-2 reader opens it cleanly.
 
 ```json
 {

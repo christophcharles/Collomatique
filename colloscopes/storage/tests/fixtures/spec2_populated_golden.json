@@ -1,7 +1,7 @@
 {
   "header": {
     "file_type": "Collomatique",
-    "produced_with_version": "0.1.0-alpha.0.99",
+    "produced_with_version": "0.1.0-alpha.4.99",
     "file_content": "Colloscope"
   },
   "entries": [
@@ -742,6 +742,18 @@
             "center_vertically": true
           }
         }
+      }
+    },
+    {
+      "minimum_spec_version": 3,
+      "needed_entry": true,
+      "content": {
+        "SubjectWeekPatterns": [
+          {
+            "subject_id": 16,
+            "week_pattern_id": 21
+          }
+        ]
       }
     }
   ]

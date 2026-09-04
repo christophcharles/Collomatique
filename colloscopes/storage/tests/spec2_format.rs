@@ -5,6 +5,7 @@
 //! validity rules, the derived-key-set completion, and the placement
 //! errors of the sparse colloscope encoding.
 
+use collomatique_state_colloscopes::ids::Id;
 use collomatique_storage::*;
 
 fn document(entries: &[String]) -> String {
@@ -21,11 +22,17 @@ fn document(entries: &[String]) -> String {
     )
 }
 
-fn entry(content: &str) -> String {
+fn entry_at_version(version: u32, content: &str) -> String {
     format!(
-        r#"{{ "minimum_spec_version": 2, "needed_entry": true, "content": {} }}"#,
-        content
+        r#"{{ "minimum_spec_version": {}, "needed_entry": true, "content": {} }}"#,
+        version, content
     )
+}
+
+/// An entry for a block introduced by spec 2, which is all of them but
+/// `SubjectWeekPatterns`
+fn entry(content: &str) -> String {
+    entry_at_version(2, content)
 }
 
 /// Runs the in-memory invariant gate on a decoded document
@@ -469,6 +476,16 @@ fn known_block_with_non_canonical_envelope_values_is_rejected() {
         expect_decode_error(&not_needed),
         DecodeError::MismatchedSpecRequirementInEntry("Settings")
     );
+
+    // The canonical spec level is per block, not per document: a spec-3
+    // block claiming 2 is as invalid as a spec-2 block claiming 3.
+    let too_old = document(&[entry(
+        r#"{ "SubjectWeekPatterns": [ { "subject_id": 2, "week_pattern_id": 6 } ] }"#,
+    )]);
+    assert_eq!(
+        expect_decode_error(&too_old),
+        DecodeError::MismatchedSpecRequirementInEntry("SubjectWeekPatterns")
+    );
 }
 
 #[test]
@@ -478,6 +495,16 @@ fn unknown_block_within_supported_spec_is_probably_illformed() {
     )]);
     assert_eq!(
         expect_decode_error(&content),
+        DecodeError::ProbablyIllformedEntry
+    );
+
+    // The supported level is now 3, so an unknown name claiming it is
+    // still a typo rather than a future block.
+    let at_current = document(&[format!(
+        r#"{{ "minimum_spec_version": 3, "needed_entry": false, "content": {{ "NotABlock": {{}} }} }}"#
+    )]);
+    assert_eq!(
+        expect_decode_error(&at_current),
         DecodeError::ProbablyIllformedEntry
     );
 }
@@ -1488,6 +1515,159 @@ fn incompatibility_week_pattern_must_exist() {
         expect_decode_error(&content),
         dangling("Incompatibilities", RowKey::Id(9), IdKind::WeekPattern, 99)
     );
+}
+
+/// A scheduling setup whose subject carries a week pattern
+///
+/// One period of two weeks (ids 20 and 21), one subject (id 2) with
+/// interrogations, one teacher, one slot (id 7) with no pattern of its
+/// own, and a « Pause colles » pattern (id 6) excluding week 21.
+/// `subject_week_patterns` is the block under test, spelled out so the
+/// dangling cases can point it at ids that do not exist.
+fn subject_pattern_document(subject_week_patterns: &str, extra: &[String]) -> String {
+    let mut entries = vec![
+        entry(
+            r#"{ "GeneralPlanning": {
+                "first_week": null,
+                "periods": [
+                    { "id": 1, "weeks": [
+                        { "id": 20, "interrogations": true, "annotation": null },
+                        { "id": 21, "interrogations": true, "annotation": null }
+                    ] }
+                ]
+            } }"#,
+        ),
+        entry(&format!(
+            r#"{{ "Subjects": [ {} ] }}"#,
+            subject_with_interrogations(2, "Mathématiques")
+        )),
+        entry(
+            r#"{ "Teachers": [
+                { "id": 3, "surname": "Rogue", "firstname": "Severus", "tel": null, "email": null, "subjects": [2] }
+            ] }"#,
+        ),
+        entry(
+            r#"{ "WeekPatterns": [ { "id": 6, "name": "Pause colles", "excluded_weeks": [21] } ] }"#,
+        ),
+        entry(
+            r#"{ "Slots": [
+                { "subject_id": 2, "slots": [
+                    { "id": 7, "teacher_id": 3, "start": { "day": "monday", "time": "14:00" }, "extra_info": "", "week_pattern_id": null, "cost": 0 }
+                ] }
+            ] }"#,
+        ),
+        entry_at_version(
+            3,
+            &format!(r#"{{ "SubjectWeekPatterns": {subject_week_patterns} }}"#),
+        ),
+    ];
+    entries.extend_from_slice(extra);
+    document(&entries)
+}
+
+#[test]
+fn subject_week_pattern_subject_must_exist() {
+    let content =
+        subject_pattern_document(r#"[ { "subject_id": 99, "week_pattern_id": 6 } ]"#, &[]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        dangling("SubjectWeekPatterns", RowKey::Id(99), IdKind::Subject, 99)
+    );
+}
+
+#[test]
+fn subject_week_pattern_week_pattern_must_exist() {
+    let content =
+        subject_pattern_document(r#"[ { "subject_id": 2, "week_pattern_id": 99 } ]"#, &[]);
+
+    assert_eq!(
+        expect_decode_error(&content),
+        dangling(
+            "SubjectWeekPatterns",
+            RowKey::Id(2),
+            IdKind::WeekPattern,
+            99
+        )
+    );
+}
+
+#[test]
+fn subject_week_pattern_decodes_and_reserializes_identically() {
+    let content = subject_pattern_document(r#"[ { "subject_id": 2, "week_pattern_id": 6 } ]"#, &[]);
+
+    let (inner, caveats) = deserialize_data(&content).expect("The document should decode");
+    assert!(caveats.is_empty());
+    let subject = inner
+        .params
+        .subjects
+        .ordered_subject_list
+        .iter()
+        .find(|(id, _)| id.inner() == 2)
+        .expect("subject 2 is in the document")
+        .1;
+    assert_eq!(subject.week_pattern.map(|id| id.inner()), Some(6));
+
+    // The writer stamps the block's own spec level, not the document's:
+    // this is the only entry declaring 3.
+    let reserialized =
+        serialize_data(gate(inner).get_inner_data()).expect("The document should be writable");
+    let value: serde_json::Value = serde_json::from_str(&reserialized).unwrap();
+    let versions: Vec<_> = value["entries"]
+        .as_array()
+        .expect("entries is an array")
+        .iter()
+        .filter(|entry| entry["content"].get("SubjectWeekPatterns").is_some())
+        .map(|entry| entry["minimum_spec_version"].clone())
+        .collect();
+    assert_eq!(versions, vec![serde_json::json!(3)]);
+
+    let (decoded_again, _caveats) =
+        deserialize_data(&reserialized).expect("Reserialized document should decode");
+    assert_eq!(
+        serialize_data(gate(decoded_again).get_inner_data()).expect("still writable"),
+        reserialized
+    );
+}
+
+#[test]
+fn colloscope_row_on_a_subject_pattern_off_week_is_rejected() {
+    // Week 21 has interrogations and the slot has no pattern of its own,
+    // but the subject's pattern excludes it. Pins that the block is
+    // applied before the colloscope is reconstructed.
+    let content = subject_pattern_document(
+        r#"[ { "subject_id": 2, "week_pattern_id": 6 } ]"#,
+        &[entry(
+            r#"{ "Colloscope": {
+                "interrogations": [ { "slot_id": 7, "week_id": 21, "assigned_groups": [] } ],
+                "group_lists": []
+            } }"#,
+        )],
+    );
+
+    assert_eq!(
+        expect_decode_error(&content),
+        DecodeError::InvalidInterrogationCell {
+            slot_id: 7,
+            week_id: 21
+        }
+    );
+}
+
+#[test]
+fn colloscope_row_on_a_subject_pattern_on_week_decodes() {
+    let content = subject_pattern_document(
+        r#"[ { "subject_id": 2, "week_pattern_id": 6 } ]"#,
+        &[entry(
+            r#"{ "Colloscope": {
+                "interrogations": [ { "slot_id": 7, "week_id": 20, "assigned_groups": [] } ],
+                "group_lists": []
+            } }"#,
+        )],
+    );
+
+    let (_inner, caveats) = deserialize_data(&content).expect("Active cell should decode");
+    assert!(caveats.is_empty());
 }
 
 #[test]
