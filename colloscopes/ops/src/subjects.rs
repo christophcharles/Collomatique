@@ -4,10 +4,14 @@ use super::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubjectsUpdateOp {
-    AddNewSubject(collomatique_state_colloscopes::subjects::SubjectParameters),
+    AddNewSubject(
+        collomatique_state_colloscopes::subjects::SubjectParameters,
+        Option<collomatique_state_colloscopes::WeekPatternId>,
+    ),
     UpdateSubject(
         collomatique_state_colloscopes::SubjectId,
         collomatique_state_colloscopes::subjects::SubjectParameters,
+        Option<collomatique_state_colloscopes::WeekPatternId>,
     ),
     DeleteSubject(collomatique_state_colloscopes::SubjectId),
     MoveSubjectUp(collomatique_state_colloscopes::SubjectId),
@@ -17,14 +21,12 @@ pub enum SubjectsUpdateOp {
         collomatique_state_colloscopes::PeriodId,
         bool,
     ),
-    SetSubjectWeekPattern(
-        collomatique_state_colloscopes::SubjectId,
-        Option<collomatique_state_colloscopes::WeekPatternId>,
-    ),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum SubjectsUpdateError {
+    #[error(transparent)]
+    AddNewSubject(#[from] AddNewSubjectError),
     #[error(transparent)]
     UpdateSubject(#[from] UpdateSubjectError),
     #[error(transparent)]
@@ -35,14 +37,20 @@ pub enum SubjectsUpdateError {
     MoveSubjectDown(#[from] MoveSubjectDownError),
     #[error(transparent)]
     UpdatePeriodStatus(#[from] UpdatePeriodStatusError),
-    #[error(transparent)]
-    SetSubjectWeekPattern(#[from] SetSubjectWeekPatternError),
+}
+
+#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
+pub enum AddNewSubjectError {
+    #[error("Week pattern ID {0:?} is invalid")]
+    InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
 pub enum UpdateSubjectError {
     #[error("Subject ID {0:?} is invalid")]
     InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
+    #[error("Week pattern ID {0:?} is invalid")]
+    InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -75,14 +83,6 @@ pub enum UpdatePeriodStatusError {
     InvalidPeriodId(collomatique_state_colloscopes::PeriodId),
 }
 
-#[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
-pub enum SetSubjectWeekPatternError {
-    #[error("Subject ID {0:?} is invalid")]
-    InvalidSubjectId(collomatique_state_colloscopes::SubjectId),
-    #[error("Week pattern ID {0:?} is invalid")]
-    InvalidWeekPatternId(collomatique_state_colloscopes::WeekPatternId),
-}
-
 impl SubjectsUpdateOp {
     pub(crate) fn apply_to_session<
         T: collomatique_state::traits::Manager<Data = Data, Desc = Desc>,
@@ -91,7 +91,7 @@ impl SubjectsUpdateOp {
         session: &mut CascadeSession<T>,
     ) -> Result<Option<collomatique_state_colloscopes::SubjectId>, SubjectsUpdateError> {
         match self {
-            Self::AddNewSubject(params) => {
+            Self::AddNewSubject(params, week_pattern) => {
                 let last_subject = session
                     .get_data()
                     .get_inner_data()
@@ -110,36 +110,60 @@ impl SubjectsUpdateOp {
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods: BTreeSet::new(),
-                                    week_pattern: None,
+                                    week_pattern: *week_pattern,
                                 },
                             ),
                         ),
                         self.get_desc(),
                     )
-                    // A brand new subject runs on every period, so it names no
-                    // period; and nothing in the document can name *it* yet. The
-                    // anchor is the list's own last subject, read one line above.
-                    .expect("a subject nothing names yet contradicts nothing");
+                    .map_err(|e| {
+                        use collomatique_state_colloscopes::{
+                            Error, FixableInvariant, Reference, WeekPatternRefSite,
+                        };
+                        match &e {
+                            // A brand new subject runs on every period, so it
+                            // names no period; and nothing in the document can
+                            // name *it* yet. The anchor is the list's own last
+                            // subject, read a few lines above. The one thing it
+                            // can be wrong about is the pattern it comes with,
+                            // and that break is not the cascade's to repair: the
+                            // subject goes away again with the rolled-back op, so
+                            // the map finds no subject naming the dead id,
+                            // answers nothing, and the target is convicted.
+                            Error::BrokenInvariants(set) => {
+                                for inv in set {
+                                    if let FixableInvariant::DanglingFk(Reference::WeekPattern {
+                                        target,
+                                        site: WeekPatternRefSite::SubjectWeekPattern(_),
+                                    }) = inv
+                                    {
+                                        return AddNewSubjectError::InvalidWeekPatternId(*target);
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during AddNewSubject: {set:?}");
+                            }
+                            _ => panic!("Unexpected error during AddNewSubject: {e:?}"),
+                        }
+                    })?;
                 let Some(collomatique_state_colloscopes::NewId::SubjectId(new_id)) = result else {
                     panic!("Unexpected result from SubjectOp::AddAfter");
                 };
                 Ok(Some(new_id))
             }
-            Self::UpdateSubject(subject_id, params) => {
+            Self::UpdateSubject(subject_id, params, week_pattern) => {
                 // An address check, not a cleaning guard: the op carries the
-                // subject's *parameters* only, so the excluded-period set and
-                // the week pattern have to be read off the live subject to be
+                // subject's *parameters* and its week pattern, so only the
+                // excluded-period set has to be read off the live subject to be
                 // written back unchanged.
-                let current_subject = session
+                let excluded_periods = session
                     .get_data()
                     .get_inner_data()
                     .params
                     .subjects
                     .find_subject(*subject_id)
-                    .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?;
-
-                let excluded_periods = current_subject.excluded_periods.clone();
-                let week_pattern = current_subject.week_pattern;
+                    .ok_or(UpdateSubjectError::InvalidSubjectId(*subject_id))?
+                    .excluded_periods
+                    .clone();
 
                 let result = session
                     .apply(
@@ -149,22 +173,50 @@ impl SubjectsUpdateOp {
                                 collomatique_state_colloscopes::Subject {
                                     parameters: params.clone(),
                                     excluded_periods,
-                                    week_pattern,
+                                    week_pattern: *week_pattern,
                                 },
                             ),
                         ),
                         self.get_desc(),
                     )
-                    // Everything new parameters can contradict is material that
-                    // was already there, so the cascade repairs all of it: the
-                    // teachers declared on a subject that no longer holds colles
-                    // lose it, its slots go, its group-list associations, its
-                    // balancing options and the pairing rules naming it are
-                    // dropped. That includes the case the
-                    // old body could not survive — a longer interrogation that
-                    // would push a late slot past midnight kills the slot now
-                    // (`Fix::DeleteOverflowingSlot`) instead of the process.
-                    .expect("the cascade repairs whatever new parameters contradict");
+                    .map_err(|e| {
+                        use collomatique_state_colloscopes::{
+                            Error, FixableInvariant, Reference, WeekPatternRefSite,
+                        };
+                        match &e {
+                            // Everything new parameters can contradict is
+                            // material that was already there, so the cascade
+                            // repairs all of it: the teachers declared on a
+                            // subject that no longer holds colles lose it, its
+                            // slots go, its group-list associations, its
+                            // balancing options and the pairing rules naming it
+                            // are dropped. That includes the case the old body
+                            // could not survive — a longer interrogation that
+                            // would push a late slot past midnight kills the slot
+                            // now (`Fix::DeleteOverflowingSlot`) instead of the
+                            // process — and the colles standing on the weeks a
+                            // new pattern switches off, which the cascade clears.
+                            //
+                            // What it cannot repair is a pattern id that resolves
+                            // to nothing: the subject goes back to its old pattern
+                            // with the rolled-back op, so the map finds no subject
+                            // naming the dead id, answers nothing, and the target
+                            // is convicted.
+                            Error::BrokenInvariants(set) => {
+                                for inv in set {
+                                    if let FixableInvariant::DanglingFk(Reference::WeekPattern {
+                                        target,
+                                        site: WeekPatternRefSite::SubjectWeekPattern(_),
+                                    }) = inv
+                                    {
+                                        return UpdateSubjectError::InvalidWeekPatternId(*target);
+                                    }
+                                }
+                                panic!("Unexpected invariant breaks during UpdateSubject: {set:?}");
+                            }
+                            _ => panic!("Unexpected error during UpdateSubject: {e:?}"),
+                        }
+                    })?;
 
                 assert!(result.is_none());
 
@@ -327,64 +379,6 @@ impl SubjectsUpdateOp {
 
                 Ok(None)
             }
-            Self::SetSubjectWeekPattern(subject_id, week_pattern_id) => {
-                // An address check the composite needs before it can build its
-                // op; the week pattern is left to the state layer, which is the
-                // one that knows whether the id resolves.
-                let mut subject = session
-                    .get_data()
-                    .get_inner_data()
-                    .params
-                    .subjects
-                    .find_subject(*subject_id)
-                    .ok_or(SetSubjectWeekPatternError::InvalidSubjectId(*subject_id))?
-                    .clone();
-
-                subject.week_pattern = *week_pattern_id;
-
-                let result = session
-                    .apply(
-                        collomatique_state_colloscopes::Op::Subject(
-                            collomatique_state_colloscopes::SubjectOp::Update(*subject_id, subject),
-                        ),
-                        self.get_desc(),
-                    )
-                    .map_err(|e| {
-                        use collomatique_state_colloscopes::{
-                            Error, FixableInvariant, Reference, WeekPatternRefSite,
-                        };
-                        match &e {
-                            // The colles the pattern puts on a dead week are
-                            // pre-existing material, so the cascade clears them
-                            // and the op lands. What it cannot repair is a
-                            // pattern id that resolves to nothing: the subject
-                            // goes back to its old pattern with the rolled-back
-                            // op, so the map finds no subject naming the dead id,
-                            // answers nothing, and the target is convicted.
-                            Error::BrokenInvariants(set) => {
-                                for inv in set {
-                                    if let FixableInvariant::DanglingFk(Reference::WeekPattern {
-                                        target,
-                                        site: WeekPatternRefSite::SubjectWeekPattern(_),
-                                    }) = inv
-                                    {
-                                        return SetSubjectWeekPatternError::InvalidWeekPatternId(
-                                            *target,
-                                        );
-                                    }
-                                }
-                                panic!(
-                                    "Unexpected invariant breaks during SetSubjectWeekPattern: {set:?}"
-                                );
-                            }
-                            _ => panic!("Unexpected error during SetSubjectWeekPattern: {e:?}"),
-                        }
-                    })?;
-
-                assert!(result.is_none());
-
-                Ok(None)
-            }
         }
     }
 
@@ -392,8 +386,12 @@ impl SubjectsUpdateOp {
         (
             OpCategory::Subjects,
             match self {
-                SubjectsUpdateOp::AddNewSubject(_desc) => "Ajouter une matière".into(),
-                SubjectsUpdateOp::UpdateSubject(_id, _desc) => "Modifier une matière".into(),
+                SubjectsUpdateOp::AddNewSubject(_desc, _week_pattern) => {
+                    "Ajouter une matière".into()
+                }
+                SubjectsUpdateOp::UpdateSubject(_id, _desc, _week_pattern) => {
+                    "Modifier une matière".into()
+                }
                 SubjectsUpdateOp::DeleteSubject(_id) => "Supprimer une matière".into(),
                 SubjectsUpdateOp::MoveSubjectUp(_id) => "Remonter une matière".into(),
                 SubjectsUpdateOp::MoveSubjectDown(_id) => "Descendre une matière".into(),
@@ -403,9 +401,6 @@ impl SubjectsUpdateOp {
                     } else {
                         "Ne pas dispenser une matière sur une période".into()
                     }
-                }
-                Self::SetSubjectWeekPattern(_subject_id, _week_pattern_id) => {
-                    "Modifier le motif de semaines d'une matière".into()
                 }
             },
         )
@@ -700,7 +695,7 @@ mod tests {
         added.name = "Botanique".into();
 
         let mut session = CascadeSession::new(base.clone());
-        let op = SubjectsUpdateOp::AddNewSubject(added.clone());
+        let op = SubjectsUpdateOp::AddNewSubject(added.clone(), None);
         let new_id = op
             .apply_to_session(&mut session)
             .expect("a fresh subject names nothing");
@@ -753,10 +748,11 @@ mod tests {
             panic!("WeekPatternOp::Add should issue a week pattern id");
         };
 
-        // A subject that skips a period and follows a pattern, so the fixture
-        // can see both survive an update that says nothing about them. Emptying
-        // the enrolment row and dropping the association first is what makes
-        // the exclusion legal.
+        // A subject that skips a period and follows a pattern. The exclusion is
+        // the field the op does not carry, so the fixture sees it survive an
+        // update that says nothing about it; the pattern is carried, and the
+        // fixture sees the op hand it back unchanged. Emptying the enrolment row
+        // and dropping the association first is what makes the exclusion legal.
         base.apply(
             Op::Assignment(AssignmentOp::SetRow(first_period, potions, BTreeSet::new())),
             (OpCategory::Assignments, "Préparation".into()),
@@ -783,7 +779,7 @@ mod tests {
         let mut renamed = params_of(base.get_data(), potions);
         renamed.name = "Potions et poisons".into();
 
-        let op = SubjectsUpdateOp::UpdateSubject(potions, renamed.clone());
+        let op = SubjectsUpdateOp::UpdateSubject(potions, renamed.clone(), Some(pattern));
         let (state, warnings) = apply_alone(&base, &op);
 
         assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
@@ -864,7 +860,7 @@ mod tests {
         let mut without_colles = params_of(base.get_data(), potions);
         without_colles.interrogation_parameters = None;
 
-        let op = SubjectsUpdateOp::UpdateSubject(potions, without_colles.clone());
+        let op = SubjectsUpdateOp::UpdateSubject(potions, without_colles.clone(), None);
         let (state, warnings) = apply_alone(&base, &op);
 
         let mut expected_fixes: Vec<_> = slots
@@ -947,7 +943,7 @@ mod tests {
             .expect("the fixture's Potions runs interrogations")
             .duration = long;
 
-        let op = SubjectsUpdateOp::UpdateSubject(potions, stretched.clone());
+        let op = SubjectsUpdateOp::UpdateSubject(potions, stretched.clone(), None);
         let (state, warnings) = apply_alone(&base, &op);
 
         assert_eq!(
@@ -1147,7 +1143,11 @@ mod tests {
             panic!("WeekPatternOp::Add should issue a week pattern id");
         };
 
-        let op = SubjectsUpdateOp::SetSubjectWeekPattern(potions, Some(pattern));
+        let op = SubjectsUpdateOp::UpdateSubject(
+            potions,
+            params_of(base.get_data(), potions),
+            Some(pattern),
+        );
         let (state, warnings) = apply_alone(&base, &op);
 
         assert_eq!(
@@ -1214,11 +1214,13 @@ mod tests {
             panic!("WeekPatternOp::Add should issue a week pattern id");
         };
 
+        let params = params_of(base.get_data(), potions);
+
         let mut session = CascadeSession::new(base.clone());
-        SubjectsUpdateOp::SetSubjectWeekPattern(potions, Some(pattern))
+        SubjectsUpdateOp::UpdateSubject(potions, params.clone(), Some(pattern))
             .apply_to_session(&mut session)
             .expect("the subject may follow a live pattern");
-        SubjectsUpdateOp::SetSubjectWeekPattern(potions, None)
+        SubjectsUpdateOp::UpdateSubject(potions, params, None)
             .apply_to_session(&mut session)
             .expect("dropping the pattern contradicts nothing");
         let (state, warnings) = session.commit((OpCategory::Subjects, "Aller-retour".into()));
@@ -1234,24 +1236,31 @@ mod tests {
         );
     }
 
-    /// A pattern id no document issued cannot be repaired away: the subject
-    /// goes back to the pattern it had with the rolled-back op, so the map has
-    /// no subject naming the dead id and the op is convicted.
+    /// A pattern id no document issued cannot be repaired away, on either of
+    /// the two ops that carry one: the updated subject goes back to the pattern
+    /// it had with the rolled-back op and the added one goes away entirely, so
+    /// in both cases the map has no subject naming the dead id and the op is
+    /// convicted.
     #[test]
-    fn a_dead_week_pattern_id_is_rejected_by_the_week_pattern_op() {
+    fn a_dead_week_pattern_id_is_rejected_by_both_ops_that_carry_one() {
         let base = hogwarts();
         let potions = subject_by_name(base.get_data(), "Potions");
+        let params = params_of(base.get_data(), potions);
         let dangling = dangling_week_pattern();
 
         let mut session = CascadeSession::new(base.clone());
 
         assert_eq!(
-            SubjectsUpdateOp::SetSubjectWeekPattern(potions, Some(dangling))
+            SubjectsUpdateOp::UpdateSubject(potions, params.clone(), Some(dangling))
                 .apply_to_session(&mut session)
                 .unwrap_err(),
-            SubjectsUpdateError::SetSubjectWeekPattern(
-                SetSubjectWeekPatternError::InvalidWeekPatternId(dangling)
-            ),
+            SubjectsUpdateError::UpdateSubject(UpdateSubjectError::InvalidWeekPatternId(dangling)),
+        );
+        assert_eq!(
+            SubjectsUpdateOp::AddNewSubject(params, Some(dangling))
+                .apply_to_session(&mut session)
+                .unwrap_err(),
+            SubjectsUpdateError::AddNewSubject(AddNewSubjectError::InvalidWeekPatternId(dangling)),
         );
 
         assert_eq!(session.get_data(), base.get_data());
@@ -1449,7 +1458,7 @@ mod tests {
     }
 
     /// Every op that names an existing subject, on an id no document issued.
-    /// Five of the six answer from the family's own address check; the
+    /// Four of the five answer from the family's own address check; the
     /// removal is the one that lets the state layer's precheck answer and
     /// translates it. A rejected op changes nothing and logs nothing.
     #[test]
@@ -1462,7 +1471,7 @@ mod tests {
         let mut session = CascadeSession::new(base.clone());
 
         assert_eq!(
-            SubjectsUpdateOp::UpdateSubject(dangling, params)
+            SubjectsUpdateOp::UpdateSubject(dangling, params, None)
                 .apply_to_session(&mut session)
                 .unwrap_err(),
             SubjectsUpdateError::UpdateSubject(UpdateSubjectError::InvalidSubjectId(dangling)),
@@ -1492,14 +1501,6 @@ mod tests {
             SubjectsUpdateError::UpdatePeriodStatus(UpdatePeriodStatusError::InvalidSubjectId(
                 dangling
             )),
-        );
-        assert_eq!(
-            SubjectsUpdateOp::SetSubjectWeekPattern(dangling, None)
-                .apply_to_session(&mut session)
-                .unwrap_err(),
-            SubjectsUpdateError::SetSubjectWeekPattern(
-                SetSubjectWeekPatternError::InvalidSubjectId(dangling)
-            ),
         );
 
         assert_eq!(session.get_data(), base.get_data());

@@ -25,12 +25,11 @@ pub enum SubjectsInput {
     MoveUpSubjectClicked(collomatique_state_colloscopes::SubjectId),
     MoveDownSubjectClicked(collomatique_state_colloscopes::SubjectId),
     PeriodStatusUpdated(collomatique_state_colloscopes::SubjectId, usize, bool),
-    WeekPatternUpdated(
-        collomatique_state_colloscopes::SubjectId,
+
+    SubjectParamsSelected(
+        collomatique_state_colloscopes::SubjectParameters,
         Option<collomatique_state_colloscopes::WeekPatternId>,
     ),
-
-    SubjectParamsSelected(collomatique_state_colloscopes::SubjectParameters),
     /// A dialog of this panel just closed. The panel hosts no window of its
     /// own, so it passes the request up to the editor.
     PresentParent,
@@ -53,9 +52,7 @@ enum SubjectParamsSelectionReason {
 pub struct Subjects {
     periods: collomatique_state_colloscopes::periods::Periods,
     weeks: collomatique_state_colloscopes::weeks::Weeks,
-    /// The week patterns as the rows offer them: by name, then by id to break
-    /// ties.
-    ordered_week_patterns: Vec<(collomatique_state_colloscopes::WeekPatternId, String)>,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
     subjects: collomatique_state_colloscopes::subjects::Subjects,
     subjects_list: FactoryVecDeque<subjects_display::Entry>,
 
@@ -112,8 +109,8 @@ impl Component for Subjects {
             .transient_for(&root)
             .launch(())
             .forward(sender.input_sender(), |msg| match msg {
-                subject_params::DialogOutput::Accepted(params) => {
-                    SubjectsInput::SubjectParamsSelected(params)
+                subject_params::DialogOutput::Accepted(params, week_pattern) => {
+                    SubjectsInput::SubjectParamsSelected(params, week_pattern)
                 }
                 subject_params::DialogOutput::PresentParent => SubjectsInput::PresentParent,
             });
@@ -136,15 +133,12 @@ impl Component for Subjects {
                 subjects_display::EntryOutput::PeriodStatusUpdated(id, period_num, status) => {
                     SubjectsInput::PeriodStatusUpdated(id, period_num, status)
                 }
-                subjects_display::EntryOutput::WeekPatternUpdated(id, week_pattern_id) => {
-                    SubjectsInput::WeekPatternUpdated(id, week_pattern_id)
-                }
             });
 
         let model = Subjects {
             periods: collomatique_state_colloscopes::periods::Periods::default(),
             weeks: collomatique_state_colloscopes::weeks::Weeks::default(),
-            ordered_week_patterns: Vec::new(),
+            week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
             subjects: collomatique_state_colloscopes::subjects::Subjects::default(),
             subjects_list,
             subject_params_selection_reason: SubjectParamsSelectionReason::New,
@@ -161,15 +155,7 @@ impl Component for Subjects {
             SubjectsInput::Update(new_periods, new_weeks, new_week_patterns, new_subjects) => {
                 self.periods = new_periods;
                 self.weeks = new_weeks;
-                self.ordered_week_patterns = {
-                    let mut week_patterns: Vec<_> = new_week_patterns
-                        .week_pattern_map
-                        .iter()
-                        .map(|(id, week_pattern)| (id, week_pattern.name.clone()))
-                        .collect();
-                    week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
-                    week_patterns
-                };
+                self.week_patterns = new_week_patterns;
                 self.subjects = new_subjects;
 
                 crate::tools::factories::update_vec_deque(
@@ -179,8 +165,6 @@ impl Component for Subjects {
                         .iter()
                         .map(|(id, desc)| subjects_display::EntryData {
                             subject_params: desc.parameters.clone(),
-                            ordered_week_patterns: self.ordered_week_patterns.clone(),
-                            week_pattern: desc.week_pattern,
                             periods: self
                                 .periods
                                 .period_ids()
@@ -208,7 +192,9 @@ impl Component for Subjects {
                     .sender()
                     .send(subject_params::DialogInput::Show(
                         self.periods.first_week.clone(),
+                        self.week_patterns.clone(),
                         collomatique_state_colloscopes::SubjectParameters::default(),
+                        None,
                     ))
                     .unwrap();
             }
@@ -219,7 +205,9 @@ impl Component for Subjects {
                     .sender()
                     .send(subject_params::DialogInput::Show(
                         self.periods.first_week.clone(),
+                        self.week_patterns.clone(),
                         current_subject.parameters.clone(),
+                        current_subject.week_pattern,
                     ))
                     .unwrap();
             }
@@ -257,22 +245,15 @@ impl Component for Subjects {
                     ))
                     .unwrap();
             }
-            SubjectsInput::WeekPatternUpdated(id, week_pattern_id) => {
-                sender
-                    .output(SubjectsOutput::UpdateOp(
-                        SubjectsUpdateOp::SetSubjectWeekPattern(id, week_pattern_id),
-                    ))
-                    .unwrap();
-            }
-            SubjectsInput::SubjectParamsSelected(params) => {
+            SubjectsInput::SubjectParamsSelected(params, week_pattern) => {
                 sender
                     .output(SubjectsOutput::UpdateOp(
                         match self.subject_params_selection_reason {
                             SubjectParamsSelectionReason::New => {
-                                SubjectsUpdateOp::AddNewSubject(params)
+                                SubjectsUpdateOp::AddNewSubject(params, week_pattern)
                             }
                             SubjectParamsSelectionReason::Edit(id) => {
-                                SubjectsUpdateOp::UpdateSubject(id, params)
+                                SubjectsUpdateOp::UpdateSubject(id, params, week_pattern)
                             }
                         },
                     ))

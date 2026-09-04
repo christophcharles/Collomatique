@@ -4050,6 +4050,7 @@ fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
                 0 => collomatique_ops::SubjectsUpdateOp::UpdateSubject(
                     doomed,
                     without_colles.clone(),
+                    None,
                 ),
                 _ => collomatique_ops::SubjectsUpdateOp::DeleteSubject(doomed),
             };
@@ -4465,6 +4466,7 @@ fn a_removed_period_stales_the_subject_values_that_name_it() {
                 collomatique_ops::SubjectsUpdateOp::UpdateSubject(
                     switched_off,
                     without_colles.clone(),
+                    None,
                 ),
             ));
             apply(collomatique_ops::UpdateOp::GeneralPlanning(
@@ -9203,8 +9205,8 @@ fn subjects_are_added_rewritten_moved_and_removed() {
         .expect("the list names a live subject")
         .parameters
         .clone();
-    let add_label = label(SubjectsUpdateOp::AddNewSubject(blank.clone()));
-    let update_label = label(SubjectsUpdateOp::UpdateSubject(rich, blank));
+    let add_label = label(SubjectsUpdateOp::AddNewSubject(blank.clone(), None));
+    let update_label = label(SubjectsUpdateOp::UpdateSubject(rich, blank, None));
     let remove_label = label(SubjectsUpdateOp::DeleteSubject(rich));
     let move_up_label = label(SubjectsUpdateOp::MoveSubjectUp(rich));
     let move_down_label = label(SubjectsUpdateOp::MoveSubjectDown(rich));

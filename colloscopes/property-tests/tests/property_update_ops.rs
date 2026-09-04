@@ -129,7 +129,7 @@ const FAMILIES: [&str; 15] = [
 /// variant the walk renders that is on neither this list nor
 /// [`OPS_UNREACHABLE_FIX_VARIANTS`] fails it too (the vocabulary grew and this
 /// guard has to be told). Names as [`Fix`]'s own `Debug` prints them.
-const FIX_VARIANTS: [&str; 24] = [
+const FIX_VARIANTS: [&str; 25] = [
     "RemoveSubjectPeriodExclusion",
     "RemoveStudentPeriodExclusion",
     "RemovePairingRulePeriodExclusion",
@@ -151,6 +151,7 @@ const FIX_VARIANTS: [&str; 24] = [
     "RemoveStudentColloscopePlacement",
     "ClearSlotWeekPattern",
     "ClearIncompatWeekPattern",
+    "ClearSubjectWeekPattern",
     "DeleteSlotPairingRule",
     "ClearColloscopeGroupListRow",
     "RemoveGroupsFromInterrogationCell",
@@ -470,6 +471,7 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
             1 => SubjectsUpdateOp::UpdateSubject(
                 ghost,
                 synth::subject(rng, &pools.period_ids, &[], true).parameters,
+                None,
             ),
             _ => SubjectsUpdateOp::UpdatePeriodStatus(
                 ghost,
@@ -492,18 +494,30 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
     match weighted(rng, &[add_w, live_w, live_w, move_w, move_w, status_w]) {
         0 => {
             let with_interrogation = rng.random_bool(0.75);
-            SubjectsUpdateOp::AddNewSubject(
-                synth::subject(rng, &pools.period_ids, &[], with_interrogation).parameters,
-            )
+            let subject = synth::subject(
+                rng,
+                &pools.period_ids,
+                &pools.week_pattern_ids,
+                with_interrogation,
+            );
+            SubjectsUpdateOp::AddNewSubject(subject.parameters, subject.week_pattern)
         }
         1 => {
             let subject_id = pick(rng, &pools.subject_ids);
             // Interrogation-ness is deliberately re-drawn: turning it off is
             // what makes the cascade drop the subject's slots, its balancing
-            // options and its group-list associations.
+            // options and its group-list associations. So is the week pattern:
+            // putting one on is what makes it clear the colles that stand on
+            // the weeks the pattern switches off.
             let with_interrogation = rng.random_bool(0.6);
-            let mut parameters =
-                synth::subject(rng, &pools.period_ids, &[], with_interrogation).parameters;
+            let drawn = synth::subject(
+                rng,
+                &pools.period_ids,
+                &pools.week_pattern_ids,
+                with_interrogation,
+            );
+            let week_pattern = drawn.week_pattern;
+            let mut parameters = drawn.parameters;
             // …and so is the duration, occasionally. testgen keeps its
             // durations at 30 or 60 minutes and its start times between 8:00
             // and 18:00 precisely so a slot can never overflow its day, so
@@ -517,7 +531,7 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
                 interrogation.duration =
                     collomatique_time::NonZeroMinutes::new(10 * 60).expect("statically non-zero");
             }
-            SubjectsUpdateOp::UpdateSubject(subject_id, parameters)
+            SubjectsUpdateOp::UpdateSubject(subject_id, parameters, week_pattern)
         }
         2 => SubjectsUpdateOp::DeleteSubject(pick(rng, &pools.subject_ids)),
         3 => SubjectsUpdateOp::MoveSubjectUp(pick(rng, &pools.subject_ids)),

@@ -19,6 +19,11 @@ pub struct Dialog {
     has_interrogations: bool,
     interrogation_params: collomatique_state_colloscopes::SubjectInterrogationParameters,
     global_first_week: Option<collomatique_time::WeekStart>,
+    week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns,
+    /// The week patterns as the combo offers them: by name, then by id to break
+    /// ties.
+    ordered_week_patterns: Vec<(collomatique_state_colloscopes::WeekPatternId, String)>,
+    week_pattern_selected: u32,
     periodicity_panel: PeriodicityPanel,
     exactly_periodic_params: NonZeroU32,
     once_for_every_block_of_weeks_params: OnceForEveryBlockOfWeeksParams,
@@ -54,12 +59,15 @@ pub enum PeriodicityPanel {
 pub enum DialogInput {
     Show(
         Option<collomatique_time::WeekStart>,
+        collomatique_state_colloscopes::week_patterns::WeekPatterns,
         collomatique_state_colloscopes::SubjectParameters,
+        Option<collomatique_state_colloscopes::WeekPatternId>,
     ),
     Cancel,
     Accept,
 
     UpdateName(String),
+    UpdateSelectedWeekPattern(u32),
     UpdateDuration(collomatique_time::NonZeroMinutes),
     UpdateDurationTakenIntoAccount(bool),
     UpdateHasInterrogations(bool),
@@ -85,13 +93,64 @@ pub enum DialogInput {
 
 #[derive(Debug)]
 pub enum DialogOutput {
-    Accepted(collomatique_state_colloscopes::SubjectParameters),
+    Accepted(
+        collomatique_state_colloscopes::SubjectParameters,
+        Option<collomatique_state_colloscopes::WeekPatternId>,
+    ),
     /// The dialog just closed: whoever owns the window underneath should bring
     /// it back to the front, because Windows will not do it on its own.
     PresentParent,
 }
 
 impl Dialog {
+    fn build_ordered_week_patterns(&mut self) {
+        let mut week_patterns: Vec<_> = self
+            .week_patterns
+            .week_pattern_map
+            .iter()
+            .map(|(week_pattern_id, week_pattern)| (week_pattern_id, week_pattern.name.clone()))
+            .collect();
+        week_patterns.sort_by_key(|(id, name)| (name.clone(), *id));
+        self.ordered_week_patterns = week_patterns;
+    }
+
+    fn generate_week_patterns_model(&self) -> gtk::StringList {
+        let week_pattern_names_list: Vec<_> = ["Aucun (toutes les semaines)"]
+            .into_iter()
+            .chain(
+                self.ordered_week_patterns
+                    .iter()
+                    .map(|(_id, name)| name.as_str()),
+            )
+            .collect();
+        gtk::StringList::new(&week_pattern_names_list[..])
+    }
+
+    fn week_pattern_id_to_selected(
+        &self,
+        week_pattern_id_opt: Option<collomatique_state_colloscopes::WeekPatternId>,
+    ) -> u32 {
+        let Some(week_pattern_id) = week_pattern_id_opt else {
+            return 0;
+        };
+        for (i, (id, _)) in self.ordered_week_patterns.iter().enumerate() {
+            if *id == week_pattern_id {
+                return (i as u32) + 1;
+            }
+        }
+        panic!("Week pattern ID should be in list");
+    }
+
+    fn week_pattern_selected_to_id(
+        &self,
+        selected: u32,
+    ) -> Option<collomatique_state_colloscopes::WeekPatternId> {
+        if selected == 0 {
+            return None;
+        }
+        Some(self.ordered_week_patterns[(selected - 1) as usize].0)
+    }
+
     fn generate_periodicity_type_model() -> gtk::StringList {
         gtk::StringList::new(&[
             "Programme glissant",
@@ -347,6 +406,25 @@ impl SimpleComponent for Dialog {
                                 connect_active_notify[sender] => move |widget| {
                                     let no_interrogations = widget.is_active();
                                     sender.input(DialogInput::UpdateHasInterrogations(!no_interrogations));
+                                },
+                            },
+                        },
+                        adw::PreferencesGroup {
+                            set_title: "Semaines de colles",
+                            set_description: Some("Le modèle de périodicité retire des semaines à cette matière, en plus de celles de ses créneaux"),
+                            set_margin_all: 5,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: model.has_interrogations,
+                            adw::ComboRow {
+                                set_title: "Modèle à utiliser",
+                                #[track(model.should_redraw)]
+                                set_model: Some(&model.generate_week_patterns_model()),
+                                #[track(model.should_redraw)]
+                                set_selected: model.week_pattern_selected,
+                                connect_selected_notify[sender] => move |widget| {
+                                    let selected = widget.selected();
+                                    sender.input(DialogInput::UpdateSelectedWeekPattern(selected));
                                 },
                             },
                         },
@@ -744,6 +822,9 @@ impl SimpleComponent for Dialog {
             interrogation_params: Self::interrogation_params_from_params(&params),
             has_interrogations: Self::has_interrogations_from_params(&params),
             global_first_week: None,
+            week_patterns: collomatique_state_colloscopes::week_patterns::WeekPatterns::default(),
+            ordered_week_patterns: Vec::new(),
+            week_pattern_selected: 0,
             periodicity_panel: Self::periodicity_panel_from_params(&params),
             exactly_periodic_params: Self::periodicity_from_params(&params),
             once_for_every_block_of_weeks_params:
@@ -766,10 +847,13 @@ impl SimpleComponent for Dialog {
         self.should_redraw = false;
         self.move_front = false;
         match msg {
-            DialogInput::Show(global_first_week, params) => {
+            DialogInput::Show(global_first_week, week_patterns, params, week_pattern) => {
                 self.hidden = false;
                 self.move_front = true;
                 self.should_redraw = true;
+                self.week_patterns = week_patterns;
+                self.build_ordered_week_patterns();
+                self.week_pattern_selected = self.week_pattern_id_to_selected(week_pattern);
                 self.periodicity_panel = Self::periodicity_panel_from_params(&params);
                 self.exactly_periodic_params = Self::periodicity_from_params(&params);
                 self.once_for_every_block_of_weeks_params =
@@ -824,7 +908,10 @@ impl SimpleComponent for Dialog {
                         None
                     };
                     sender
-                        .output(DialogOutput::Accepted(self.params.clone()))
+                        .output(DialogOutput::Accepted(
+                            self.params.clone(),
+                            self.week_pattern_selected_to_id(self.week_pattern_selected),
+                        ))
                         .unwrap();
                 }
             }
@@ -833,6 +920,9 @@ impl SimpleComponent for Dialog {
                     return;
                 }
                 self.params.name = new_name;
+            }
+            DialogInput::UpdateSelectedWeekPattern(week_pattern_selected) => {
+                self.week_pattern_selected = week_pattern_selected;
             }
             DialogInput::UpdateDuration(new_duration) => {
                 if self.interrogation_params.duration == new_duration {

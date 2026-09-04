@@ -24,8 +24,9 @@
 //!
 //! The value is larger than what the ops carry, the second family where that
 //! happens: a `SubjectData` holds the excluded periods, and no subject op
-//! does — the model keeps them beside the parameters and the ops carry the
-//! parameters alone. So rather than dropping the field on the floor, `add`
+//! does — the model keeps them beside the parameters, which the ops carry, and
+//! beside the week pattern, which they carry too. So rather than dropping the
+//! field on the floor, `add`
 //! refuses a value that excludes anything and `update` refuses one whose
 //! exclusions differ from the document's, both naming `set_period_status`,
 //! which is the op that moves them. A read-modify-write never meets the second
@@ -161,7 +162,10 @@ impl Subjects {
         crate::results::created::<Subject>(
             py,
             &self.doc,
-            UpdateOp::Subjects(SubjectsUpdateOp::AddNewSubject(subject.parameters)),
+            UpdateOp::Subjects(SubjectsUpdateOp::AddNewSubject(
+                subject.parameters,
+                subject.week_pattern,
+            )),
             |new_id| match new_id {
                 NewId::SubjectId(id) => Some(id),
                 _ => None,
@@ -208,12 +212,12 @@ impl Subjects {
         // the subject is still there. `from_py` below runs python code — a
         // dataclass is a python object — and the document could be written to
         // under it.
-        let excluded = self
+        let (excluded, week_pattern) = self
             .with_data(py, |data| {
                 data.params
                     .subjects
                     .find_subject(id)
-                    .map(|subject| subject.excluded_periods.clone())
+                    .map(|subject| (subject.excluded_periods.clone(), subject.week_pattern))
             })
             .expect("the argument convention has just found this subject");
 
@@ -228,9 +232,16 @@ impl Subjects {
             )));
         }
 
+        // The week pattern is the op's, but no `SubjectData` field says which
+        // one yet, so the subject keeps the one it has: a write through this
+        // mirror never moves it.
         self.write(
             py,
-            UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(id, subject.parameters)),
+            UpdateOp::Subjects(SubjectsUpdateOp::UpdateSubject(
+                id,
+                subject.parameters,
+                week_pattern,
+            )),
         )
     }
 

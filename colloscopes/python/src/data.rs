@@ -1259,9 +1259,9 @@ impl Value for InterrogationData {
 pub struct SubjectData;
 
 impl Value for SubjectData {
-    /// The **entity**: the subject ops take the `parameters`
-    /// half alone, and it is the ops mirror that takes it out and refuses to
-    /// discard the exclusions quietly.
+    /// The **entity**: the subject ops take the `parameters` half and the week
+    /// pattern, not the exclusions, and it is the ops mirror that takes those
+    /// out and refuses to discard them quietly.
     type Model = subjects::Subject;
 
     const CLASS: &'static str = "SubjectData";

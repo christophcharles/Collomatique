@@ -1,9 +1,8 @@
-use adw::prelude::{ActionRowExt, ComboRowExt, PreferencesRowExt};
 use gtk::prelude::{BoxExt, ButtonExt, OrientableExt, WidgetExt};
 use relm4::FactorySender;
 use relm4::factory::FactoryView;
+use relm4::gtk;
 use relm4::prelude::{DynamicIndex, FactoryComponent, FactoryVecDeque, RelmWidgetExt};
-use relm4::{adw, gtk};
 
 #[derive(Debug, Clone)]
 pub struct PeriodData {
@@ -15,9 +14,6 @@ pub struct PeriodData {
 #[derive(Debug, Clone)]
 pub struct EntryData {
     pub subject_params: collomatique_state_colloscopes::SubjectParameters,
-    /// The week patterns the row offers, in the order it offers them.
-    pub ordered_week_patterns: Vec<(collomatique_state_colloscopes::WeekPatternId, String)>,
-    pub week_pattern: Option<collomatique_state_colloscopes::WeekPatternId>,
     pub periods: Vec<PeriodData>,
     pub subject_id: collomatique_state_colloscopes::SubjectId,
     pub subject_count: usize,
@@ -27,12 +23,6 @@ pub struct EntryData {
 pub struct Entry {
     index: DynamicIndex,
     subject_params: collomatique_state_colloscopes::SubjectParameters,
-    ordered_week_patterns: Vec<(collomatique_state_colloscopes::WeekPatternId, String)>,
-    week_pattern: Option<collomatique_state_colloscopes::WeekPatternId>,
-    /// Whether the week pattern list itself just changed, so the combo row has
-    /// to be given a new model. Rebuilding it resets the row's selection, so it
-    /// must not happen on every redraw.
-    week_pattern_list_changed: bool,
     periods: FactoryVecDeque<Period>,
     subject_id: collomatique_state_colloscopes::SubjectId,
     subject_count: usize,
@@ -48,7 +38,6 @@ pub enum EntryInput {
     MoveDownClicked,
 
     PeriodStatusUpdated(usize, bool),
-    WeekPatternSelected(u32),
 }
 
 #[derive(Debug)]
@@ -58,10 +47,6 @@ pub enum EntryOutput {
     MoveUpClicked(collomatique_state_colloscopes::SubjectId),
     MoveDownClicked(collomatique_state_colloscopes::SubjectId),
     PeriodStatusUpdated(collomatique_state_colloscopes::SubjectId, usize, bool),
-    WeekPatternUpdated(
-        collomatique_state_colloscopes::SubjectId,
-        Option<collomatique_state_colloscopes::WeekPatternId>,
-    ),
 }
 
 impl Entry {
@@ -172,40 +157,6 @@ impl Entry {
                 " (non-comptées)"
             }
         )
-    }
-
-    fn generate_week_patterns_model(&self) -> gtk::StringList {
-        let week_pattern_names_list: Vec<_> = ["Aucun (toutes les semaines)"]
-            .into_iter()
-            .chain(
-                self.ordered_week_patterns
-                    .iter()
-                    .map(|(_id, name)| name.as_str()),
-            )
-            .collect();
-        gtk::StringList::new(&week_pattern_names_list[..])
-    }
-
-    fn week_pattern_selected(&self) -> u32 {
-        let Some(week_pattern_id) = self.week_pattern else {
-            return 0;
-        };
-        for (i, (id, _)) in self.ordered_week_patterns.iter().enumerate() {
-            if *id == week_pattern_id {
-                return (i as u32) + 1;
-            }
-        }
-        panic!("Week pattern ID should be in list");
-    }
-
-    fn week_pattern_selected_to_id(
-        &self,
-        selected: u32,
-    ) -> Option<collomatique_state_colloscopes::WeekPatternId> {
-        if selected == 0 {
-            return None;
-        }
-        Some(self.ordered_week_patterns[(selected - 1) as usize].0)
     }
 
     fn period_switch_data(
@@ -345,25 +296,6 @@ impl FactoryComponent for Entry {
                     set_visible: self.subject_params.interrogation_parameters.is_some(),
                 },
             },
-            gtk::ListBox {
-                set_hexpand: true,
-                add_css_class: "boxed-list",
-                set_selection_mode: gtk::SelectionMode::None,
-                #[name(week_pattern_row)]
-                adw::ComboRow {
-                    set_title: "Modèle de périodicité",
-                    set_subtitle: "Restreint les semaines où la matière a des colles",
-                    #[track(self.week_pattern_list_changed)]
-                    #[block_signal(week_pattern_handler)]
-                    set_model: Some(&self.generate_week_patterns_model()),
-                    #[track(week_pattern_row.selected() != self.week_pattern_selected())]
-                    #[block_signal(week_pattern_handler)]
-                    set_selected: self.week_pattern_selected(),
-                    connect_selected_notify[sender] => move |widget| {
-                        sender.input(EntryInput::WeekPatternSelected(widget.selected()));
-                    } @week_pattern_handler,
-                },
-            },
             #[local_ref]
             periods_list -> gtk::ListBox {
                 set_hexpand: true,
@@ -387,9 +319,6 @@ impl FactoryComponent for Entry {
         let mut model = Self {
             index: index.clone(),
             subject_params: data.subject_params,
-            ordered_week_patterns: data.ordered_week_patterns,
-            week_pattern: data.week_pattern,
-            week_pattern_list_changed: true,
             subject_id: data.subject_id,
             subject_count: data.subject_count,
             periods,
@@ -418,14 +347,9 @@ impl FactoryComponent for Entry {
     }
 
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
-        self.week_pattern_list_changed = false;
         match msg {
             EntryInput::UpdateData(new_data) => {
                 self.subject_params = new_data.subject_params;
-                self.week_pattern_list_changed =
-                    self.ordered_week_patterns != new_data.ordered_week_patterns;
-                self.ordered_week_patterns = new_data.ordered_week_patterns;
-                self.week_pattern = new_data.week_pattern;
                 self.subject_id = new_data.subject_id;
                 self.subject_count = new_data.subject_count;
 
@@ -461,23 +385,6 @@ impl FactoryComponent for Entry {
                         self.subject_id,
                         num,
                         state,
-                    ))
-                    .unwrap();
-            }
-            EntryInput::WeekPatternSelected(selected) => {
-                let new_week_pattern = self.week_pattern_selected_to_id(selected);
-                if self.week_pattern == new_week_pattern {
-                    // Ignore a selection that brought the row inline with
-                    // internal data
-                    return;
-                }
-                // Otherwise, bring internal data to the correct state right away
-                // to avoid endless loops
-                self.week_pattern = new_week_pattern;
-                sender
-                    .output(EntryOutput::WeekPatternUpdated(
-                        self.subject_id,
-                        new_week_pattern,
                     ))
                     .unwrap();
             }
