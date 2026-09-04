@@ -3812,6 +3812,30 @@ fn the_subjects_read_back_with_their_interrogations() {
             .collect::<Vec<_>>()
     );
 
+    // The week pattern a subject's colles pause on, read through the handle it
+    // comes back as. The example gives none of its subjects one, so what this
+    // compares is a column of `None` — the shape, and the reading; a subject
+    // really carrying a pattern is
+    // [subjects_are_added_rewritten_moved_and_removed]'s.
+    assert_eq!(
+        global::<Vec<Option<String>>>(&globals, "subject_pattern_names"),
+        subjects
+            .iter()
+            .map(|subject| {
+                subject.week_pattern.map(|pattern| {
+                    data.get_inner_data()
+                        .params
+                        .week_patterns
+                        .week_pattern_map
+                        .get(&pattern)
+                        .expect("a subject's pattern is a live one")
+                        .name
+                        .clone()
+                })
+            })
+            .collect::<Vec<_>>()
+    );
+
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
@@ -4070,7 +4094,8 @@ fn switching_a_subject_off_then_removing_it_stales_the_view_then_the_handle() {
 ///
 /// The headline is the round trip: what each handle handed the script,
 /// extracted again, is the subject the document holds — the name, the whole
-/// interrogation record and the exclusions, in one comparison. The sub-view's
+/// interrogation record, the exclusions and the week pattern, in one
+/// comparison. The sub-view's
 /// own values ride beside it, and so do the same fields as python saw them, so
 /// that a conversion wrong in both directions at once cannot cancel itself out.
 ///
@@ -4166,21 +4191,27 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
     );
 
     // Built by hand: the value the script wrote out is the subject expected of
-    // it, whether the period was named by handle, by id, or in a list. Nothing
-    // but the name and the exclusion is given, so the interrogation record that
-    // comes out is the model's own default.
+    // it, whether the period and the pattern were named by handle, by id, or in
+    // a list. Nothing but the name, the exclusion and the pattern is given, so
+    // the interrogation record that comes out is the model's own default.
     let first_period = params
         .periods
         .period_ids()
         .next()
         .expect("the example has periods");
+    let first_pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .next()
+        .expect("the example has week patterns");
     let spe_maths = collomatique_state_colloscopes::Subject {
         parameters: collomatique_state_colloscopes::SubjectParameters {
             name: "Spé maths".to_owned(),
             ..Default::default()
         },
         excluded_periods: BTreeSet::from([first_period]),
-        week_pattern: None,
+        week_pattern: Some(first_pattern),
     };
     for name in ["by_handle", "by_id", "by_list"] {
         assert_eq!(extracted::<SubjectData>(&globals, name), spe_maths);
@@ -4188,9 +4219,10 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
 
     // One written out from end to end, so that no field can pass by being left
     // at the value the model would have put there anyway.
-    assert_eq!(
-        extracted::<SubjectData>(&globals, "written_out"),
-        periodicity_subject(
+    let written_out = {
+        // The helper's four other callers want the pattern the model's own
+        // default has, so the one value that names one sets it here.
+        let mut subject = periodicity_subject(
             "Options",
             (1, 2),
             (2, 2),
@@ -4201,7 +4233,13 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
                 minimum_week_separation: 3,
             },
             BTreeSet::from([first_period]),
-        )
+        );
+        subject.week_pattern = Some(first_pattern);
+        subject
+    };
+    assert_eq!(
+        extracted::<SubjectData>(&globals, "written_out"),
+        written_out
     );
 
     // And the subject that holds no colles at all, which is what an explicit
@@ -4296,9 +4334,12 @@ fn the_subject_values_carry_the_interrogation_out_and_back() {
     );
 
     // A handle of another document names nothing here — the same refusal every
-    // method of this api already makes.
-    let (kind, _message) = refused::<SubjectData>(&globals, "foreign_period");
-    assert_eq!(kind, "StaleHandleError");
+    // method of this api already makes, on each of the two fields that name an
+    // entity.
+    for name in ["foreign_period", "foreign_pattern"] {
+        let (kind, _message) = refused::<SubjectData>(&globals, name);
+        assert_eq!(kind, "StaleHandleError", "`{name}` should be refused");
+    }
 
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
@@ -9096,8 +9137,8 @@ fn the_colloscope_is_written_row_by_row_and_erased() {
 /// the script leans on: two subjects that run colles, the first of them holding
 /// every reference site the removal repairs — a teacher, slots, balancing
 /// options of its own, an enrolment row and a group-list association on each of
-/// the three periods — and a week of the first period one of its slots is really
-/// active on.
+/// the three periods — a week pattern for the new subject to follow, and a week
+/// of the first period one of its slots is really active on.
 ///
 /// Rust reads back the file the script saved after its last accepted write of
 /// the first half: the two subjects the example did not have, field by field,
@@ -9180,6 +9221,14 @@ fn subjects_are_added_rewritten_moved_and_removed() {
         .period_ids()
         .next()
         .expect("the example has periods");
+    // The pattern the script gives its new subject: the first the document
+    // holds, which is what `list(doc.week_patterns)[0]` names on its side.
+    let first_pattern = params
+        .week_patterns
+        .week_pattern_map
+        .keys()
+        .next()
+        .expect("the example has week patterns");
     assert!(
         params
             .slots
@@ -9235,7 +9284,8 @@ fn subjects_are_added_rewritten_moved_and_removed() {
     });
 
     // What the script's two adds asked for, as they stood when it saved. The
-    // first was created bare, rewritten three times and taken off the first
+    // first was created bare, rewritten six times — the last three of them
+    // about the week pattern it ends up following — and taken off the first
     // period; the second is the subject that never holds a colle.
     let written_out = vec![
         Subject {
@@ -9253,7 +9303,7 @@ fn subjects_are_added_rewritten_moved_and_removed() {
                 }),
             },
             excluded_periods: BTreeSet::from([first_period]),
-            week_pattern: None,
+            week_pattern: Some(first_pattern),
         },
         Subject {
             parameters: SubjectParameters {
@@ -12657,10 +12707,10 @@ fn real_file_choosers_open_one_after_another() {
 ///
 /// `referenced_by` needs a document where every reference the registry walks
 /// appears at least once: exclusions on every kind that has them, an
-/// assignments row and an association, teachers with subjects, slots with a
-/// subject, a teacher and a week pattern, an incompatibility, pairing rules on
-/// both levels, settings and balancing overrides, both group-list fillings,
-/// and a filled colloscope. The example covers some of these and not the
+/// assignments row and an association, teachers with subjects, a subject
+/// following a week pattern, slots with a subject, a teacher and a week
+/// pattern, an incompatibility, pairing rules on both levels, settings and
+/// balancing overrides, both group-list fillings, and a filled colloscope. The example covers some of these and not the
 /// others — subject pairing rules, overrides and a colloscope are its known
 /// holes — so the fixture is built as an `InnerData` through the sealed types'
 /// own constructors and passed through `Data::from_inner_data`, so a fixture
@@ -12732,8 +12782,11 @@ fn refs_document(path: &Path) {
 
     // The first subject excludes the second period — the exclusion site — and
     // runs nothing there, so every row, association and cell the fixture
-    // stores keeps off that pair.
-    let subject_with = |name: &str, excluded_periods: BTreeSet<PeriodId>| Subject {
+    // stores keeps off that pair. The second follows the week pattern — the
+    // subject side of the pattern sites.
+    let subject_with = |name: &str,
+                        excluded_periods: BTreeSet<PeriodId>,
+                        week_pattern: Option<WeekPatternId>| Subject {
         parameters: SubjectParameters {
             name: name.to_owned(),
             interrogation_parameters: Some(SubjectInterrogationParameters {
@@ -12747,14 +12800,17 @@ fn refs_document(path: &Path) {
             }),
         },
         excluded_periods,
-        week_pattern: None,
+        week_pattern,
     };
     let subjects = vec![
         (
             subject(11),
-            subject_with("Sortilèges", BTreeSet::from([period(2)])),
+            subject_with("Sortilèges", BTreeSet::from([period(2)]), None),
         ),
-        (subject(12), subject_with("Métamorphose", BTreeSet::new())),
+        (
+            subject(12),
+            subject_with("Métamorphose", BTreeSet::new(), Some(week_pattern(41))),
+        ),
     ];
 
     let teachers = vec![
@@ -12774,7 +12830,7 @@ fn refs_document(path: &Path) {
         ),
     ];
 
-    // The second slot follows the week pattern — the slot sides of the two
+    // The second slot follows the week pattern — the slot side of the three
     // pattern sites.
     let slot_start = |weekday, hour, minute| collomatique_time::SlotStart {
         weekday,
@@ -13194,7 +13250,7 @@ fn what_points_at_an_entity() {
         .collect();
 
     // The fixture is only worth reading if every site class has at least one
-    // edge to read; the twenty-four names collected below are that check.
+    // edge to read; the twenty-five names collected below are that check.
     let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut compare = |name: &str, expected: Vec<Vec<(String, Vec<usize>)>>| {
         assert_eq!(
@@ -13445,7 +13501,7 @@ fn what_points_at_an_entity() {
 
     assert_eq!(
         seen.len(),
-        24,
+        25,
         "the fixture holds at least one edge of every site class"
     );
     assert!(global::<bool>(&globals, "never_referenced"));
@@ -13649,8 +13705,11 @@ fn snapshot_document(path: &Path) {
 
     // The first subject excludes the second period, and the second student
     // does too — the two exclusion shapes, each kept off every row it would
-    // trip.
-    let subject_with = |name: &str, excluded_periods: BTreeSet<PeriodId>| Subject {
+    // trip. The second subject follows the week pattern and the first follows
+    // none, the two shapes of that field.
+    let subject_with = |name: &str,
+                        excluded_periods: BTreeSet<PeriodId>,
+                        week_pattern: Option<WeekPatternId>| Subject {
         parameters: SubjectParameters {
             name: name.to_owned(),
             interrogation_parameters: Some(SubjectInterrogationParameters {
@@ -13664,14 +13723,17 @@ fn snapshot_document(path: &Path) {
             }),
         },
         excluded_periods,
-        week_pattern: None,
+        week_pattern,
     };
     let subjects = vec![
         (
             subject(11),
-            subject_with("Sortilèges", BTreeSet::from([period(2)])),
+            subject_with("Sortilèges", BTreeSet::from([period(2)]), None),
         ),
-        (subject(12), subject_with("Métamorphose", BTreeSet::new())),
+        (
+            subject(12),
+            subject_with("Métamorphose", BTreeSet::new(), Some(week_pattern(41))),
+        ),
     ];
 
     // One teacher with contact details and one without, so both shapes of the

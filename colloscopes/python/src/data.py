@@ -250,18 +250,32 @@ class SubjectData:
     subject that skips a period is therefore two calls, which a transaction
     makes one undo step.
 
+    `week_pattern` says which weeks this subject really runs colles on. `None`
+    means every week: the subject carries no pattern of its own, so only the
+    weeks' own flags switch it off. A pattern can only take weeks away, never
+    give one back — a week its period runs no colles on stays off whatever the
+    pattern says. It takes a `WeekPattern` handle or a `WeekPatternId`, and
+    `to_data()` fills it with an id.
+
+    Unlike `excluded_periods`, that field the subject ops carry, so
+    `doc.subjects.update` writes what the value names: a value naming no pattern
+    clears the one the subject had. A read-modify-write leaves it where it was,
+    since `to_data()` fills the field with the subject's own pattern.
+
     Rewriting the rest of the value through `doc.subjects.update` is a write
     that reaches most of the document. Setting `interrogation` to `None`
     dismantles everything that needed those colles — the teachers who held them,
     their slots in the subject, its group-list associations, its balancing
     options and the pairing rules naming it — and lengthening `duration` far
-    enough to push a late slot past midnight takes that slot. The result
-    reports it either way.
+    enough to push a late slot past midnight takes that slot. Giving the subject
+    a pattern that switches a week off takes the colles already written there.
+    The result reports it either way.
     """
 
     name: str
     interrogation: InterrogationData | None = field(default_factory=InterrogationData)
     excluded_periods: set[Period | PeriodId] = field(default_factory=set)
+    week_pattern: WeekPattern | WeekPatternId | None = None
 
 
 @dataclass

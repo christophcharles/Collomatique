@@ -1250,12 +1250,14 @@ impl Value for InterrogationData {
     }
 }
 
-/// One subject — a name, how its colles run, and the periods it sits out
+/// One subject — a name, how its colles run, the periods it sits out and the
+/// weeks it pauses on
 ///
-/// The model splits the id-free parameters from the `#[fk]` exclusions, because
-/// its reference walk visits only the second. Python has no such walk, so the
-/// value is flat: `d.name` and `d.excluded_periods` sit side by side, the way
-/// the handle already shows them.
+/// The model splits the id-free parameters from the `#[fk]` exclusions and the
+/// `#[fk]` week pattern, because its reference walk visits only the last two.
+/// Python has no such walk, so the value is flat: `d.name`,
+/// `d.excluded_periods` and `d.week_pattern` sit side by side, the way the
+/// handle already shows them.
 pub struct SubjectData;
 
 impl Value for SubjectData {
@@ -1285,7 +1287,7 @@ impl Value for SubjectData {
                 interrogation_parameters,
             },
             excluded_periods: entity_set::<Period>(doc, site, "excluded_periods", obj)?,
-            week_pattern: None,
+            week_pattern: optional_entity::<WeekPattern>(doc, site, "week_pattern", obj)?,
         })
     }
 
@@ -1308,6 +1310,10 @@ impl Value for SubjectData {
                     .iter()
                     .map(|id| PeriodId::wrap(*id)),
             )?,
+        )?;
+        kwargs.set_item(
+            "week_pattern",
+            subject.week_pattern.map(WeekPatternId::wrap),
         )?;
 
         class(py, Self::CLASS)?.call((), Some(&kwargs))

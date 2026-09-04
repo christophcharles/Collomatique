@@ -122,6 +122,30 @@ subjects.update(created, collomatique.SubjectData("Sortilèges"))
 assert created.interrogation is not None
 assert created.interrogation.duration == 60
 
+# The pattern the subject's colles pause on rides in the same value, and the op
+# carries it: `update` writes what the value names. The exclusions, which no op
+# carries, it refuses to move instead. A new subject is born without a pattern.
+pattern = list(doc.week_patterns)[0]
+assert created.week_pattern is None
+
+with_pattern = created.to_data()
+with_pattern.week_pattern = pattern
+subjects.update(created, with_pattern)
+assert created.week_pattern == pattern
+assert created.to_data().week_pattern == pattern.id
+
+# A value naming no pattern is a subject left with none: this field is written,
+# not preserved behind the value's back.
+subjects.update(created, collomatique.SubjectData("Sortilèges"))
+assert created.week_pattern is None
+
+# And the id spelling names the same pattern the handle does. This is the state
+# the save below writes out.
+subjects.update(
+    created, collomatique.SubjectData("Sortilèges", week_pattern=pattern.id)
+)
+assert created.week_pattern == pattern
+
 # The family's own pair, and the only way a subject moves: the list order is the
 # one `doc.subjects` walks in, so `move_up` swaps the subject with the one before
 # it. Nothing else moves — a position is display order, and nothing reads one.
@@ -554,6 +578,17 @@ assert created.index == before - 1
 assert doc.undo_name == move_up_label
 doc.undo()
 assert created.index == before
+
+# The three week-pattern writes go the way they came, and each is its own undo
+# slot: the op that carries the pattern is the ordinary update, so its label is
+# the ordinary one too.
+assert doc.undo_name == update_label
+doc.undo()
+assert created.week_pattern is None
+doc.undo()
+assert created.week_pattern == pattern
+doc.undo()
+assert created.week_pattern is None
 
 assert doc.undo_name == update_label
 doc.undo()

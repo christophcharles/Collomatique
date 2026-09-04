@@ -138,6 +138,19 @@ excluded_period_indices = [
 ]
 assert all(isinstance(subject.excluded_periods, frozenset) for subject in subject_list)
 
+# The pattern a subject's colles pause on is a live handle or `None`, and `None`
+# means every week. The example gives none of its subjects one — a subject
+# carrying a pattern is what the write script builds — so what this pins is the
+# shape and the reading, which rust compares against the document.
+subject_pattern_names = [
+    None if subject.week_pattern is None else subject.week_pattern.name
+    for subject in subject_list
+]
+assert all(
+    subject.week_pattern is None or subject.week_pattern in doc.week_patterns
+    for subject in subject_list
+)
+
 # A handle from another document names nothing here, whatever its id says.
 other = collomatique.load(source)
 assert subject_list[0] not in other.subjects
