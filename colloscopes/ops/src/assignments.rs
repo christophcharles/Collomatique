@@ -1013,6 +1013,53 @@ mod tests {
         );
     }
 
+    /// The reported bug: duplicating into a period with no enrolments yet —
+    /// the state a fresh period or a newly added subject is in — copied
+    /// nothing. The table is sparse, a row with nobody in it is absent, and
+    /// the composite iterated the *target* period's rows to decide what to
+    /// copy; an absent row was skipped, so the one situation the button
+    /// exists for was the one it did nothing in.
+    #[test]
+    fn duplicate_previous_period_fills_a_row_the_target_period_does_not_have_yet() {
+        let mut base = hogwarts();
+        let arithmancie = subject_by_name(base.get_data(), "Arithmancie");
+        let first_period = period_at(base.get_data(), 0);
+        let second_period = period_at(base.get_data(), 1);
+
+        // Nobody is enrolled in Arithmancie on the second period: no row.
+        seed(
+            &mut base,
+            Op::Assignment(AssignmentOp::SetRow(
+                second_period,
+                arithmancie,
+                BTreeSet::new(),
+            )),
+        );
+        assert_eq!(
+            row(base.get_data(), second_period, arithmancie),
+            None,
+            "an emptied row is stored as no row at all"
+        );
+
+        let op = AssignmentsUpdateOp::DuplicatePreviousPeriod(second_period);
+        let (state, warnings) = apply_alone(&base, &op);
+
+        assert!(warnings.is_empty(), "nothing to repair: {warnings:?}");
+        let expected_row = live_row(base.get_data(), first_period, arithmancie);
+        assert_eq!(
+            state.get_data(),
+            expected_document(
+                &base,
+                vec![Op::Assignment(AssignmentOp::SetRow(
+                    second_period,
+                    arithmancie,
+                    expected_row
+                ))],
+            )
+            .get_data(),
+        );
+    }
+
     /// The exclusion rule: a student either period excludes keeps whatever
     /// status they have instead of copying the previous period's. Copying
     /// blindly would put Ginny — who is not there for the second period — back
