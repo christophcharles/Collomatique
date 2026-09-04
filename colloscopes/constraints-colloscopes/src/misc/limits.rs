@@ -73,7 +73,10 @@ fn counted_slots_for_student_week(
             .flatten()
         {
             let active = crate::tools::extract_week_pattern(env, slot_data.week_pattern);
-            if !active.get(week.0).copied().unwrap_or(false) {
+            let subject_active = crate::tools::extract_week_pattern(env, subject.week_pattern);
+            if !active.get(week.0).copied().unwrap_or(false)
+                || !subject_active.get(week.0).copied().unwrap_or(false)
+            {
                 continue;
             }
             result.push((*slot_id, slot_data.start_time.weekday));

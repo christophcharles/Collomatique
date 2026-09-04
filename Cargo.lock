@@ -342,8 +342,10 @@ dependencies = [
 name = "collomatique-constraints-colloscopes"
 version = "0.1.0-alpha.4.99"
 dependencies = [
+ "chrono",
  "collomatique-ilp",
  "collomatique-ilp-modeler",
+ "collomatique-state",
  "collomatique-state-colloscopes",
  "collomatique-storage",
  "collomatique-time",

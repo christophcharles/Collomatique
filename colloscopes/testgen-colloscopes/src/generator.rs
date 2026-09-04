@@ -434,7 +434,12 @@ fn gen_subject(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: 
             let with_interrogation = rng.random_bool(0.75);
             SubjectOp::AddAfter(
                 anchor,
-                synth::subject(rng, &pools.period_ids, with_interrogation),
+                synth::subject(
+                    rng,
+                    &pools.period_ids,
+                    &pools.week_pattern_ids,
+                    with_interrogation,
+                ),
             )
         }
         1 => {
@@ -450,7 +455,12 @@ fn gen_subject(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools, invalid: 
                 .is_some();
             SubjectOp::Update(
                 subject_id,
-                synth::subject(rng, &pools.period_ids, with_interrogation),
+                synth::subject(
+                    rng,
+                    &pools.period_ids,
+                    &pools.week_pattern_ids,
+                    with_interrogation,
+                ),
             )
         }
         2 => SubjectOp::ChangePosition(
@@ -1370,7 +1380,12 @@ fn gen_force_retarget(rng: &mut ChaCha8Rng, inner: &InnerData, pools: &Pools) ->
     if !pools.subject_ids.is_empty() {
         let id = pick(rng, &pools.subject_ids);
         let with_interrogation = rng.random_bool(0.7);
-        let mut subject = synth::subject(rng, &pools.period_ids, with_interrogation);
+        let mut subject = synth::subject(
+            rng,
+            &pools.period_ids,
+            &pools.week_pattern_ids,
+            with_interrogation,
+        );
         subject
             .excluded_periods
             .insert(unsafe { PeriodId::new(dangling(rng)) });

@@ -34,8 +34,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let slot_week_pairs =
-            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let slot_week_pairs = slot_week_pairs_for_subject(env, *subject_id, subject);
         let ntot = slot_weeks_in_range(&slot_week_pairs, first_week, last_week);
         if ntot == 0 {
             continue;

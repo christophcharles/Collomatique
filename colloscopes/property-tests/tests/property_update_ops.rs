@@ -469,7 +469,7 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
             0 => SubjectsUpdateOp::DeleteSubject(ghost),
             1 => SubjectsUpdateOp::UpdateSubject(
                 ghost,
-                synth::subject(rng, &pools.period_ids, true).parameters,
+                synth::subject(rng, &pools.period_ids, &[], true).parameters,
             ),
             _ => SubjectsUpdateOp::UpdatePeriodStatus(
                 ghost,
@@ -493,7 +493,7 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
         0 => {
             let with_interrogation = rng.random_bool(0.75);
             SubjectsUpdateOp::AddNewSubject(
-                synth::subject(rng, &pools.period_ids, with_interrogation).parameters,
+                synth::subject(rng, &pools.period_ids, &[], with_interrogation).parameters,
             )
         }
         1 => {
@@ -503,7 +503,7 @@ fn gen_subjects(rng: &mut ChaCha8Rng, pools: &Pools, invalid: bool) -> SubjectsU
             // options and its group-list associations.
             let with_interrogation = rng.random_bool(0.6);
             let mut parameters =
-                synth::subject(rng, &pools.period_ids, with_interrogation).parameters;
+                synth::subject(rng, &pools.period_ids, &[], with_interrogation).parameters;
             // …and so is the duration, occasionally. testgen keeps its
             // durations at 30 or 60 minutes and its start times between 8:00
             // and 18:00 precisely so a slot can never overflow its day, so

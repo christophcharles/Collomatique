@@ -1,6 +1,6 @@
 use crate::extras::{
     MyBundle, V, base_var, extra_var, groups_for_interrogation, subject_interrogation_params,
-    weeks_for_slot,
+    week_to_period_id, weeks_for_slot,
 };
 use crate::helpers::merge_objectified_weighted;
 use crate::ids::GlobalWeek;
@@ -52,16 +52,21 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
             continue;
         }
 
-        let combined_excluded: BTreeSet<_> = subject
-            .excluded_periods
-            .union(rule.excluded_periods())
-            .copied()
-            .collect();
-        let ant_weeks: BTreeSet<_> = weeks_for_slot(env, ant_slot_data, &combined_excluded)
+        // The rule's own excluded periods come on top of the subject's, so the
+        // slot weeks are filtered a second time here rather than inside
+        // `weeks_for_slot`, which only knows the subject.
+        let rule_excluded = rule.excluded_periods();
+        let kept = |week: &GlobalWeek| {
+            week_to_period_id(env, *week)
+                .is_some_and(|(period, _)| !rule_excluded.contains(&period))
+        };
+        let ant_weeks: BTreeSet<_> = weeks_for_slot(env, ant_slot_data, subject)
             .into_iter()
+            .filter(kept)
             .collect();
-        let con_weeks: BTreeSet<_> = weeks_for_slot(env, con_slot_data, &combined_excluded)
+        let con_weeks: BTreeSet<_> = weeks_for_slot(env, con_slot_data, subject)
             .into_iter()
+            .filter(kept)
             .collect();
 
         let mut hard_bundle = MyBundle::new();

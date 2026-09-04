@@ -22,7 +22,7 @@ pub(super) fn build(env: &VarEnv) -> MyBundle {
                 continue;
             }
 
-            for week in weeks_for_slot(env, slot_data, &subject.excluded_periods) {
+            for week in weeks_for_slot(env, slot_data, subject) {
                 // Only weeks with a group list associated for this (period, subject) declare
                 // the InterrogationHasGroups extra (see extras.rs); reference it only there,
                 // matching group_count_per_interrogation.rs. Without an association the subject

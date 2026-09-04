@@ -3,9 +3,8 @@ use crate::ids::GlobalWeek;
 use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
-use collomatique_state_colloscopes::ids::{PeriodId, StudentId, SubjectId};
-use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
-use std::collections::BTreeSet;
+use collomatique_state_colloscopes::ids::{StudentId, SubjectId};
+use collomatique_state_colloscopes::subjects::{Subject, SubjectPeriodicity};
 
 use super::helpers::{
     count_interrogations_expr, enrolled_students_for_subject, slot_week_pairs_for_subject,
@@ -21,7 +20,7 @@ fn compute_period_runs(
     env: &VarEnv,
     subject_id: SubjectId,
     student: StudentId,
-    excluded_periods: &BTreeSet<PeriodId>,
+    subject: &Subject,
 ) -> Vec<PeriodRunInfo> {
     let mut runs = Vec::new();
     let mut current_first: Option<GlobalWeek> = None;
@@ -35,7 +34,7 @@ fn compute_period_runs(
         let first_of_period = GlobalWeek(global_week);
         let last_of_period = GlobalWeek(global_week + period_len.saturating_sub(1));
 
-        let is_active = !excluded_periods.contains(period_id)
+        let is_active = !subject.excluded_periods.contains(period_id)
             && env
                 .assignments
                 .students(*period_id, subject_id)
@@ -46,10 +45,10 @@ fn compute_period_runs(
                 current_first = Some(first_of_period);
             }
             current_last = last_of_period;
-            for (_week_id, week_desc) in
+            for (week_id, _week_desc) in
                 env.weeks.weeks_for_period(*period_id).into_iter().flatten()
             {
-                if week_desc.interrogations {
+                if env.is_week_active(*week_id, subject.week_pattern) {
                     current_active_weeks.push(GlobalWeek(global_week));
                 }
                 global_week += 1;
@@ -90,12 +89,11 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
         };
 
         let periodicity = periodicity_in_weeks.get() as usize;
-        let slot_week_pairs =
-            slot_week_pairs_for_subject(env, *subject_id, &subject.excluded_periods);
+        let slot_week_pairs = slot_week_pairs_for_subject(env, *subject_id, subject);
         let enrolled = enrolled_students_for_subject(env, *subject_id);
 
         for &student in &enrolled {
-            let runs = compute_period_runs(env, *subject_id, student, &subject.excluded_periods);
+            let runs = compute_period_runs(env, *subject_id, student, subject);
 
             for run in &runs {
                 if run.active_weeks.len() < periodicity {
