@@ -47,6 +47,9 @@ tokio = { workspace = true, features = ["rt", "rt-multi-thread", "time", "proces
 chrono.workspace = true
 anyhow.workspace = true
 non-empty-string.workspace = true
+# Only to mint the seed the anonymize op carries, at the moment the button is
+# clicked.
+rand = "0.9"
 
 [target.'cfg(windows)'.dependencies]
 # Only for the three calls in src/windows_stdio.rs. Same version as the one

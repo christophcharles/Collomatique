@@ -61,6 +61,8 @@ pub mod colloscope;
 pub use colloscope::*;
 pub mod export_config;
 pub use export_config::*;
+pub mod anonymize;
+pub use anonymize::*;
 
 pub type Desc = (OpCategory, String);
 
@@ -82,6 +84,7 @@ pub enum OpCategory {
     Balancing,
     Colloscope,
     ExportConfig,
+    Anonymize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -101,6 +104,7 @@ pub enum UpdateOp {
     Balancing(BalancingUpdateOp),
     Colloscope(ColloscopeUpdateOp),
     ExportConfig(ExportConfigUpdateOp),
+    Anonymize(AnonymizeUpdateOp),
 }
 
 #[derive(Clone, Debug, Error, Serialize, Deserialize, PartialEq, Eq)]
@@ -135,10 +139,12 @@ pub enum UpdateError {
     Colloscope(#[from] ColloscopeUpdateError),
     #[error(transparent)]
     ExportConfig(#[from] ExportConfigUpdateError),
+    #[error(transparent)]
+    Anonymize(#[from] AnonymizeUpdateError),
 }
 
 impl UpdateOp {
-    /// Applies the op to `session`: the fifteen families all know how to write
+    /// Applies the op to `session`: the sixteen families all know how to write
     /// themselves as elementary ops on a [CascadeSession], and this is the
     /// dispatch that reaches the right one.
     ///
@@ -210,6 +216,10 @@ impl UpdateOp {
                 export_config_op.apply_to_session(session)?;
                 Ok(None)
             }
+            UpdateOp::Anonymize(anonymize_op) => {
+                anonymize_op.apply_to_session(session)?;
+                Ok(None)
+            }
         }
     }
 }
@@ -232,6 +242,7 @@ impl UpdateOp {
             UpdateOp::Balancing(balancing_op) => balancing_op.get_desc(),
             UpdateOp::Colloscope(colloscope_op) => colloscope_op.get_desc(),
             UpdateOp::ExportConfig(export_config_op) => export_config_op.get_desc(),
+            UpdateOp::Anonymize(anonymize_op) => anonymize_op.get_desc(),
         }
     }
 

@@ -649,6 +649,7 @@ impl EditorPanel {
             collomatique_ops::OpCategory::Balancing => Some(PanelNumbers::Balancing),
             collomatique_ops::OpCategory::Colloscope => Some(PanelNumbers::Colloscope),
             collomatique_ops::OpCategory::ExportConfig => Some(PanelNumbers::Export),
+            collomatique_ops::OpCategory::Anonymize => Some(PanelNumbers::AdvancedTools),
         }
     }
 
@@ -1004,6 +1005,15 @@ impl Component for EditorPanel {
                 }
                 advanced_tools::AdvancedToolsOutput::CompactIdsClicked => {
                     EditorInput::CompactIdsClicked
+                }
+                // The seed is minted here, at click time: the op carries it so
+                // that replaying it gives the same fake names back.
+                advanced_tools::AdvancedToolsOutput::AnonymizeNamesClicked => {
+                    EditorInput::UpdateOp(collomatique_ops::UpdateOp::Anonymize(
+                        collomatique_ops::AnonymizeUpdateOp::AnonymizeNames {
+                            seed: rand::random(),
+                        },
+                    ))
                 }
                 advanced_tools::AdvancedToolsOutput::PresentParent => EditorInput::PresentParent,
             },

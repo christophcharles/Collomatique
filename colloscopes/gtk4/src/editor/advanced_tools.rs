@@ -238,6 +238,7 @@ pub enum AdvancedToolsInput {
     /// configured with.
     ResetMpsExportConfig,
     CompactIdsClicked,
+    AnonymizeNamesClicked,
     /// A dialog of this panel just closed. The panel hosts no window of its
     /// own, so it passes the request up to the editor.
     PresentParent,
@@ -254,6 +255,7 @@ pub enum AdvancedToolsOutput {
     MpsExportSuccessful(PathBuf),
     MpsExportFailed(PathBuf, String),
     CompactIdsClicked,
+    AnonymizeNamesClicked,
     /// A dialog of this panel just closed: the window underneath should be
     /// brought back to the front, because Windows will not do it on its own.
     PresentParent,
@@ -453,6 +455,19 @@ impl Component for AdvancedTools {
                         },
                         connect_clicked => AdvancedToolsInput::CompactIdsClicked,
                     },
+                    gtk::Button {
+                        add_css_class: "frame",
+                        add_css_class: "warning",
+                        set_hexpand: true,
+                        set_margin_start: 10,
+                        set_margin_end: 10,
+                        set_size_request: (-1, 40),
+                        adw::ButtonContent {
+                            set_icon_name: "view-conceal-symbolic",
+                            set_label: "Anonymiser les noms",
+                        },
+                        connect_clicked => AdvancedToolsInput::AnonymizeNamesClicked,
+                    },
                     gtk::Separator {
                         set_orientation: gtk::Orientation::Horizontal,
                         set_margin_top: 30,
@@ -642,6 +657,11 @@ impl Component for AdvancedTools {
             AdvancedToolsInput::CompactIdsClicked => {
                 sender
                     .output(AdvancedToolsOutput::CompactIdsClicked)
+                    .unwrap();
+            }
+            AdvancedToolsInput::AnonymizeNamesClicked => {
+                sender
+                    .output(AdvancedToolsOutput::AnonymizeNamesClicked)
                     .unwrap();
             }
             AdvancedToolsInput::PresentParent => {

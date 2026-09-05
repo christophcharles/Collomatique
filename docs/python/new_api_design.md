@@ -336,6 +336,12 @@ colloscope, export config).
 > fed by `doc.generate_group_lists` and `doc.default_generation_request`. It
 > mints a list per entry and reports no id back, so it answers a plain
 > `OpResult` rather than the `AddResult` of `add`.
+>
+> **Added since**, on the `anonymity` branch: a sixteenth family, Anonymize (1),
+> with one door — `doc.anonymize_names(seed=None)`, mirroring `AnonymizeNames`.
+> It sits on `Document` rather than on a collection, since it renames the
+> students and the teachers at once. Left out, the seed comes from python's
+> `random`.
 
 No elementary `Op` is exposed. The cascade architecture makes raw elementary access
 unsafe to hand out (`force_apply` fixes nothing by design), and ops + the coarse

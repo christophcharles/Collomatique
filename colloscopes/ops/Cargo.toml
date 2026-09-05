@@ -16,6 +16,7 @@ thiserror.workspace = true
 serde = { workspace = true, features = ["derive"] }
 chrono.workspace = true
 non-empty-string = { workspace = true, features = ["serde"] }
+rand = "0.9"
 
 [dev-dependencies]
 # Only the tests need it: they decode the frozen `tests/fixtures/hogwarts.collomatique`
