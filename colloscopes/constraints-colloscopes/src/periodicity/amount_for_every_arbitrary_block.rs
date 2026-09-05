@@ -1,13 +1,13 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::ids::GlobalWeek;
-use crate::types::{ProgressiveConstraint, QualityConstraint};
+use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::subjects::{SubjectPeriodicity, WeekBlock};
 
 use super::helpers::{
     all_active_global_weeks, count_interrogations_expr, enrolled_students_for_subject,
-    last_global_week, slot_week_pairs_for_subject,
+    last_global_week, slot_week_pairs_for_subject, span_has_slot_week,
 };
 
 struct BlockRange {
@@ -93,6 +93,21 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
 
         for &student in &enrolled {
             for br in &block_ranges {
+                if br.count_min > 0
+                    && !span_has_slot_week(&slot_week_pairs, br.first_week, br.last_week)
+                {
+                    bundle = bundle.with_infeasible(
+                        InfeasibleConstraint::NoSlotsForWeekSpan {
+                            student,
+                            subject: *subject_id,
+                            first_week: br.first_week,
+                            last_week: br.last_week,
+                            required_count: br.count_min,
+                        }
+                        .into(),
+                    );
+                    continue;
+                }
                 let count_expr = count_interrogations_expr(
                     &slot_week_pairs,
                     student,
