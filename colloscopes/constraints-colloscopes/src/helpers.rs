@@ -43,6 +43,20 @@ pub(crate) fn count_interrogations_expr(
         .sum()
 }
 
+/// Whether `[first_week, last_week]` holds any slot-week at all.
+///
+/// When it does not, [`count_interrogations_expr`] over that span is the
+/// constant zero, so any positive minimum written over it is constant-false.
+pub(crate) fn span_has_slot_week(
+    slot_week_pairs: &[(SlotId, GlobalWeek)],
+    first_week: GlobalWeek,
+    last_week: GlobalWeek,
+) -> bool {
+    slot_week_pairs
+        .iter()
+        .any(|(_, week)| *week >= first_week && *week <= last_week)
+}
+
 pub(crate) fn enrolled_students_for_subject(
     env: &VarEnv,
     subject_id: SubjectId,

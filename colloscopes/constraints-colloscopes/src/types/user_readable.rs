@@ -40,6 +40,23 @@ impl InfeasibleConstraint {
                     week_range_text(*first_week, *last_week),
                 )
             }
+            InfeasibleConstraint::NoSlotsForWeekSpan {
+                student,
+                subject,
+                first_week,
+                last_week,
+                required_count,
+            } => {
+                let s_name = student_name(env, *student);
+                let subj_name = subject_name(env, *subject);
+                format!(
+                    "Aucun créneau disponible en {} pour {} alors qu'il faut au moins {} interrogation(s) ({})",
+                    subj_name,
+                    s_name,
+                    required_count,
+                    week_range_text(*first_week, *last_week),
+                )
+            }
             InfeasibleConstraint::BalancingAvoidTwiceUnsupported { subject } => {
                 let subj_name = subject_name(env, *subject);
                 format!(

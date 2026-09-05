@@ -1,13 +1,13 @@
 use crate::extras::{MyBundle, subject_interrogation_params};
 use crate::ids::GlobalWeek;
-use crate::types::{ProgressiveConstraint, QualityConstraint};
+use crate::types::{InfeasibleConstraint, ProgressiveConstraint, QualityConstraint};
 use crate::vars::VarEnv;
 use collomatique_ilp::int_linexpr::IntLinExpr;
 use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 
 use super::helpers::{
     all_active_global_weeks, count_interrogations_expr, enrolled_students_for_subject,
-    last_global_week, slot_week_pairs_for_subject,
+    last_global_week, slot_week_pairs_for_subject, span_has_slot_week,
 };
 
 pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
@@ -39,7 +39,18 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
             let count_expr =
                 count_interrogations_expr(&slot_week_pairs, student, first_week, last_week);
 
-            if count_min == count_max {
+            if count_min > 0 && !span_has_slot_week(&slot_week_pairs, first_week, last_week) {
+                bundle = bundle.with_infeasible(
+                    InfeasibleConstraint::NoSlotsForWeekSpan {
+                        student,
+                        subject: *subject_id,
+                        first_week,
+                        last_week,
+                        required_count: count_min,
+                    }
+                    .into(),
+                );
+            } else if count_min == count_max {
                 bundle = bundle.with_constraint(
                     count_expr.eq(&IntLinExpr::constant(i64::from(count_min))),
                     ProgressiveConstraint::PeriodicityInterrogationCountExact {

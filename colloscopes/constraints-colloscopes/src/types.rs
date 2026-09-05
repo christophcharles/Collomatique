@@ -110,6 +110,16 @@ pub enum InfeasibleConstraint {
         last_week: GlobalWeek,
         weeks_per_block: u32,
     },
+    /// A span in which at least one interrogation is required holds no
+    /// slot-week at all — every week is excluded by the slots' or the
+    /// subject's week pattern (or has no interrogations).
+    NoSlotsForWeekSpan {
+        student: StudentId,
+        subject: SubjectId,
+        first_week: GlobalWeek,
+        last_week: GlobalWeek,
+        required_count: u32,
+    },
     BalancingAvoidTwiceUnsupported {
         subject: SubjectId,
     },

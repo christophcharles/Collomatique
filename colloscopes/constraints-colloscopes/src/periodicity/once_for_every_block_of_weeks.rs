@@ -7,7 +7,7 @@ use collomatique_state_colloscopes::subjects::SubjectPeriodicity;
 
 use super::helpers::{
     all_active_global_weeks, count_interrogations_expr, enrolled_students_for_subject,
-    slot_week_pairs_for_subject,
+    slot_week_pairs_for_subject, span_has_slot_week,
 };
 
 pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
@@ -81,6 +81,19 @@ pub(super) fn build(env: &VarEnv, mut bundle: MyBundle) -> MyBundle {
                     for chunk in active_weeks_in_period.chunks(wpb) {
                         let block_first = chunk[0];
                         let block_last = chunk[chunk.len() - 1];
+                        if !span_has_slot_week(&slot_week_pairs, block_first, block_last) {
+                            bundle = bundle.with_infeasible(
+                                InfeasibleConstraint::NoSlotsForWeekSpan {
+                                    student,
+                                    subject: *subject_id,
+                                    first_week: block_first,
+                                    last_week: block_last,
+                                    required_count: 1,
+                                }
+                                .into(),
+                            );
+                            continue;
+                        }
                         let count_expr = count_interrogations_expr(
                             &slot_week_pairs,
                             student,
