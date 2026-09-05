@@ -4934,6 +4934,131 @@ fn a_person_who_shared_nothing_reads_as_none() {
     std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
 }
 
+/// One call replaces every name in the document, and rust reads the file back
+///
+/// What the op *does* is pinned where it lives (`colloscopes/ops/src/anonymize/`),
+/// on a document far bigger than this one. What is pinned here is the door: the
+/// script checks that the call answers what a write of a family that creates
+/// nothing answers, that the handles held across it did not go stale, that the
+/// seed decides the names across two copies of the same document, that leaving
+/// the seed out draws one from python's own `random`, and that the whole thing
+/// is a single undo slot named by the operation itself.
+///
+/// Rust reads the file the script left, because a file is what a stranger
+/// receives: every name changed, no contact left, no two people colliding, and
+/// — putting the real names back — nothing else in the document moved.
+///
+/// The fixture is [contact_document]'s, for the four shapes a card can have:
+/// anonymizing has to erase a number without an email as surely as it erases
+/// both.
+#[test]
+fn a_script_anonymizes_every_name_in_one_call() {
+    use collomatique_state_colloscopes::PersonWithContact;
+
+    let dir = workspace("anonymize");
+    let source = dir.join("contacts.collomatique");
+    contact_document(&source);
+    // A byte copy rather than a second fixture: the script's same-seed
+    // comparison rests on the two documents holding the same people under the
+    // same ids.
+    let second_source = dir.join("second.collomatique");
+    std::fs::copy(&source, &second_source).expect("the fixture should be copyable");
+    let target = dir.join("anonymized.collomatique");
+
+    let seed = 20260905u64;
+    // The operation's own french name, so the script's undo assertions pin what
+    // `ops` calls this rather than a string typed twice.
+    let label = collomatique_ops::AnonymizeUpdateOp::AnonymizeNames { seed }
+        .get_desc()
+        .1;
+
+    // Every person's card, in the order the op walks them: the students first,
+    // then the teachers, both in id order.
+    let cards = |data: &Data| -> Vec<PersonWithContact> {
+        let inner = data.get_inner_data();
+        inner
+            .params
+            .students
+            .student_map
+            .values()
+            .map(|student| student.desc.clone())
+            .chain(
+                inner
+                    .params
+                    .teachers
+                    .teacher_map
+                    .values()
+                    .map(|teacher| teacher.desc.clone()),
+            )
+            .collect()
+    };
+
+    let fixture = reload(&source);
+    let before = cards(&fixture);
+
+    run(include_str!("scripts/anonymize.py"), |globals| {
+        globals.set_item("source", &source)?;
+        globals.set_item("second_source", &second_source)?;
+        globals.set_item("target", &target)?;
+        globals.set_item("seed", seed)?;
+        globals.set_item("label", &label)?;
+        Ok(())
+    });
+
+    let written = reload(&target);
+    let after = cards(&written);
+    assert_eq!(after.len(), before.len(), "nobody is added or removed");
+
+    for (old, new) in before.iter().zip(after.iter()) {
+        assert_ne!(
+            (&new.surname, &new.firstname),
+            (&old.surname, &old.firstname),
+            "{old:?} kept their name",
+        );
+        assert_eq!(new.tel, None, "{new:?} kept a phone number");
+        assert_eq!(new.email, None, "{new:?} kept an email");
+    }
+
+    let distinct: BTreeSet<_> = after
+        .iter()
+        .map(|desc| (desc.surname.clone(), desc.firstname.clone()))
+        .collect();
+    assert_eq!(
+        distinct.len(),
+        after.len(),
+        "two people came out under the same name",
+    );
+
+    // The real names put back have to give the fixture again, field for field —
+    // the exclusions, the subjects, the colloscope, all of it. That is what says
+    // the call went in through the anonymize op and not through some other door.
+    let mut restored = written.get_inner_data().clone();
+    let student_ids: Vec<_> = restored.params.students.student_map.keys().collect();
+    let teacher_ids: Vec<_> = restored.params.teachers.teacher_map.keys().collect();
+    let mut real = before.iter();
+    for id in student_ids {
+        restored
+            .params
+            .students
+            .student_map
+            .get_mut(&id)
+            .expect("the id came out of the map")
+            .desc = real.next().expect("one card per person").clone();
+    }
+    for id in teacher_ids {
+        restored
+            .params
+            .teachers
+            .teacher_map
+            .get_mut(&id)
+            .expect("the id came out of the map")
+            .desc = real.next().expect("one card per person").clone();
+    }
+    assert_eq!(restored, *fixture.get_inner_data());
+
+    std::fs::remove_dir_all(&dir).expect("the temporary directory should be removable");
+}
+
 /// The people values go out through `to_data()` and come back in unchanged
 ///
 /// The headline is the round trip: what each handle handed the script,

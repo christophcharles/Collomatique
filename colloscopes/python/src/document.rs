@@ -7,7 +7,7 @@ use std::sync::Mutex;
 use pyo3::prelude::*;
 use pyo3::types::PyFrozenSet;
 
-use collomatique_ops::{Desc, UpdateOp};
+use collomatique_ops::{AnonymizeUpdateOp, Desc, UpdateOp};
 use collomatique_state::SessionStack;
 use collomatique_state::traits::Manager;
 use collomatique_state_colloscopes::{Data, NewId, Op};
@@ -751,6 +751,55 @@ impl Document {
             .map_err(|e| UpdateError::new_err(e.to_string()))?;
 
         Ok(OpResult::new(Vec::new()))
+    }
+
+    /// Replaces every name in the document with a fake one
+    ///
+    /// ```python
+    /// doc.anonymize_names()
+    /// doc.save("partageable.collomatique")
+    /// ```
+    ///
+    /// Every student and every teacher comes out under a name drawn from two
+    /// pools of french names, and their phone number and email are dropped —
+    /// what makes a document shareable is the contacts going with the names. No
+    /// two people are given the same name. Nothing else in the document moves:
+    /// a name is read by no foreign key and by no invariant, so the groups, the
+    /// slots and the colloscope are exactly where they were.
+    ///
+    /// One call is one undo slot, named « Anonymiser les noms »: a single
+    /// `undo()` hands every real name back, as the button in « Outils avancés »
+    /// does.
+    ///
+    /// `seed` is the whole of what decides the names: the same seed on the same
+    /// document gives the same names back, which is what makes the op
+    /// replayable and what lets a script anonymize two copies of a document
+    /// alike. Left out, it is drawn from python's own `random` — so
+    /// `random.seed(...)` before the call makes the run reproducible without
+    /// naming a seed. It is a 64-bit number: anything outside `range(2**64)`
+    /// raises `OverflowError`.
+    ///
+    /// The answer is an `OpResult` whose `warnings` is always empty. This
+    /// family refuses nothing and repairs nothing — `AnonymizeUpdateError` has
+    /// no variants at all, which is that sentence written in rust.
+    #[pyo3(signature = (seed=None))]
+    fn anonymize_names(slf: Py<Self>, py: Python<'_>, seed: Option<u64>) -> PyResult<OpResult> {
+        // Drawn before the borrow below and never inside it: minting the seed
+        // calls back into python, and doing that while the document is held is
+        // how a nested borrow becomes a `PanicException`.
+        let seed = match seed {
+            Some(seed) => seed,
+            None => py
+                .import("random")?
+                .call_method1("getrandbits", (64,))?
+                .extract()?,
+        };
+
+        let mut doc = slf.borrow_mut(py);
+        doc.update(
+            py,
+            UpdateOp::Anonymize(AnonymizeUpdateOp::AnonymizeNames { seed }),
+        )
     }
 
     /// Groups every write in a block into one undo slot
